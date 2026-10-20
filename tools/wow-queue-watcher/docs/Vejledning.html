@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="da"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WoW Queue Watcher – Vejledning</title>
+<style>
+:root{--bg:#0e1116;--surface:#161a22;--surface-2:#1c212b;--border:#262c38;--text:#e8ebf1;--text-2:#a3abba;--text-3:#6f7889;
+ --gold:#e8b341;--gold-soft:rgba(232,179,65,.13);--green:#3fbf7f;--green-soft:rgba(63,191,127,.12);--red:#ef5a5a;--red-soft:rgba(239,90,90,.12);
+ --blue:#5b9cf5;--blue-soft:rgba(91,156,245,.12)}
+@media (prefers-color-scheme:light){:root{--bg:#f5f6f8;--surface:#fff;--surface-2:#f8f9fb;--border:#e4e7ec;--text:#151a23;--text-2:#556072;--text-3:#8a93a3;
+ --gold:#a87a12;--gold-soft:rgba(183,134,27,.1);--green:#1f9d61;--red:#d64545;--blue:#2f74d8}}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text)}
+body{font:15.5px/1.65 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:860px;margin:0 auto;padding:40px 16px 80px}
+h1{font-size:30px;letter-spacing:-.02em;margin:0;line-height:1.2}
+h2{font-size:21px;letter-spacing:-.01em;margin:46px 0 12px;padding-top:6px}
+h3{font-size:16px;margin:24px 0 6px}
+p{margin:8px 0}a{color:var(--gold)}
+code,kbd{font-family:ui-monospace,"Cascadia Mono",Consolas,monospace;font-size:.88em;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:1px 6px}
+.hero{display:flex;gap:18px;align-items:center;margin-bottom:10px}
+.logo{width:58px;height:58px;border-radius:15px;background:var(--gold);display:grid;place-items:center;flex:none}
+.lead{color:var(--text-2);font-size:17px;margin:18px 0 0}
+nav{display:flex;flex-wrap:wrap;gap:8px;margin:26px 0 0}
+nav a{text-decoration:none;color:var(--text-2);border:1px solid var(--border);background:var(--surface);padding:5px 12px;border-radius:99px;font-size:13.5px}
+nav a:hover{color:var(--gold);border-color:var(--gold)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin:14px 0}
+.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-top:18px}
+.features .card{margin:0}.features b{display:block;margin-bottom:2px}
+.features span{color:var(--text-2);font-size:14.5px}
+ol.steps{list-style:none;padding:0;margin:0;counter-reset:s}
+ol.steps>li{counter-increment:s;position:relative;padding:0 0 22px 52px}
+ol.steps>li::before{content:counter(s);position:absolute;left:0;top:0;width:34px;height:34px;border-radius:50%;background:var(--gold-soft);color:var(--gold);
+ display:grid;place-items:center;font-weight:700}
+ol.steps>li>b:first-child{display:block;font-size:16px;margin-bottom:2px}
+ul{padding-left:20px}li{margin:4px 0}
+table{width:100%;border-collapse:collapse;font-size:14.5px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+th{color:var(--text-3);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.05em}
+.note{border-left:3px solid var(--blue);background:var(--blue-soft);padding:12px 16px;border-radius:0 10px 10px 0;margin:14px 0}
+.warn{border-left:3px solid var(--red);background:var(--red-soft);padding:12px 16px;border-radius:0 10px 10px 0;margin:14px 0}
+.ok{border-left:3px solid var(--green);background:var(--green-soft);padding:12px 16px;border-radius:0 10px 10px 0;margin:14px 0}
+.files td:first-child{white-space:nowrap;font-weight:600}
+footer{margin-top:60px;color:var(--text-3);font-size:13px}
+@media (max-width:560px){h1{font-size:25px}main{padding-top:24px}th,td{padding:8px 6px}}
+</style></head><body><main>
+
+<div class="hero">
+ <div class="logo"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#17130a" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12M6 21h12M7 3v3a5 5 0 0 0 10 0V3M7 21v-3a5 5 0 0 1 10 0v3"/></svg></div>
+ <div><h1>WoW Queue Watcher</h1><div style="color:var(--text-3)">Vejledning til WoW Forever · version 1.0</div></div>
+</div>
+<p class="lead">Holder øje med login-køen i WoW Forever for dig. Den sender beskeder til din telefon med din plads og tid tilbage, vækker dig med en alarm når der er under 15 minutter tilbage, og kommer selv tilbage i køen hvis du bliver smidt ud.</p>
+
+<nav><a href="#funktioner">Funktioner</a><a href="#beta">Test på betaen</a><a href="#kom-i-gang">Kom i gang</a><a href="#brug">Sådan bruger du den</a><a href="#telefon">Kommandoer fra telefonen</a><a href="#nat">Før du går i seng</a><a href="#fejl">Fejlfinding</a><a href="#regler">Regler og privatliv</a></nav>
+
+<h2 id="funktioner">Hvad kan den?</h2>
+<div class="features">
+ <div class="card"><b>📱 Beskeder til telefonen</b><span>Din plads i køen, Blizzards estimat og hvornår du er inde (fx "inde ca. 21:40").</span></div>
+ <div class="card"><b>⏰ Vækker dig</b><span>Alarm der ringer igen og igen, når der er 15 min tilbage, og når køen er færdig.</span></div>
+ <div class="card"><b>🔁 Kommer selv tilbage</b><span>Valgfrit og slået fra som standard: ved disconnect klikker den "Reconnect", og crasher spillet, starter den det igen via Battle.net. Slås til med <code>enabled = true</code> under <code>[reconnect]</code>.</span></div>
+ <div class="card"><b>🕒 Start køen hjemmefra</b><span>Send "start 18:00" eller "start om 1t" fra telefonen, så er køen færdig når du kommer hjem.</span></div>
+ <div class="card"><b>🎯 Bedre ETA</b><span>Måler hvor hurtigt køen faktisk rykker, i stedet for kun at stole på Blizzards estimat.</span></div>
+ <div class="card"><b>🚪 Enter World fra sengen</b><span>Tryk "Enter world" i beskeden, så logger din karakter ind før du bliver smidt af character select.</span></div>
+</div>
+
+<h2 id="kom-i-gang">Kom i gang (ca. 5 minutter)</h2>
+<div class="card">
+<p><b>Du skal bruge:</b> Windows 10 eller 11 · Battle.net hvor du er logget ind · WoW Forever installeret og sat til <b>engelsk</b> · en telefon med den gratis app <b>ntfy</b>.</p>
+</div>
+<ol class="steps">
+ <li><b>Pak mappen ud</b>Pak zip-filen ud til et fast sted, fx <code>Dokumenter\WoW-Queue-Watcher</code>. Kør den ikke direkte inde fra zip-filen.</li>
+ <li><b>Installér ntfy på telefonen</b>
+  Android: <a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy">Google Play</a> (eller F-Droid) · iPhone: <a href="https://apps.apple.com/app/ntfy/id1625396347">App Store</a>.</li>
+ <li><b>Kør <code>Test-telefon.bat</code></b>
+  Første gang laver programmet dit eget private <b>emne</b> (topic). Det står i en ramme øverst i vinduet, fx <code>wqw-8f3a…</code>.
+  <div class="note">Får du en blå boks "Windows beskyttede din PC", så tryk <b>Flere oplysninger → Kør alligevel</b>. Programmet er ikke signeret, fordi det er lavet af en spiller og ikke et firma. Kildekoden ligger på guildens GitHub.</div></li>
+ <li><b>Abonnér på dit emne i ntfy</b>Åbn ntfy → tryk <b>+</b> → skriv dit emne → <b>Subscribe</b>. Kør derefter <code>Test-telefon.bat</code> igen. Du skal få en testbesked med et billede og bagefter en test-alarm.</li>
+ <li><b>Gør alarmen høj nok til at vække dig</b> (Android)
+  <ul>
+   <li>ntfy → <b>Indstillinger</b> → slå <b>"Keep alerting for highest priority"</b> til (alarmen ringer indtil du slår den fra).</li>
+   <li>Åbn dit emne → <b>⋮</b> → notifikationer: sæt <b>Max priority</b> til at <b>tilsidesætte "Forstyr ikke"</b>, og vælg en høj lyd.</li>
+   <li>Telefonens <b>Indstillinger → Apps → ntfy → Batteri</b>: vælg <b>Ubegrænset</b>, så beskeder ikke bliver forsinket om natten.</li>
+  </ul>
+  <span style="color:var(--text-2)">iPhone: tillad notifikationer og kritiske beskeder for ntfy. Alarmen er mindre insisterende på iPhone end på Android.</span></li>
+ <li><b>Tjek Battle.net</b>Gå til WoW Forever-siden og vælg <b>"WoW: Forever"</b> i versions-menuen (ikke Beta), og sæt flueben i <b>"Hold mig logget ind"</b>. Kør evt. <code>Test-start-spil.bat</code> for at se at programmet kan starte spillet.</li>
+</ol>
+<div class="ok">Klar! Programmet finder selv Battle.net og din WoW-mappe. Du behøver normalt ikke røre <code>config.toml</code>.</div>
+
+<h2 id="brug">Sådan bruger du den</h2>
+<table class="files">
+ <tr><th>Fil</th><th>Hvad den gør</th></tr>
+ <tr><td>Start.bat</td><td>Starter WoW via Battle.net og holder øje med køen med det samme. Brug den når du sætter dig i kø (eller går i seng).</td></tr>
+ <tr><td>Start-standby.bat</td><td>Starter programmet uden at starte spillet. Det venter på at du sender <code>start</code> fra telefonen. Brug den før du går hjemmefra.</td></tr>
+ <tr><td>Start-beta.bat</td><td>Som Start.bat, men til <b>WoW Forever betaen</b> (så længe den er åben). Vælg <b>"WoW: Forever - Beta"</b> i Battle.net først. Godt til at prøve programmet af inden launch. Du kan tilføje <code>--standby</code> ligesom ved Start-standby.</td></tr>
+ <tr><td>Stop.bat</td><td>Stopper programmet. Du kan også sende <code>quit</code> fra telefonen eller lukke vinduet.</td></tr>
+ <tr><td>Test-telefon.bat</td><td>Sender en testbesked og en test-alarm til telefonen.</td></tr>
+ <tr><td>Test-skaerm.bat</td><td>Med WoW åbent: viser hvad programmet kan læse på skærmen.</td></tr>
+ <tr><td>Test-lyd.bat</td><td>Afspiller alarmlyden på PC'en. Den er en blød klokke-lyd, der bliver lidt kraftigere efter et minut. Du kan bruge din egen lyd via <code>alarm_sound</code> i <code>config.toml</code> (fx <code>C:\Windows\Media\Alarm01.wav</code>) eller slå den fra med <code>local_sound = false</code>.</td></tr>
+ <tr><td>Test-start-spil.bat</td><td>Tjekker at programmet kan starte WoW Forever via Battle.net.</td></tr>
+</table>
+<p style="margin-top:14px"><b>Dashboard:</b> mens programmet kører, kan du åbne <a href="http://localhost:8765">http://localhost:8765</a> i browseren. Her ser du en graf over køen, et billede af spillet, tidslinjen og alle knapperne.</p>
+
+<h3>Dashboardet på telefonen</h3>
+<p>Du kan også åbne dashboardet på telefonen, når den er på <b>samme wifi</b> som PC'en:</p>
+<ol style="padding-left:20px">
+ <li>Åbn <code>config.toml</code> og ret linjen under <code>[dashboard]</code> til <code>host = "0.0.0.0"</code>. Gem filen.</li>
+ <li>Start programmet. Vinduet viser nu en linje som <code>Dashboard on your phone (same Wi-Fi): http://192.168.1.105:8765</code>.</li>
+ <li>Spørger Windows Firewall om adgang, så vælg <b>Tillad</b> for <b>private netværk</b>.</li>
+ <li>Åbn adressen i telefonens browser. Tip: "Føj til startskærm" giver en genvej som en app.</li>
+</ol>
+<div class="note">Alle på dit wifi kan åbne dashboardet, så brug det kun på dit eget hjemmenetværk. Når du er hjemmefra, styrer du programmet med kommandoer i ntfy i stedet.</div>
+
+<h3>Det får du på telefonen</h3>
+<table>
+ <tr><th>Hvornår</th><th>Besked</th></tr>
+ <tr><td>Du kommer i kø</td><td>Plads, Blizzards estimat og et billede</td></tr>
+ <tr><td>Hver 30. minut</td><td>Stille status: plads, ETA og "in at ~21:40"</td></tr>
+ <tr><td>Ca. 30 min tilbage</td><td>"Heads up", høj prioritet</td></tr>
+ <tr><td>Ca. 15 min tilbage</td><td><b>ALARM</b>, ringer igen indtil du trykker <b>I'm up</b></td></tr>
+ <tr><td>Køen er færdig</td><td><b>ALARM</b> med knappen <b>Enter world</b></td></tr>
+ <tr><td>Disconnect eller crash</td><td>Besked med billede (med auto-reconnect slået til prøver programmet også selv at komme ind igen)</td></tr>
+ <tr><td>Kan ikke komme tilbage i 20 min</td><td><b>ALARM</b></td></tr>
+</table>
+<p style="color:var(--text-2)">Beskederne fra programmet er på engelsk, men knapperne er lige til: <b>I'm up</b> stopper alarmen, <b>Screenshot</b> sender et billede af skærmen, og <b>Enter world</b> logger ind.</p>
+
+<h2 id="beta">Test på betaen</h2>
+<p>Så længe WoW Forever betaen er åben, kan du prøve hele programmet af før launch:</p>
+<ol style="padding-left:20px">
+ <li>Gå til WoW Forever i Battle.net og vælg <b>"WoW: Forever - Beta"</b> i versions-menuen.</li>
+ <li>Kør <code>Start-beta.bat</code>. Programmet starter betaen via Battle.net og går til character select.</li>
+ <li>Du får en "Queue finished!"-alarm på telefonen. Prøv knapperne <b>I'm up</b> og <b>Enter world</b>.</li>
+ <li>Har du slået auto-reconnect til: prøv også at lukke spillet (uden at sende <code>pause</code> først). Programmet opdager det og starter spillet igen.</li>
+</ol>
+<div class="note">Betaen har normalt ingen kø, så selve kø-visningen kan kun ses ved launch. Husk at skifte tilbage til <b>"WoW: Forever"</b> i Battle.net, før du bruger <code>Start.bat</code> på launch-dagen.</div>
+
+<h2 id="telefon">Kommandoer fra telefonen</h2>
+<p>Skriv kommandoerne i ntfy, i det <b>samme emne</b> som beskederne kommer i (tekstfeltet nederst). Programmet skal køre på PC'en, fx startet med <code>Start-standby.bat</code>.</p>
+<table>
+ <tr><th>Send</th><th>Det sker</th></tr>
+ <tr><td><code>start</code></td><td>Starter WoW og går i kø med det samme</td></tr>
+ <tr><td><code>start 18:30</code> · <code>start kl 18.30</code></td><td>Starter kl. 18:30 (er tiden passeret i dag, bliver det i morgen)</td></tr>
+ <tr><td><code>start om 45m</code> · <code>start om 1t30</code> · <code>start in 2h</code></td><td>Starter om så lang tid (dansk og engelsk virker begge)</td></tr>
+ <tr><td><code>cancel</code></td><td>Annullerer en planlagt start</td></tr>
+ <tr><td><code>status</code></td><td>Status og et billede af skærmen</td></tr>
+ <tr><td><code>ack</code></td><td>Stopper alarmen (det samme som <b>I'm up</b>)</td></tr>
+ <tr><td><code>enter</code></td><td>Trykker Enter World på character select</td></tr>
+ <tr><td><code>reconnect</code></td><td>Lukker og genstarter spillet</td></tr>
+ <tr><td><code>pause</code> / <code>resume</code></td><td>Stopper/genstarter klik og genstart (beskederne fortsætter)</td></tr>
+ <tr><td><code>standby</code></td><td>Holder op med at overvåge, men lader spillet være</td></tr>
+ <tr><td><code>quit</code></td><td>Lukker programmet</td></tr>
+</table>
+<div class="note"><b>Tip: kom hjem til en færdig kø.</b> Start <code>Start-standby.bat</code> før du går. Når du kan se hvornår du er hjemme, sender du fx <code>start om 1t</code>. Når du er i køen, får du Blizzards estimat og "inde ca. kl.", så du kan se om det passer.</div>
+
+<h2 id="nat">Tjekliste før du går i seng</h2>
+<div class="card"><ul style="margin:0">
+ <li>WoW kører i <b>vindue eller windowed fullscreen</b> og er <b>ikke minimeret</b>. Andre vinduer foran er OK.</li>
+ <li><b>Lås ikke PC'en</b> (Windows+L). Windows blokerer skærmbilleder og klik når PC'en er låst. Programmet sørger selv for at PC'en og skærmen ikke går i dvale.</li>
+ <li>Windows Update: sæt <b>aktive timer</b>, så PC'en ikke genstarter om natten.</li>
+ <li>Telefonen er ikke på lydløs uden at ntfy må tilsidesætte "Forstyr ikke" (se trin 5).</li>
+ <li>Lyd på PC'en er en god ekstra sikkerhed. Alarmen spiller også i højttalerne.</li>
+</ul></div>
+<div class="note">Vil du selv lukke spillet mens programmet kører, så send <code>standby</code> eller <code>pause</code> først. Ellers tror programmet at spillet er crashet og starter det igen.</div>
+
+<h2 id="fejl">Fejlfinding</h2>
+<h3>Jeg får ingen beskeder</h3>
+<p>Tjek at du abonnerer på præcis det emne der står i <code>config.toml</code> (linjen <code>topic = …</code>), og at ntfy har ubegrænset batteri. Kør <code>Test-telefon.bat</code>.</p>
+<h3>"Wrong WoW version running"</h3>
+<p>Battle.net startede en anden version end WoW Forever. Vælg <b>WoW: Forever</b> i versions-menuen i Battle.net, og luk den anden version.</p>
+<h3>Spillet starter to gange, eller slet ikke</h3>
+<p>Kør <code>Test-start-spil.bat</code>. Tjek at du er logget ind i Battle.net, og at der ikke venter en opdatering.</p>
+<h3>Den kan ikke læse skærmen</h3>
+<p>Kør <code>Test-skaerm.bat</code> med WoW åbent. Spillet skal være på <b>engelsk</b>. Hvis Windows mangler engelsk tekstgenkendelse, så tilføj <b>Engelsk (USA)</b> under <i>Indstillinger → Tid og sprog → Sprog og område</i>.</p>
+<h3>Antivirus brokker sig</h3>
+<p>Programmer der er pakket med PyInstaller bliver nogle gange fejlagtigt markeret. Kildekoden ligger på guildens GitHub, hvis du vil se hvad programmet gør.</p>
+<h3>"A watcher is already running"</h3>
+<p>Programmet kører allerede, måske uden vindue. Kør <code>Stop.bat</code> og start igen.</p>
+
+<h2 id="regler">Regler og privatliv</h2>
+<div class="warn"><b>Om Blizzards regler:</b> det at kigge på skærmen og sende beskeder til din telefon påvirker ikke spillet. Funktionerne der <b>klikker</b> (Reconnect, genstart, Enter World) sender derimod klik og tastetryk til spillet, og Blizzards regler tillader ikke automatisering. Det sker kun på login-skærme og character select, aldrig mens du spiller. Derfor er de <b>slået fra som standard</b>, så programmet kun overvåger og sender alarmer. Vil du have dem, så sæt <code>enabled = true</code> under <code>[reconnect]</code> i <code>config.toml</code>. Det er på eget ansvar.</div>
+<ul>
+ <li>Beskederne går gennem den gratis tjeneste <b>ntfy.sh</b> til et tilfældigt emne der kun er dit. <b>Del ikke dit emne</b>, for alle der kender det kan læse dine beskeder og styre programmet.</li>
+ <li>Billeder af skærmen sendes kun med beskederne. Login-skærmen med e-mail/adgangskode sendes <b>aldrig</b>, og programmet skriver aldrig din adgangskode.</li>
+ <li>Programmet læser ikke spillets hukommelse eller filer. Det kigger kun på skærmen, ligesom et kamera.</li>
+</ul>
+
+<footer>WoW Queue Watcher 1.0 · lavet af en spiller til Nordens Paris · ikke tilknyttet Blizzard Entertainment.</footer>
+</main></body></html>

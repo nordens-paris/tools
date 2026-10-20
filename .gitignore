@@ -1,0 +1,39 @@
+# Personlige indstillinger (indeholder fx dit private ntfy-emne)
+config.toml
+config-*.toml
+!config.example.toml
+*.local.*
+.env
+.env.*
+
+# Logs, skærmbilleder og data fra kørsler
+logs/
+*.log
+screenshots/
+samples-*.csv
+
+# WoW-data
+WTF/
+SavedVariables/
+UI-backup-*/
+
+# Færdigbyggede filer hører til på GitHub Releases
+*.exe
+*.zip
+build/
+dist/
+*.spec
+release/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Editor / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store

@@ -1,0 +1,75 @@
+# WoW Queue Watcher - indstillinger
+# Du behøver normalt ikke ændre noget her. Programmet finder selv Battle.net og WoW.
+# Gem filen og genstart programmet, hvis du ændrer noget.
+
+[game]
+# Findes automatisk, hvis stierne herunder ikke passer på din PC.
+battlenet_exe = 'C:\Program Files (x86)\Battle.net\Battle.net.exe'
+game_dir = 'C:\Program Files (x86)\World of Warcraft\_forever_'
+process_name = "Wow.exe"
+# "battlenet" = starter spillet via Battle.net præcis som Play-knappen (ingen adgangskode).
+launch_method = "battlenet"
+# Battle.net starter den version, der er valgt i versions-menuen på Forever-siden.
+# Sørg for at "WoW: Forever" er valgt (ikke Beta).
+launch_family = "WoWF"
+launch_code = "wowf"
+ocr_language = "en-US"        # spillet skal køre på engelsk (enUS / enGB)
+
+[schedule]
+# Fast starttidspunkt, fx "2026-11-04 18:00". Tom = start med det samme.
+# (Du kan også bare sende "start 18:00" fra telefonen.)
+start_at = ""
+
+[watch]
+interval_seconds = 20         # hvor ofte skærmen tjekkes (sekunder)
+ocr_scale = 2.0
+save_screenshots = true       # gem et billede ved hvert skærmskift i logs\screenshots
+
+[alerts]
+# Hvilken ETA der styrer alarmerne: "earliest" (sikrest), "blizzard" eller "pace" (målt tempo)
+eta_source = "earliest"
+update_every_minutes = 30     # stille status-beskeder
+heads_up_minutes = 30         # "snart din tur" (høj prioritet)
+alarm_minutes = 15            # ALARM - ringer indtil du trykker "I'm up"
+alarm_on_queue_done = true    # alarm når køen er færdig (character select)
+alarm_repeat_seconds = 120
+alarm_max_repeats = 20
+local_sound = true            # alarm også i PC'ens højttalere (blød klokke-lyd, prøv Test-lyd.bat)
+# Din egen lyd i stedet, fx 'C:\Windows\Media\Alarm01.wav'. Tom = den indbyggede klokke-lyd.
+alarm_sound = ''
+give_up_minutes = 20          # alarm hvis den ikke kan komme tilbage i køen i så lang tid
+
+[ntfy]
+server = "https://ntfy.sh"
+# Dit private emne (topic) laves automatisk første gang. Del det ikke med andre -
+# alle der kender det kan læse dine beskeder og styre programmet.
+topic = ""
+token = ""
+
+[reconnect]
+# Slået FRA som standard: programmet overvåger og sender alarmer, men klikker aldrig selv i spillet.
+# Sæt til true, hvis den skal klikke dig tilbage efter disconnect og genstarte spillet ved crash.
+# Blizzards regler tillader ikke automatisering, så det er på eget ansvar.
+enabled = false
+auto_launch = true            # start spillet hvis det ikke kører
+action_cooldown_seconds = 30
+stuck_minutes = 8             # genstart spillet hvis det sidder fast så længe
+relaunch_wait_seconds = 90
+max_relaunches = 30
+# Knapper den må klikke på fejl-/login-skærme. Den klikker ALDRIG mens du er i køen.
+click_buttons = ["Okay", "OK", "Reconnect", "Connect", "Retry"]
+realm_name = ""
+# Tryk "Enter World" automatisk hvis ingen reagerer på alarmen, så du ikke bliver smidt
+# ud af character select. Din karakter står så AFK i spillet. Virker kun når enabled = true.
+auto_enter_world = false
+auto_enter_world_after_minutes = 10
+
+[dashboard]
+enabled = true
+host = "127.0.0.1"            # "0.0.0.0" = kan også åbnes fra telefonen på dit hjemme-wifi
+port = 8765
+
+[health]
+# Valgfrit: en https://healthchecks.io ping-adresse, så du får besked hvis hele PC'en går ned.
+ping_url = ""
+ping_every_seconds = 60
