@@ -5,8 +5,9 @@ Alle i Nordens Paris er velkomne til at lægge værktøjer og addons her, også 
 ## Kom med
 
 1. Opret en gratis konto på [github.com](https://github.com).
-2. Send dit GitHub-brugernavn til Darkfade på Discord.
-3. Accepter invitationen til organisationen `nordens-paris`, som kommer på mail og på github.com.
+2. Slå tofaktor-login (2FA) til under **Settings → Password and authentication**. Organisationen kræver det, så du kan ikke acceptere invitationen uden. En authenticator-app på telefonen (fx Microsoft eller Google Authenticator) er nemmest. Gem dine recovery codes et sikkert sted.
+3. Send dit GitHub-brugernavn til Darkfade på Discord.
+4. Accepter invitationen til organisationen `nordens-paris`, som kommer på mail og på github.com.
 
 ## Læg noget op (ingen git-erfaring nødvendig)
 
