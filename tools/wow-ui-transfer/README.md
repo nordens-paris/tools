@@ -13,7 +13,7 @@ Med denne guide får du addons, addon-profiler, keybinds, macros, Edit Mode og c
 
 ### Del 2: Før launch
 1. Preinstaller spillet i Battle.net, så mappen `_forever_` findes.
-2. Download `UI-overfoersel.zip` fra repoets [Releases](../../../../releases) (eller hent filerne i denne mappe). Højreklik på den → **Egenskaber** → sæt flueben i **Fjern blokering** → OK. Så spørger Windows ikke om lov hver gang.
+2. Download `UI-overfoersel.zip` fra repoets [Releases](https://github.com/nordens-paris/tools/releases) (eller hent filerne i denne mappe). Højreklik på den → **Egenskaber** → sæt flueben i **Fjern blokering** → OK. Så spørger Windows ikke om lov hver gang.
 3. Højreklik på zip-filen → **Udpak alle**, fx til skrivebordet.
 4. **Hvis du lavede dit UI på beta:** gør dette, mens spillet er helt lukket, gerne før launch:
    - Kopier `_classic_beta_\Interface` til `_forever_\Interface`. Addons bliver kun fundet, når spillet starter, så de skal ligge der før første login.

@@ -18,7 +18,7 @@ Kommandoer du selv sender fra telefonen (`enter`, `reconnect`, `start`) virker s
 
 ## Kom i gang
 
-**Den nemme måde:** hent den færdige zip-fil under [Releases](../../releases), pak den ud og følg `Vejledning.html`.
+**Den nemme måde:** hent den færdige zip-fil under [Releases](https://github.com/nordens-paris/tools/releases), pak den ud og følg `Vejledning.html`.
 
 **Fra kildekoden** (kræver Python 3.11 eller nyere):
 
