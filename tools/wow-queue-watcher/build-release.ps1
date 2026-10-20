@@ -1,6 +1,7 @@
 # Bygger WoWQueueWatcher.exe og den zip-fil, der lægges på en GitHub Release.
 #   py -3 -m pip install -r requirements.txt pyinstaller
-#   powershell -ExecutionPolicy Bypass -File build-release.ps1 -Version 1.1
+#   pwsh -File build-release.ps1 -Version 1.1
+# Brug PowerShell 7 (pwsh). Windows PowerShell 5 laver zip-filer med \ i stierne.
 # Resultatet havner i dist\ (som git ignorerer).
 param([string]$Version = "dev")
 $ErrorActionPreference = "Stop"
