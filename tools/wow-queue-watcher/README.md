@@ -39,4 +39,11 @@ Alle kommandoer, tjekliste til natten og fejlfinding står i [docs/Vejledning.ht
 
 ## Byg en release
 
-`release-files/` indeholder de `.bat`-filer, der skal ligge ved siden af `WoWQueueWatcher.exe` i zip-filen. Exe-filen bygges med PyInstaller ud fra `watch.py` og lægges på en GitHub Release, ikke i selve repoet.
+Kun owners kan udgive releases. Sådan bygges zip-filen (kræver PowerShell 7):
+
+```bash
+py -3 -m pip install -r requirements.txt pyinstaller
+pwsh -File build-release.ps1 -Version 1.2
+```
+
+Scriptet bygger `WoWQueueWatcher.exe` med PyInstaller og lægger den i `dist/` sammen med `.bat`-filerne fra `release-files/`, `Vejledning.html` og en frisk `config.toml` (tomt ntfy-emne, auto-klik slået fra). Zip-filen uploades til en GitHub Release med et tag som `queue-watcher-v1.2`. Den hører ikke til i selve repoet.

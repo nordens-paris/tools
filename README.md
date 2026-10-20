@@ -13,7 +13,7 @@ Fælles samling af værktøjer og addons, som folk i guilden **Nordens Paris** h
 
 ## Sådan hentes et værktøj
 
-- **Færdige versioner** (zip, exe) ligger under [Releases](../../releases).
+- **Færdige versioner** (zip, exe) ligger under [Releases](https://github.com/nordens-paris/tools/releases).
 - **Kildekoden** ligger i mappen for hvert projekt. Tryk **Code → Download ZIP** for at hente hele repoet.
 
 Kør kun ting, du har hentet herfra eller fra en Release, ikke filer sendt rundt i Discord.
@@ -29,7 +29,9 @@ Hvert projekt har sin egen mappe med en `README.md`, der forklarer, hvad det gø
 
 ## Vil du bidrage?
 
-Læs [CONTRIBUTING.md](CONTRIBUTING.md). Kort sagt: én mappe pr. projekt, ingen personlige data eller hemmeligheder, og en anden fra guilden kigger på ændringen, før den kommer ind.
+Send dit GitHub-brugernavn til Darkfade på Discord, så bliver du inviteret. Læs derefter [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Kort sagt: én mappe pr. projekt, ingen personlige data eller hemmeligheder, og alt kommer ind via en pull request, som en code owner skal godkende. Kun owners udgiver releases.
 
 ## Licens
 
