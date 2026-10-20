@@ -1,0 +1,33 @@
+name: Fejl i et værktøj
+description: Noget virker ikke, som det skal
+title: "[Fejl] "
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: vaerktoej
+    attributes:
+      label: Hvilket værktøj?
+      options:
+        - WoW Queue Watcher
+        - UI-overførsel
+        - Andet
+    validations:
+      required: true
+  - type: textarea
+    id: hvad
+    attributes:
+      label: Hvad skete der?
+      description: Hvad gjorde du, hvad forventede du, og hvad skete der i stedet?
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Fejlbesked eller log
+      description: Kopiér fejlteksten ind. Fjern først kontonavne, e-mails, ntfy-emner og stier med dit navn.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: fx queue-watcher-v1.1

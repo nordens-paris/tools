@@ -27,6 +27,11 @@ addons/    WoW-addons (Lua), der lægges i Interface\AddOns   (tom endnu)
 
 Hvert projekt har sin egen mappe med en `README.md`, der forklarer, hvad det gør, hvordan man installerer det, og hvem der vedligeholder det.
 
+## Fejl, idéer og spørgsmål
+
+- **Noget virker ikke, eller har du en idé?** Opret et [issue](https://github.com/nordens-paris/tools/issues/new/choose).
+- **Spørgsmål og snak** hører til i [Discussions](https://github.com/nordens-paris/tools/discussions).
+
 ## Vil du bidrage?
 
 Send dit GitHub-brugernavn til Darkfade på Discord, så bliver du inviteret. Læs derefter [CONTRIBUTING.md](CONTRIBUTING.md).

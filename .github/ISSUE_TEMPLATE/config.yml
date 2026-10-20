@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Spørgsmål og snak
+    url: https://github.com/nordens-paris/tools/discussions
+    about: Spørg om hjælp eller del idéer i Discussions

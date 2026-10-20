@@ -1,0 +1,20 @@
+name: Idé eller ønske
+description: Foreslå et nyt addon, et tool eller en forbedring
+title: "[Idé] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: ide
+    attributes:
+      label: Hvad er idéen?
+      description: Hvad skal det gøre, og hvorfor ville det hjælpe guilden?
+    validations:
+      required: true
+  - type: dropdown
+    id: selv
+    attributes:
+      label: Vil du selv lave det?
+      options:
+        - Ja, jeg går i gang
+        - Måske, med lidt hjælp
+        - Nej, det er bare en idé
