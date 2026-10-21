@@ -10,6 +10,8 @@ Fælles samling af værktøjer og addons, som folk i guilden **Nordens Paris** h
 |---|---|---|
 | [WoW Queue Watcher](tools/wow-queue-watcher) | Overvåger login-køen og sender alarmer til din telefon | Windows, Python |
 | [UI-overførsel](tools/wow-ui-transfer) | Flytter addons, keybinds, macros, Edit Mode og chat fra Beta til din nye character på launch | Windows, PowerShell |
+| [NP Roster](tools/raid-roster) | Planlægger raid-rosters ud fra Raid-Helper: buffs, grupper, bænk-rotation og fremmøde | Web (Claude-artifact) |
+| [NPRoster-addon](addons/NPRoster) | Importerer rosteret i spillet: invitér, sortér grupper, bænk-whispers og fremmøde | WoW-addon |
 | [Darkfade's Forever Warrior](addons/darkfade-forever-warrior) | Komplet WeakAura-UI til Warrior: cooldowns, procs, swing og Rage, Battle Shout-påmindelser og tank-announces | WeakAura (ForeverAuras) |
 
 ## Sådan hentes et værktøj

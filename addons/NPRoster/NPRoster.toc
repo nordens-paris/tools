@@ -1,0 +1,9 @@
+## Interface: 16001
+## Title: NP Roster
+## Notes: Imports the raid roster for Holdet: invite, sort groups, bench whispers and attendance.
+## Author: Nordens Paris
+## Version: 1.0.0
+## SavedVariables: NPRosterDB
+
+Core.lua
+UI.lua
