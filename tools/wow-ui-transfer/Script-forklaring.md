@@ -73,7 +73,7 @@ Kun de filer, scriptet lige har kopieret, tæller. En `.old`-fil kan have samme 
 
 Det samme gøres for character-mappens `cache.md5` i fase 2.
 
-**Hvis målet ikke har nogen `cache.md5`** (spillet har aldrig været startet på pc'en, eller `WTF` er slettet), kender fase 1 ikke serverens tidspunkter. Har serveren data for kontoen, henter spillet så serverens version. Interface-indstillingerne (Type 0) hentes ved login, mens Edit Mode (Type 13), keybinds (Type 2) og macros (Type 4) hentes ved Enter World. Fase 1 skriver det i loggen. Løsningen er at skrive `/logout` efter første Enter World og køre fase 2 igen (se afsnit 5).
+**Hvis målet ikke har nogen `cache.md5`** (spillet har aldrig været startet på pc'en, eller `WTF` er slettet), kender fase 1 ikke serverens tidspunkter. Har serveren data for kontoen, henter spillet så serverens version. Interface-indstillingerne (Type 0) hentes ved login, mens Edit Mode (Type 13), keybinds (Type 2) og macros (Type 4) hentes ved Enter World. Fase 1 advarer om det i opsummeringen, i "Færdig"-beskeden og i loggen. Løsningen er at skrive `/logout` efter første Enter World og køre fase 2 igen (se afsnit 5).
 
 ## 4. Fase 2: vælg din nye character
 1. Du vælger spilmappen. *WoW Forever (_forever_)* er standard.

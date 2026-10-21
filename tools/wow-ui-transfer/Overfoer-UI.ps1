@@ -130,7 +130,11 @@ function Get-Accounts([string]$Root, [string]$Flavor) {
 function Get-TargetAccount([string]$Root, [string]$Flavor, [string]$Name) {
     $Name = $Name.Trim().ToUpperInvariant()
     $path = Join-Path $Root "$Flavor\WTF\Account\$Name"
-    return [pscustomobject]@{ Flavor = $Flavor; Account = $Name; AccPath = $path; Exists = (Test-Path -LiteralPath $path) }
+    # HasCache: uden cache.md5 kendes serverens tidspunkter ikke (se Update-CacheTimes)
+    return [pscustomobject]@{
+        Flavor = $Flavor; Account = $Name; AccPath = $path; Exists = (Test-Path -LiteralPath $path)
+        HasCache = (Test-Path -LiteralPath (Join-Path $path 'cache.md5'))
+    }
 }
 
 # Alle characters i en spilmappe: WTF\Account\<konto>\<realm>\<Fornavn-Efternavn>
@@ -308,6 +312,7 @@ function Get-PlanSummary([string]$Phase, $Src, $Tgt, [bool]$CopyAddons, [bool]$N
         if ($Src.AccPath -ne $Tgt.AccPath) {
             $lines += "Konto-indstillinger kopieres til kontoen $($Tgt.Account): Edit Mode, keybinds, macros, interface- og addon-indstillinger"
             if (-not $Tgt.Exists) { $lines += "Kontomappen $($Tgt.Account) findes ikke endnu og bliver oprettet. Tjek at navnet er stavet rigtigt" }
+            if (-not $Tgt.HasCache) { $lines += "OBS: Spillet har ikke været startet på denne konto på pc'en. Mangler Edit Mode eller keybinds efter Enter World: skriv /logout og kør fase 2 igen" }
         }
         if ($NoSync) { $lines += "Server-synkronisering slås fra (nødløsning)" }
     } else {
@@ -779,6 +784,9 @@ function Start-Console {
     Write-Host ""
     if ($ph -eq '1') {
         Write-Host "Fase 1 færdig! Kør fase 2 på launch, når du har oprettet din character." -ForegroundColor Green
+        if ($src.AccPath -ne $tgt.AccPath -and -not $tgt.HasCache) {
+            Write-Host "  Spillet har ikke været startet på denne konto på pc'en. Mangler Edit Mode eller keybinds efter Enter World: skriv /logout, kør fase 2 igen, og tryk Enter World." -ForegroundColor Yellow
+        }
     } else {
         Write-Host "Færdig! Du kan nu trykke 'Enter World'." -ForegroundColor Green
         if (-not ($srcRealm -and $tgtRealm)) {
@@ -1291,6 +1299,9 @@ function Start-Gui {
             if ($ph -eq '1') {
                 & $setBanner 'ok' 'Fase 1 er færdig. Kør fase 2 på launch, når du har oprettet din character.'
                 $done = "Fase 1 er færdig.`n`n•  $($r.Files) filer kopieret`n•  $($r.Backups) overskrevne filer gemt i backup`n`nPå launch: log ind, opret din character (tryk IKKE Enter World), og kør så Overfoer-UI.bat igen og vælg Fase 2."
+                if ($src.AccPath -ne $tgt.AccPath -and -not $tgt.HasCache) {
+                    $done += "`n`nOBS: Spillet har ikke været startet på denne konto på pc'en, så serverens tidspunkter kendes ikke. Mangler Edit Mode eller keybinds, når du er inde i verden: skriv /logout (du kommer ikke i kø), kør fase 2 igen og tryk Enter World."
+                }
             } else {
                 & $setBanner 'ok' "Færdig! Du kan nu trykke Enter World på $($tgt.Char)."
                 $done = "Dit UI er kopieret til $($tgt.Char).`n`n•  $($r.Files) filer kopieret`n•  $($r.Profiles) addons sat op`n•  $($r.Backups) overskrevne filer gemt i backup`n`nDu kan nu trykke Enter World."
