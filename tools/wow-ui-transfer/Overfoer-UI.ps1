@@ -1,16 +1,27 @@
 ﻿<#
   Overfoer-UI.ps1  -  WoW Forever UI-overførsel
 
-  Flytter dit UI (addons, addon-profiler, keybinds, macros, Edit Mode, chat) fra Beta/Stresstest
-  til din nye character på launch.
+  Flytter dit UI (addons, addon-profiler, keybinds, macros, Edit Mode, indstillinger, chat) fra
+  Beta/Stresstest til din nye character på launch. Det sker i to faser:
 
-  Brug:
-    0. Kommer dit UI fra en anden spilmappe (fx beta): kopiér Interface og WTF\Config.wtf over,
-       FØR du starter spillet første gang (se guiden).
-    1. Opret din character i spillet. Tryk IKKE "Enter World".
-    2. Dobbeltklik på Overfoer-UI.bat (spillet må gerne stå åbent på character select).
-    3. Vælg din gamle character og din nye character, og tryk "Overfør UI".
+  Fase 1  -  før launch, med spillet LUKKET
+    Addons (Interface), grafik og lyd (Config.wtf) og alt på kontoniveau: Edit Mode-layouts,
+    keybinds, macros, interface-indstillinger og addon-indstillinger. Spillet indlæser de filer,
+    allerede når du logger ind, så de skal ligge klar, før du starter spillet.
+    Du skriver dit kontonavn (fx C00LPET), så scriptet ved, hvor filerne skal hen.
+
+  Fase 2  -  på launch, på character select (spillet må gerne køre, du mister ikke din plads)
+    1. Opret din character. Tryk IKKE "Enter World".
+    2. Dobbeltklik på Overfoer-UI.bat og vælg Fase 2.
+    3. Vælg din gamle og din nye character, og tryk "Overfør UI".
     4. Tryk Enter World.
+    Titan Panel, X-Perl og AtlasLoot gemmer under realm-navnet, som først står i filerne efter første
+    Enter World. Skriv det fra character select, eller: skriv /logout i spillet (ingen kø), kør
+    fase 2 igen (realmen findes nu automatisk), og tryk Enter World.
+
+  Spillet synkroniserer konto-indstillinger med serveren. I Logs\AccountData.log kan man se, at det
+  bruger filen på disken, når tidspunktet i cache.md5 er det samme som serverens, og ellers henter
+  serverens version. Derfor får de kopierede filer serverens tidspunkt (se Update-CacheTimes).
 
   Sikkerhed:
     - Scriptet sletter og flytter aldrig noget. Det kopierer kun.
@@ -23,10 +34,14 @@
 [CmdletBinding()]
 param(
     [string]$WowRoot,
+    [ValidateSet('', '1', '2')][string]$Phase = '',
     [string]$SourceFlavor,
     [string]$TargetFlavor,
     [string]$SourceChar,
     [string]$TargetChar,
+    [string]$TargetAccount,
+    [string]$SourceRealm,
+    [string]$TargetRealm,
     [ValidateSet('ask', 'yes', 'no')][string]$CopyInterface = 'ask',
     [switch]$DisableSync,
     [switch]$NoGui,
@@ -86,8 +101,7 @@ function Test-WowRunning {
     return (@(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match '^Wow' }).Count -gt 0)
 }
 
-# Addons bliver kun fundet, når spillet starter. Ligger der ingen i målet, er Interface (og
-# dermed typisk også Config.wtf) ikke kopieret over før første start.
+# Addons bliver kun fundet, når spillet starter.
 function Test-HasAddons([string]$Root, [string]$Flavor) {
     if (-not $Root -or -not $Flavor) { return $false }
     $addonDir = Join-Path $Root "$Flavor\Interface\AddOns"
@@ -102,6 +116,21 @@ function Get-Flavors([string]$Root, [switch]$WithAccounts) {
         $all = @($all | Where-Object { Test-Path -LiteralPath (Join-Path $Root "$_\WTF\Account") })
     }
     return $all
+}
+
+# Kontomapper i en spilmappe, senest brugt først.
+function Get-Accounts([string]$Root, [string]$Flavor) {
+    $accRoot = Join-Path $Root "$Flavor\WTF\Account"
+    if (-not (Test-Path -LiteralPath $accRoot)) { return @() }
+    return @(Get-ChildItem -LiteralPath $accRoot -Directory | Where-Object { $_.Name -ne 'SavedVariables' } |
+        Sort-Object LastWriteTime -Descending | ForEach-Object { $_.Name })
+}
+
+# Mål for fase 1: en kontomappe, som måske ikke findes endnu.
+function Get-TargetAccount([string]$Root, [string]$Flavor, [string]$Name) {
+    $Name = $Name.Trim().ToUpperInvariant()
+    $path = Join-Path $Root "$Flavor\WTF\Account\$Name"
+    return [pscustomobject]@{ Flavor = $Flavor; Account = $Name; AccPath = $path; Exists = (Test-Path -LiteralPath $path) }
 }
 
 # Alle characters i en spilmappe: WTF\Account\<konto>\<realm>\<Fornavn-Efternavn>
@@ -132,34 +161,280 @@ function Get-Characters([string]$Root, [string]$Flavor) {
     return $list
 }
 
+# "Darkfade-Speedy" -> Full "Darkfade Speedy", First "Darkfade" (det navn spillet selv bruger i mange addons)
+function Get-CharNames([string]$Char) {
+    return @{ Full = ($Char -replace '-', ' '); First = ($Char -split '-')[0] }
+}
+
+# WTF-mapperne bruger realm-numre (fx 70), men addons gemmer under realm-navnet.
+# Find navnet i addon-filerne: Titan bruger "Fornavn Efternavn@Realm", ellers "Fornavn - Realm".
+$RealmCache = @{}
+#   -ExactOnly: kun det sikre "Fornavn Efternavn@Realm". Fornavnet alene kan deles af flere characters
+#   (fx Darkfade Speedy og Darkfade Wastaken på hver sin realm), så det bruges ikke til den nye character.
+function Find-RealmName([string]$AccPath, [string]$Char, [switch]$ExactOnly) {
+    $svDir = Join-Path $AccPath 'SavedVariables'
+    if (-not $Char -or -not (Test-Path -LiteralPath $svDir)) { return '' }
+    $cacheKey = "$AccPath|$Char|$ExactOnly"
+    if (-not $RealmCache.ContainsKey($cacheKey)) { $RealmCache[$cacheKey] = Find-RealmNameUncached $svDir $Char $ExactOnly.IsPresent }
+    return $RealmCache[$cacheKey]
+}
+function Find-RealmNameUncached([string]$svDir, [string]$Char, [bool]$ExactOnly) {
+    $n = Get-CharNames $Char
+    $counts = @{}
+    foreach ($file in Get-ChildItem -LiteralPath $svDir -Filter '*.lua' -File) {
+        $text = [IO.File]::ReadAllText($file.FullName, $Utf8NoBom)
+        $m = [regex]::Match($text, '\["' + [regex]::Escape($n.Full) + '@([^"\\]+)"\]')
+        if ($m.Success) { return $m.Groups[1].Value }
+        if ($ExactOnly) { continue }
+        foreach ($m in [regex]::Matches($text, '\["' + [regex]::Escape($n.First) + ' - ([^"\\]+)"\]')) {
+            $counts[$m.Groups[1].Value] = 1 + [int]$counts[$m.Groups[1].Value]
+        }
+    }
+    if ($counts.Count -gt 0) { return ($counts.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 1).Key }
+    return ''
+}
+
+# Alle realm-navne der optræder i addon-filerne som "Navn - Realm" eller "Navn@Realm".
+function Get-RealmSet([string]$AccPath) {
+    $cacheKey = "set|$AccPath"
+    if ($RealmCache.ContainsKey($cacheKey)) { return $RealmCache[$cacheKey] }
+    $set = @{}
+    $svDir = Join-Path $AccPath 'SavedVariables'
+    if (Test-Path -LiteralPath $svDir) {
+        foreach ($file in Get-ChildItem -LiteralPath $svDir -Filter '*.lua' -File) {
+            $text = [IO.File]::ReadAllText($file.FullName, $Utf8NoBom)
+            foreach ($m in [regex]::Matches($text, '\["[^"\\\r\n]+(?: - |@)([^"\\\r\n]+)"\]')) { $set[$m.Groups[1].Value] = $true }
+        }
+    }
+    $RealmCache[$cacheKey] = $set
+    return $set
+}
+
+# Den nye characters realm. Først efter første Enter World står den i addon-filerne, så det virker,
+# når man har logget ud til character select og kører fase 2 igen.
+#   1. Titan Panel: "Fornavn Efternavn@Realm" (sikkert)
+#   2. "Fornavn - Realm" (AtlasLoot m.fl.), men kun realms der ikke også findes i kildens filer,
+#      for fornavnet kan deles med gamle characters (fx Darkfade Speedy og Darkfade Testfive).
+function Find-TargetRealm($Tgt, $Src) {
+    $r = Find-RealmName $Tgt.AccPath $Tgt.Char -ExactOnly
+    if ($r) { return $r }
+    $svDir = Join-Path $Tgt.AccPath 'SavedVariables'
+    if (-not (Test-Path -LiteralPath $svDir)) { return '' }
+    $srcSet = @{}
+    if ($Src) { $srcSet = Get-RealmSet $Src.AccPath }
+    $first = [regex]::Escape((Get-CharNames $Tgt.Char).First)
+    $counts = @{}
+    foreach ($file in Get-ChildItem -LiteralPath $svDir -Filter '*.lua' -File) {
+        $text = [IO.File]::ReadAllText($file.FullName, $Utf8NoBom)
+        foreach ($m in [regex]::Matches($text, '\["' + $first + ' - ([^"\\\r\n]+)"\]')) {
+            $realm = $m.Groups[1].Value
+            if (-not $srcSet.ContainsKey($realm)) { $counts[$realm] = 1 + [int]$counts[$realm] }
+        }
+    }
+    if ($counts.Count -gt 0) { return ($counts.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 1).Key }
+    return ''
+}
+
+# Realm-navnet for den realm spillet står på. Når man er på character select, skriver spillet
+# realm-oplysningerne i Logs\Connection.log, fx ..."name":"CAMWOW EU5 Realm 10 PvP"...
+function Find-RealmFromLog([string]$Root, [string]$Flavor) {
+    $logPath = Join-Path $Root "$Flavor\Logs\Connection.log"
+    if (-not $Root -or -not (Test-Path -LiteralPath $logPath)) { return '' }
+    try {
+        $text = [IO.File]::ReadAllText($logPath, $Utf8NoBom)
+        $all = [regex]::Matches($text, '"name":"([^"\\]+)"')
+        if ($all.Count -gt 0) { return $all[$all.Count - 1].Groups[1].Value }
+    } catch { }
+    return ''
+}
+
+# cache.md5 holder styr på, hvornår hver fil (keybinds, macros, Edit Mode, indstillinger ...) sidst
+# blev gemt: 24 bytes pr. fil = MD5 af filen (16) + tidspunkt (4, unix-tid) + 4 ekstra bytes.
+# Ved login sammenligner spillet tidspunktet med serverens kopi (se Logs\AccountData.log):
+# er de ens, bruger det filen på disken. Er de forskellige, henter det serverens version.
+# Målets cache.md5 indeholder serverens tidspunkter fra sidste gang, spillet var åbent. Her får de
+# kopierede filer de tidspunkter (og deres egen MD5), så spillet tror, filerne er serverens version.
+#   $OldBytes: målets cache.md5 fra før kopieringen. Poster for filer der ikke blev kopieret, tages derfra.
+function Update-CacheTimes([string]$Dir, [byte[]]$OldBytes) {
+    $path = Join-Path $Dir 'cache.md5'
+    if (-not (Test-Path -LiteralPath $path)) { return 0 }
+    $b = [IO.File]::ReadAllBytes($path)
+    if ($b.Length -eq 0 -or $b.Length % 24 -ne 0) { return 0 }
+    $md5 = [System.Security.Cryptography.MD5]::Create()
+    $hashes = @{}
+    foreach ($f in Get-ChildItem -LiteralPath $Dir -File) {
+        if ($f.Name -eq 'cache.md5') { continue }
+        $hashes[[BitConverter]::ToString($md5.ComputeHash([IO.File]::ReadAllBytes($f.FullName)))] = $true
+    }
+    $sameSize = ($OldBytes -and $OldBytes.Length -eq $b.Length)
+    $zero = [BitConverter]::ToString((New-Object byte[] 16))
+    $bumped = 0
+    for ($off = 0; $off -lt $b.Length; $off += 24) {
+        $h = [BitConverter]::ToString($b, $off, 16)
+        if ($h -ne $zero -and $hashes.ContainsKey($h)) {
+            # Serveren har ingen kopi (tidspunkt 0)? Så bruger spillet filen alligevel.
+            if ($sameSize -and [BitConverter]::ToUInt32($OldBytes, $off + 16) -ne 0) {
+                [Array]::Copy($OldBytes, $off + 16, $b, $off + 16, 4)
+                $bumped++
+            }
+        } elseif ($sameSize) {
+            [Array]::Copy($OldBytes, $off, $b, $off, 24)
+        }
+    }
+    [IO.File]::WriteAllBytes($path, $b)
+    return $bumped
+}
+
+# Har fase 1 kørt? Så ligger kildens addon-filer allerede i målkontoen.
+function Test-Phase1Done($Src, $Tgt) {
+    if ($Src.AccPath -eq $Tgt.AccPath) { return $true }
+    $srcSv = Join-Path $Src.AccPath 'SavedVariables'
+    $tgtSv = Join-Path $Tgt.AccPath 'SavedVariables'
+    if (-not (Test-Path -LiteralPath $srcSv)) { return $true }
+    $names = @(Get-ChildItem -LiteralPath $srcSv -Filter '*.lua' -File | ForEach-Object { $_.Name })
+    if ($names.Count -eq 0) { return $true }
+    $found = @($names | Where-Object { Test-Path -LiteralPath (Join-Path $tgtSv $_) }).Count
+    return ($found * 2 -ge $names.Count)
+}
+
 # Beskriver hvad der kommer til at ske (bruges til opsummering i både vindue og konsol).
-function Get-PlanSummary($Src, $Tgt, [bool]$CopyAddons, [bool]$NoSync, [bool]$WowRunning) {
+function Get-PlanSummary([string]$Phase, $Src, $Tgt, [bool]$CopyAddons, [bool]$NoSync, [string]$SrcRealm, [string]$TgtRealm) {
     $sameFlavor = ($Src.Flavor -eq $Tgt.Flavor)
-    $sameAccount = ($sameFlavor -and $Src.Account -eq $Tgt.Account)
     $lines = @()
-    if (-not $sameFlavor -and $CopyAddons) {
-        if ($WowRunning) { $lines += "Addons kopieres fra $($Src.Flavor) til $($Tgt.Flavor) (indlæses først, når spillet genstartes)" }
-        else { $lines += "Addons kopieres fra $($Src.Flavor) til $($Tgt.Flavor)" }
+    if ($Phase -eq '1') {
+        if (-not $sameFlavor -and $CopyAddons) { $lines += "Addons kopieres fra $($Src.Flavor) til $($Tgt.Flavor)" }
+        if (-not $sameFlavor) { $lines += "Grafik- og lydindstillinger kopieres (uden beta-loginlinjer)" }
+        if ($Src.AccPath -ne $Tgt.AccPath) {
+            $lines += "Konto-indstillinger kopieres til kontoen $($Tgt.Account): Edit Mode, keybinds, macros, interface- og addon-indstillinger"
+            if (-not $Tgt.Exists) { $lines += "Kontomappen $($Tgt.Account) findes ikke endnu og bliver oprettet. Tjek at navnet er stavet rigtigt" }
+        }
+        if ($NoSync) { $lines += "Server-synkronisering slås fra (nødløsning)" }
+    } else {
+        if (-not (Test-Phase1Done $Src $Tgt)) { $lines += "OBS: Fase 1 ser ikke ud til at være kørt. Edit Mode, keybinds og indstillinger kommer ikke med" }
+        $lines += "Character-indstillinger kopieres: $($Src.Char)  ->  $($Tgt.Char)"
+        $lines += "Addon-profiler for $($Src.Char) bliver valgt på $($Tgt.Char)"
+        if ($SrcRealm -and $TgtRealm) { $lines += "Realm-indstillinger (Titan Panel, X-Perl, AtlasLoot) flyttes: $SrcRealm  ->  $TgtRealm" }
+        else { $lines += "Intet realm-navn: Titan Panel, X-Perl og AtlasLoot venter. Tryk Enter World, skriv /logout, og kør fase 2 igen" }
     }
-    if (-not $sameFlavor) {
-        if ($WowRunning) { $lines += "Grafik og lyd (Config.wtf) springes over: spillet kører og overskriver den, når det lukker" }
-        else { $lines += "Grafik- og lydindstillinger kopieres (uden beta-loginlinjer)" }
-    }
-    if (-not $sameAccount) { $lines += "Konto-indstillinger kopieres: addons, keybinds, macros, Edit Mode" }
-    $lines += "Character-indstillinger kopieres: $($Src.Char)  ->  $($Tgt.Char)"
-    $lines += "Addon-profiler for $($Src.Char) bliver valgt på $($Tgt.Char)"
-    if ($NoSync) { $lines += "Server-synkronisering slås fra (nødløsning)" }
     $lines += "Intet slettes. Overskrevne filer gemmes i en backup-mappe."
     return $lines
 }
 
-# Udfører overførslen. $Log og $Progress er scriptblocks, så vinduet og konsollen kan vise fremdrift.
+# ---- Små hjælpere til WoW's SavedVariables (Lua-tabeller) ----
+
+# Index på den '}' der lukker den '{' der står på $Open. Springer tekst i "..." over.
+function Find-LuaBlockEnd([string]$Text, [int]$Open) {
+    $depth = 0
+    $i = $Open
+    $special = [char[]]'{}"'
+    $inString = [char[]]'"\'
+    while ($true) {
+        $i = $Text.IndexOfAny($special, $i)
+        if ($i -lt 0) { return -1 }
+        if ($Text[$i] -eq '"') {
+            $i++
+            while ($true) {
+                $j = $Text.IndexOfAny($inString, $i)
+                if ($j -lt 0) { return -1 }
+                if ($Text[$j] -eq '\') { $i = $j + 2; continue }
+                $i = $j + 1
+                break
+            }
+            continue
+        }
+        if ($Text[$i] -eq '{') { $depth++ } else { $depth--; if ($depth -eq 0) { return $i } }
+        $i++
+    }
+}
+
+# Finder ["Key"] = { direkte i blokken der starter ved $Open (ikke i underblokke). Returnerer index på '{' eller -1.
+function Find-LuaChildBlock([string]$Text, [int]$Open, [int]$Close, [string]$Key) {
+    $needle = '["' + $Key + '"] = {'
+    $pos = $Text.IndexOf($needle, $Open, [StringComparison]::Ordinal)
+    while ($pos -ge 0 -and $pos -lt $Close) {
+        # dybden ved $pos: tæl blokke der åbner og lukker igen mellem $Open og $pos
+        $depth = 1
+        $i = $Open + 1
+        while ($i -lt $pos) {
+            $c = $Text[$i]
+            if ($c -eq '{') {
+                $end = Find-LuaBlockEnd $Text $i
+                if ($end -gt $pos) { $depth = 2; break }
+                $i = $end + 1
+                continue
+            }
+            if ($c -eq '"') {
+                $i++
+                while ($i -lt $pos -and $Text[$i] -ne '"') { if ($Text[$i] -eq '\') { $i++ }; $i++ }
+            }
+            $i++
+        }
+        if ($depth -eq 1) { return $pos + $needle.Length - 1 }
+        $pos = $Text.IndexOf($needle, $pos + 1, [StringComparison]::Ordinal)
+    }
+    return -1
+}
+
+# Erstatter blokken der starter ved $Open med $Value. $null hvis den allerede er ens.
+function Set-LuaBlock([string]$Text, [int]$Open, [string]$Value) {
+    $close = Find-LuaBlockEnd $Text $Open
+    if ($close -lt 0) { return $null }
+    if ($Text.Substring($Open, $close - $Open + 1) -eq $Value) { return $null }
+    return $Text.Substring(0, $Open) + $Value + $Text.Substring($close + 1)
+}
+
+# Titan Panel: TitanSettings.Players["Fornavn Efternavn@Realm"] = {...}  ->  kopi under den nye nøgle.
+# Findes den nye nøgle allerede (addonnet har lavet standardindstillinger ved første login), erstattes den.
+function Copy-LuaKeyedBlock([string]$Text, [string]$FromKey, [string]$ToKey) {
+    $from = '["' + $FromKey + '"] = {'
+    $pos = $Text.IndexOf($from, [StringComparison]::Ordinal)
+    if ($pos -lt 0) { return $null }
+    $open = $pos + $from.Length - 1
+    $close = Find-LuaBlockEnd $Text $open
+    if ($close -lt 0 -or $Text[$close + 1] -ne ',') { return $null }
+    $value = $Text.Substring($open, $close - $open + 1)
+    $to = '["' + $ToKey + '"] = {'
+    $toPos = $Text.IndexOf($to, [StringComparison]::Ordinal)
+    if ($toPos -ge 0) { return (Set-LuaBlock $Text ($toPos + $to.Length - 1) $value) }
+    return $Text.Insert($close + 2, "`n" + '["' + $ToKey + '"] = ' + $value + ',')
+}
+
+# X-Perl: ZPerlConfigNew["Realm"]["Fornavn"] = {...}  ->  kopi under ["Ny realm"]["Nyt fornavn"].
+function Copy-LuaRealmCharBlock([string]$Text, [string]$SrcRealm, [string]$SrcFirst, [string]$TgtRealm, [string]$TgtFirst) {
+    $rNeedle = '["' + $SrcRealm + '"] = {'
+    $rPos = $Text.IndexOf($rNeedle, [StringComparison]::Ordinal)
+    if ($rPos -lt 0) { return $null }
+    $rOpen = $rPos + $rNeedle.Length - 1
+    $rClose = Find-LuaBlockEnd $Text $rOpen
+    if ($rClose -lt 0) { return $null }
+    $cOpen = Find-LuaChildBlock $Text $rOpen $rClose $SrcFirst
+    if ($cOpen -lt 0) { return $null }
+    $value = $Text.Substring($cOpen, (Find-LuaBlockEnd $Text $cOpen) - $cOpen + 1)
+    $entry = '["' + $TgtFirst + '"] = ' + $value + ','
+
+    $tNeedle = '["' + $TgtRealm + '"] = {'
+    $tPos = $Text.IndexOf($tNeedle, [StringComparison]::Ordinal)
+    if ($tPos -ge 0) {
+        $tOpen = $tPos + $tNeedle.Length - 1
+        $tClose = Find-LuaBlockEnd $Text $tOpen
+        $existing = Find-LuaChildBlock $Text $tOpen $tClose $TgtFirst
+        if ($existing -ge 0) { return (Set-LuaBlock $Text $existing $value) }
+        return $Text.Insert($tOpen + 1, "`n" + $entry)
+    }
+    if ($Text[$rClose + 1] -ne ',') { return $null }
+    return $Text.Insert($rClose + 2, "`n" + $tNeedle + "`n" + $entry + "`n},")
+}
+
+# Udfører en fase. $Log og $Progress er scriptblocks, så vinduet og konsollen kan vise fremdrift.
+#   Fase 1: $Tgt er en konto (Get-TargetAccount).  Fase 2: $Tgt er en character (Get-Characters).
 function Invoke-Transfer {
     param(
-        [string]$Root, $Src, $Tgt,
-        [bool]$CopyAddons, [bool]$NoSync, [bool]$SkipConfig,
+        [string]$Phase, [string]$Root, $Src, $Tgt,
+        [bool]$CopyAddons, [bool]$NoSync, [string]$SrcRealm, [string]$TgtRealm,
         [scriptblock]$Log, [scriptblock]$Progress
     )
+    if ($Phase -eq '1' -and (Test-WowRunning)) { throw "Spillet kører. Luk WoW helt (også Battle.net-spillet), før du kører fase 1." }
+
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
     $backupRoot = Join-Path $Root "UI-backup-$stamp"
     $state = @{ Backups = 0; Files = 0; Profiles = 0; LogLines = New-Object System.Collections.Generic.List[string] }
@@ -181,37 +456,52 @@ function Invoke-Transfer {
         $state.Backups++
     }
 
-    if ($Src.Path -eq $Tgt.Path) { throw "Kilde og mål er den samme character." }
-
     $srcBase = Join-Path $Root $Src.Flavor
     $tgtBase = Join-Path $Root $Tgt.Flavor
     $sameFlavor = ($Src.Flavor -eq $Tgt.Flavor)
-    $sameAccount = ($sameFlavor -and $Src.Account -eq $Tgt.Account)
 
+    & $say "Fase $Phase"
     & $say "Fra: $($Src.Flavor)\$($Src.Account)\$($Src.Realm)\$($Src.Char)"
-    & $say "Til: $($Tgt.Flavor)\$($Tgt.Account)\$($Tgt.Realm)\$($Tgt.Char)"
+    if ($Phase -eq '1') { & $say "Til: $($Tgt.Flavor)\$($Tgt.Account)" }
+    else {
+        if ($Src.Path -eq $Tgt.Path) { throw "Kilde og mål er den samme character." }
+        & $say "Til: $($Tgt.Flavor)\$($Tgt.Account)\$($Tgt.Realm)\$($Tgt.Char)"
+    }
 
     # ---- Saml alle fil-kopieringer først, så fremdriften kan vises korrekt ----
     $ops = New-Object System.Collections.Generic.List[object]
     $addTree = {
-        param([string]$From, [string]$To, [string[]]$SkipTopDirs)
+        param([string]$From, [string]$To)
         foreach ($f in Get-ChildItem -LiteralPath $From -Recurse -File -Force) {
             $rel = $f.FullName.Substring($From.Length).TrimStart('\', '/')
-            $top = ($rel -split '[\\/]')[0]
-            if ($SkipTopDirs -and ($SkipTopDirs -contains $top) -and $rel -ne $top) { continue }
             $ops.Add(@($f.FullName, (Join-Path $To $rel)))
         }
     }
 
-    if (-not $sameFlavor -and $CopyAddons) {
-        $srcInterface = Join-Path $srcBase 'Interface'
-        if (Test-Path -LiteralPath $srcInterface) { & $addTree $srcInterface (Join-Path $tgtBase 'Interface') @() }
+    if ($Phase -eq '1') {
+        if (-not $sameFlavor -and $CopyAddons) {
+            $srcInterface = Join-Path $srcBase 'Interface'
+            if (Test-Path -LiteralPath $srcInterface) { & $addTree $srcInterface (Join-Path $tgtBase 'Interface') }
+        }
+        if ($Src.AccPath -ne $Tgt.AccPath) {
+            # Filerne direkte i kontomappen (Edit Mode, keybinds, macros, indstillinger) + kontoens addon-indstillinger.
+            # Rækkefølgen af characters på character select hører til den gamle konto og bliver ikke kopieret.
+            foreach ($f in Get-ChildItem -LiteralPath $Src.AccPath -File -Force) {
+                if ($f.Name -like 'character-list-order*') { continue }
+                $ops.Add(@($f.FullName, (Join-Path $Tgt.AccPath $f.Name)))
+            }
+            $srcSv = Join-Path $Src.AccPath 'SavedVariables'
+            if (Test-Path -LiteralPath $srcSv) { & $addTree $srcSv (Join-Path $Tgt.AccPath 'SavedVariables') }
+        }
+    } else {
+        & $addTree $Src.Path $Tgt.Path
     }
-    if (-not $sameAccount) {
-        $realmDirs = @(Get-ChildItem -LiteralPath $Src.AccPath -Directory | Where-Object { $_.Name -ne 'SavedVariables' } | ForEach-Object { $_.Name })
-        & $addTree $Src.AccPath $Tgt.AccPath $realmDirs
-    }
-    & $addTree $Src.Path $Tgt.Path @()
+
+    # Målets cache.md5 gemmes inden kopieringen (se Update-CacheTimes)
+    if ($Phase -eq '1') { $cacheDir = $Tgt.AccPath } else { $cacheDir = $Tgt.Path }
+    $oldCache = $null
+    $oldCachePath = Join-Path $cacheDir 'cache.md5'
+    if (Test-Path -LiteralPath $oldCachePath) { $oldCache = [IO.File]::ReadAllBytes($oldCachePath) }
 
     # ---- Kopiér ----
     & $say "Kopierer $($ops.Count) filer..."
@@ -228,86 +518,121 @@ function Invoke-Transfer {
     $state.Files = $ops.Count
     & $say "Filer kopieret."
 
-    # ---- Config.wtf (grafik/lyd) uden beta-loginlinjer ----
-    # Kører spillet, skriver det sin egen Config.wtf, når det lukker, så en kopi nu ville gå tabt.
-    $loginLines = '^\s*SET\s+(portal|realmList|realmListbn|realmName|lastCharacterIndex|lastSelectedRealm|accountName|accountList|gxApi)\s'
-    if (-not $sameFlavor -and $SkipConfig) {
-        & $say "Grafik og lyd (Config.wtf) sprunget over, fordi spillet kører. Kopiér den, mens spillet er lukket."
-    } elseif (-not $sameFlavor) {
-        $srcConfig = Join-Path $srcBase 'WTF\Config.wtf'
-        if (Test-Path -LiteralPath $srcConfig) {
-            $tgtConfig = Join-Path $tgtBase 'WTF\Config.wtf'
-            $keep = @()
-            if (Test-Path -LiteralPath $tgtConfig) {
-                # behold målets egne login-linjer, så launch-klienten stadig logger rigtigt ind
-                $keep = @([IO.File]::ReadAllLines($tgtConfig) | Where-Object { $_ -match $loginLines })
-                & $backupFile $tgtConfig
+    if ($Phase -eq '2' -or $Src.AccPath -ne $Tgt.AccPath) {
+        $n = Update-CacheTimes $cacheDir $oldCache
+        if ($n -gt 0) { & $say "$n filer fik serverens tidspunkt, så spillet bruger dem frem for at hente serverens kopi." }
+    }
+
+    if ($Phase -eq '1') {
+        # ---- Config.wtf (grafik/lyd) uden beta-loginlinjer ----
+        $loginLines = '^\s*SET\s+(portal|realmList|realmListbn|realmName|lastCharacterIndex|lastSelectedRealm|accountName|accountList|gxApi)\s'
+        if (-not $sameFlavor) {
+            $srcConfig = Join-Path $srcBase 'WTF\Config.wtf'
+            if (Test-Path -LiteralPath $srcConfig) {
+                $tgtConfig = Join-Path $tgtBase 'WTF\Config.wtf'
+                $keep = @()
+                if (Test-Path -LiteralPath $tgtConfig) {
+                    # behold målets egne login-linjer, så launch-klienten stadig logger rigtigt ind
+                    $keep = @([IO.File]::ReadAllLines($tgtConfig) | Where-Object { $_ -match $loginLines })
+                    & $backupFile $tgtConfig
+                }
+                $lines = @([IO.File]::ReadAllLines($srcConfig) | Where-Object { $_ -notmatch $loginLines }) + $keep
+                New-Item -ItemType Directory -Path (Split-Path $tgtConfig -Parent) -Force | Out-Null
+                [IO.File]::WriteAllLines($tgtConfig, [string[]]$lines, $Utf8NoBom)
+                & $say "Grafik- og lydindstillinger kopieret (Config.wtf, uden beta-loginlinjer)."
             }
-            $lines = @([IO.File]::ReadAllLines($srcConfig) | Where-Object { $_ -notmatch $loginLines }) + $keep
+        }
+        if ($Progress) { & $Progress 90 }
+
+        # ---- (Valgfrit) Slå server-synkronisering fra ----
+        if ($NoSync) {
+            $tgtConfig = Join-Path $tgtBase 'WTF\Config.wtf'
+            $lines = @()
+            if (Test-Path -LiteralPath $tgtConfig) {
+                & $backupFile $tgtConfig
+                $lines = @([IO.File]::ReadAllLines($tgtConfig) | Where-Object { $_ -notmatch '^\s*SET\s+synchronize(Config|Settings|Bindings|Macros)\s' })
+            }
+            $lines += 'SET synchronizeConfig "0"', 'SET synchronizeSettings "0"', 'SET synchronizeBindings "0"', 'SET synchronizeMacros "0"'
             New-Item -ItemType Directory -Path (Split-Path $tgtConfig -Parent) -Force | Out-Null
             [IO.File]::WriteAllLines($tgtConfig, [string[]]$lines, $Utf8NoBom)
-            & $say "Grafik- og lydindstillinger kopieret (Config.wtf, uden beta-loginlinjer)."
+            & $say "Server-synkronisering af keybinds, macros og indstillinger er slået fra."
         }
-    }
-    if ($Progress) { & $Progress 85 }
-
-    # ---- Addon-profiler (AceDB profileKeys) ----
-    # I WoW Forever ser nøglerne ud som ["Fornavn Efternavn"] = "Profil" (mellemrum, ingen realm).
-    $srcSpace = $Src.Char -replace '-', ' '
-    $tgtSpace = $Tgt.Char -replace '-', ' '
-    $keyMap = @{}
-    $keyMap[$srcSpace] = $tgtSpace
-    $keyMap[$Src.Char] = $Tgt.Char
-    $keyMap["$($Src.Char) - $($Src.Realm)"] = "$($Tgt.Char) - $($Tgt.Realm)"
-    $keyMap["$srcSpace - $($Src.Realm)"] = "$tgtSpace - $($Tgt.Realm)"
-    $svDir = Join-Path $Tgt.AccPath 'SavedVariables'
-    if (Test-Path -LiteralPath $svDir) {
-        $blockPattern = '(?s)\["profileKeys"\] = \{.*?\n[ \t]*\}'
-        $linePattern = '(?m)^([ \t]*)\["((?:[^"\\\r\n]|\\.)*)"\] = ("(?:[^"\\\r\n]|\\.)*"),(\r?)$'
-        $names = @()
-        foreach ($file in Get-ChildItem -LiteralPath $svDir -Filter '*.lua' -File) {
-            $text = [IO.File]::ReadAllText($file.FullName, $Utf8NoBom)
-            if (-not $text.Contains('["profileKeys"]')) { continue }
-            $new = [regex]::Replace($text, $blockPattern, {
-                param($block)
-                $b = $block.Value
-                $added = @{}
-                [regex]::Replace($b, $linePattern, {
-                    param($m)
-                    $old = $m.Groups[2].Value
-                    if (-not $keyMap.ContainsKey($old)) { return $m.Value }
-                    $nk = $keyMap[$old]
-                    if ($nk -eq $old -or $added.ContainsKey($nk) -or $b.Contains('["' + $nk + '"] = ')) { return $m.Value }
-                    $added[$nk] = $true
-                    return $m.Value + "`n" + $m.Groups[1].Value + '["' + $nk + '"] = ' + $m.Groups[3].Value + ',' + $m.Groups[4].Value
-                })
-            })
-            if ($new -ne $text) {
-                if ($text.Contains("`r`n")) { $new = $new -replace '(?<!\r)\n', "`r`n" }
-                & $backupFile $file.FullName
-                [IO.File]::WriteAllText($file.FullName, $new, $Utf8NoBom)
-                $state.Profiles++
-                $names += $file.BaseName
+    } else {
+        # ---- Addon-profiler (AceDB profileKeys) og indstillinger gemt under realm-navn ----
+        # I WoW Forever ser profileKeys ud som ["Fornavn Efternavn"] = "Profil", og i nogle addons
+        # ["Fornavn - Realm"], hvor fornavnet er det spillet selv kalder characteren.
+        $s = Get-CharNames $Src.Char
+        $t = Get-CharNames $Tgt.Char
+        $keyMap = @{}
+        $keyMap[$s.Full] = $t.Full
+        $keyMap[$Src.Char] = $Tgt.Char
+        $useRealm = [bool]($SrcRealm -and $TgtRealm)
+        if ($useRealm) {
+            $keyMap["$($s.First) - $SrcRealm"] = "$($t.First) - $TgtRealm"
+            $keyMap["$($s.Full) - $SrcRealm"] = "$($t.Full) - $TgtRealm"
+        }
+        $svDir = Join-Path $Tgt.AccPath 'SavedVariables'
+        if (Test-Path -LiteralPath $svDir) {
+            $blockPattern = '(?s)\["profileKeys"\] = \{.*?\n[ \t]*\}'
+            $linePattern = '(?m)^([ \t]*)\["((?:[^"\\\r\n]|\\.)*)"\] = ("(?:[^"\\\r\n]|\\.)*"),(\r?)$'
+            $names = @()
+            foreach ($file in Get-ChildItem -LiteralPath $svDir -Filter '*.lua' -File) {
+                $text = [IO.File]::ReadAllText($file.FullName, $Utf8NoBom)
+                $new = $text
+                if ($text.Contains('["profileKeys"]')) {
+                    $new = [regex]::Replace($new, $blockPattern, {
+                        param($block)
+                        $b = $block.Value
+                        # Hvilken profil skal den nye character have? (samme som den gamle)
+                        $want = @{}
+                        foreach ($m in [regex]::Matches($b, $linePattern)) {
+                            $old = $m.Groups[2].Value
+                            if ($keyMap.ContainsKey($old) -and $keyMap[$old] -ne $old -and -not $want.ContainsKey($keyMap[$old])) {
+                                $want[$keyMap[$old]] = $m.Groups[3].Value
+                            }
+                        }
+                        # Findes den nye character allerede (fx efter første login), rettes profilen
+                        $b = [regex]::Replace($b, $linePattern, {
+                            param($m)
+                            $k = $m.Groups[2].Value
+                            if (-not $want.ContainsKey($k) -or $m.Groups[3].Value -eq $want[$k]) { return $m.Value }
+                            return $m.Groups[1].Value + '["' + $k + '"] = ' + $want[$k] + ',' + $m.Groups[4].Value
+                        })
+                        # Ellers indsættes en ny linje lige under den gamle characters linje
+                        $added = @{}
+                        $bb = $b
+                        [regex]::Replace($bb, $linePattern, {
+                            param($m)
+                            $old = $m.Groups[2].Value
+                            if (-not $keyMap.ContainsKey($old)) { return $m.Value }
+                            $nk = $keyMap[$old]
+                            if ($nk -eq $old -or $added.ContainsKey($nk) -or $bb.Contains('["' + $nk + '"] = ')) { return $m.Value }
+                            $added[$nk] = $true
+                            return $m.Value + "`n" + $m.Groups[1].Value + '["' + $nk + '"] = ' + $m.Groups[3].Value + ',' + $m.Groups[4].Value
+                        })
+                    })
+                }
+                if ($useRealm -and $file.Name -eq 'Titan.lua') {
+                    $r = Copy-LuaKeyedBlock $new "$($s.Full)@$SrcRealm" "$($t.Full)@$TgtRealm"
+                    if ($r) { $new = $r }
+                }
+                if ($useRealm -and $file.Name -eq 'ZPerl.lua') {
+                    $r = Copy-LuaRealmCharBlock $new $SrcRealm $s.First $TgtRealm $t.First
+                    if ($r) { $new = $r }
+                }
+                if ($new -ne $text) {
+                    if ($text.Contains("`r`n")) { $new = $new -replace '(?<!\r)\n', "`r`n" }
+                    & $backupFile $file.FullName
+                    [IO.File]::WriteAllText($file.FullName, $new, $Utf8NoBom)
+                    $state.Profiles++
+                    $names += $file.BaseName
+                }
             }
+            if ($names.Count -gt 0) { & $say "Addon-profiler sat op i $($names.Count) addons: $($names -join ', ')" }
+            else { & $say "Ingen addon-profiler at sætte op (de er allerede sat, eller ingen addons bruger profiler)." }
         }
-        if ($names.Count -gt 0) { & $say "Addon-profiler sat op i $($names.Count) addons: $($names -join ', ')" }
-        else { & $say "Ingen addon-profiler at sætte op (de er allerede sat, eller ingen addons bruger profiler)." }
     }
     if ($Progress) { & $Progress 95 }
-
-    # ---- (Valgfrit) Slå server-synkronisering fra ----
-    if ($NoSync) {
-        $tgtConfig = Join-Path $tgtBase 'WTF\Config.wtf'
-        $lines = @()
-        if (Test-Path -LiteralPath $tgtConfig) {
-            & $backupFile $tgtConfig
-            $lines = @([IO.File]::ReadAllLines($tgtConfig) | Where-Object { $_ -notmatch '^\s*SET\s+synchronize(Config|Settings|Bindings|Macros)\s' })
-        }
-        $lines += 'SET synchronizeConfig "0"', 'SET synchronizeSettings "0"', 'SET synchronizeBindings "0"', 'SET synchronizeMacros "0"'
-        New-Item -ItemType Directory -Path (Split-Path $tgtConfig -Parent) -Force | Out-Null
-        [IO.File]::WriteAllLines($tgtConfig, [string[]]$lines, $Utf8NoBom)
-        & $say "Server-synkronisering af keybinds, macros og indstillinger er slået fra."
-    }
 
     & $say "Færdig. $($state.Files) filer kopieret, $($state.Backups) filer gemt i backup."
 
@@ -319,7 +644,7 @@ function Invoke-Transfer {
 
     return [pscustomobject]@{
         Files = $state.Files; Backups = $state.Backups; Profiles = $state.Profiles
-        BackupRoot = $backupRoot; LogPath = $logPath; TargetPath = $Tgt.Path
+        BackupRoot = $backupRoot; LogPath = $logPath
     }
 }
 
@@ -350,10 +675,29 @@ function Confirm-Console([string]$Question) {
     return ((Read-Host "$Question (j/n)") -match '^\s*[jy]')
 }
 
+# Spørg om en tekst med et forslag, der bruges hvis man bare trykker Enter.
+function Read-WithDefault([string]$Question, [string]$Default) {
+    if ($Yes) { return $Default }
+    $q = $Question
+    if ($Default) { $q += " [$Default]" }
+    $a = Read-Host $q
+    if ($a) { return $a.Trim() }
+    return $Default
+}
+
 function Start-Console {
     Write-Host "=== $AppTitle ===" -ForegroundColor Green
     $running = Test-WowRunning
-    if ($running) {
+    $ph = $Phase
+    if (-not $ph) {
+        $def = 0; if ($running) { $def = 1 }
+        $ph = Select-FromList "Hvilken fase?" @('1', '2') { param($x) if ($x -eq '1') { 'Fase 1: før launch (spillet lukket)' } else { 'Fase 2: på launch (character select)' } } $def
+    }
+    if ($ph -eq '1' -and $running) {
+        Write-Host "Spillet kører. Fase 1 kræver, at WoW er helt lukket. Luk spillet, og kør scriptet igen." -ForegroundColor Yellow
+        return 1
+    }
+    if ($ph -eq '2' -and $running) {
         Write-Host "WoW kører. Det er OK, så længe du står på character select og ikke har trykket Enter World." -ForegroundColor Yellow
         if (-not (Confirm-Console "Står du på character select?")) { Write-Host "Afbrudt. Intet er ændret."; return 1 }
     }
@@ -377,34 +721,52 @@ function Start-Console {
     if ($TargetFlavor) { $tgtFlavors = @($tgtFlavors | Where-Object { $_ -eq $TargetFlavor }) }
     $def = [Math]::Max(0, [Array]::IndexOf($tgtFlavors, '_forever_'))
     $tf = Select-FromList "Hvor spiller du nu? (TIL)" $tgtFlavors { param($x) Get-FlavorLabel $x } $def
-    if ($running -and $sf -ne $tf -and -not (Test-HasAddons $root $tf)) {
-        Write-Host "Der ligger ingen addons i $tf, og spillet kører. Addons, grafik og lyd skal på plads, før spillet starter." -ForegroundColor Yellow
-        Write-Host "Luk spillet helt og kør scriptet igen. Din character er allerede oprettet, så det er nok." -ForegroundColor Yellow
-        if (-not (Confirm-Console "Fortsæt alligevel?")) { Write-Host "Afbrudt. Intet er ændret."; return 1 }
-    }
-
-    $tgtChars = @(Get-Characters $root $tf | Where-Object { $_.Path -ne $src.Path } | Sort-Object Created -Descending)
-    if ($TargetChar) { $tgtChars = @($tgtChars | Where-Object { $_.Char -eq $TargetChar }) }
-    if ($tgtChars.Count -eq 0) { throw "Fandt ingen ny character i $tf. Opret din character i spillet først (tryk ikke Enter World), og kør så scriptet igen." }
-    $tgt = Select-FromList "Vælg din NYE character (nyeste øverst)" $tgtChars { param($x) $x.Label } 0
 
     $copyAddons = $false
-    if ($sf -ne $tf) {
-        if ($CopyInterface -eq 'yes') { $copyAddons = $true }
-        elseif ($CopyInterface -eq 'ask') { $copyAddons = Confirm-Console "Kopiér også dine addons?" }
+    $srcRealm = ''
+    $tgtRealm = ''
+    if ($ph -eq '1') {
+        $acc = $TargetAccount
+        if (-not $acc) { $acc = Read-WithDefault "Dit kontonavn i $tf (fx C00LPET)" (@(Get-Accounts $root $tf) | Select-Object -First 1) }
+        if (-not $acc) { throw "Intet kontonavn angivet." }
+        $tgt = Get-TargetAccount $root $tf $acc
+        if ($sf -ne $tf) {
+            if ($CopyInterface -eq 'yes') { $copyAddons = $true }
+            elseif ($CopyInterface -eq 'ask') { $copyAddons = Confirm-Console "Kopiér også dine addons?" }
+        }
+    } else {
+        $tgtChars = @(Get-Characters $root $tf | Where-Object { $_.Path -ne $src.Path } | Sort-Object Created -Descending)
+        if ($TargetChar) { $tgtChars = @($tgtChars | Where-Object { $_.Char -eq $TargetChar }) }
+        if ($tgtChars.Count -eq 0) { throw "Fandt ingen ny character i $tf. Opret din character i spillet først (tryk ikke Enter World), og kør så scriptet igen." }
+        $tgt = Select-FromList "Vælg din NYE character (nyeste øverst)" $tgtChars { param($x) $x.Label } 0
+        $srcRealm = $SourceRealm
+        if (-not $srcRealm) { $srcRealm = Read-WithDefault "Realm-navn for $($src.Char)" (Find-RealmName $src.AccPath $src.Char) }
+        $tgtRealm = $TargetRealm
+        if (-not $tgtRealm) {
+            $guess = Find-TargetRealm $tgt $src
+            if (-not $guess) { $guess = Find-RealmFromLog $root $tgt.Flavor }
+            $tgtRealm = Read-WithDefault "Realm-navn for $($tgt.Char) (står på character select, Enter = spring over)" $guess
+        }
     }
 
     Write-Host ""
     Write-Host "Det her sker:" -ForegroundColor Cyan
-    Get-PlanSummary $src $tgt $copyAddons $DisableSync.IsPresent $running | ForEach-Object { Write-Host "  - $_" }
+    Get-PlanSummary $ph $src $tgt $copyAddons $DisableSync.IsPresent $srcRealm $tgtRealm | ForEach-Object { Write-Host "  - $_" }
     if (-not (Confirm-Console "Fortsæt?")) { Write-Host "Afbrudt. Intet er ændret."; return 1 }
 
-    $r = Invoke-Transfer -Root $root -Src $src -Tgt $tgt -CopyAddons $copyAddons -NoSync $DisableSync.IsPresent -SkipConfig $running `
-        -Log { param($t) Write-Host "  $t" } -Progress $null
+    $r = Invoke-Transfer -Phase $ph -Root $root -Src $src -Tgt $tgt -CopyAddons $copyAddons -NoSync $DisableSync.IsPresent `
+        -SrcRealm $srcRealm -TgtRealm $tgtRealm -Log { param($t) Write-Host "  $t" } -Progress $null
     Write-Host ""
-    Write-Host "Færdig! Du kan nu trykke 'Enter World'." -ForegroundColor Green
+    if ($ph -eq '1') {
+        Write-Host "Fase 1 færdig! Kør fase 2 på launch, når du har oprettet din character." -ForegroundColor Green
+    } else {
+        Write-Host "Færdig! Du kan nu trykke 'Enter World'." -ForegroundColor Green
+        if (-not ($srcRealm -and $tgtRealm)) {
+            Write-Host "  Realm-navnet manglede: skriv /logout når du er inde i verden, kør fase 2 igen, og tryk Enter World." -ForegroundColor Yellow
+        }
+        Write-Host "  Mangler binds eller macros på barerne: /myslot -> vælg profil -> Import."
+    }
     Write-Host "  Backup og log: $($r.BackupRoot)"
-    Write-Host "  Mangler binds eller macros på barerne: /myslot -> vælg profil -> Import."
     return 0
 }
 
@@ -487,6 +849,12 @@ function Start-Gui {
     function Clear-Combo($cb) { $cb.Items.Clear(); $cb.Tag.Clear() }
     function Add-ComboItem($cb, [string]$Label, $Value) { [void]$cb.Items.Add($Label); [void]$cb.Tag.Add($Value) }
     function Get-ComboValue($cb) { if ($cb.SelectedIndex -ge 0) { return $cb.Tag[$cb.SelectedIndex] } else { return $null } }
+    function New-TextBox($X, $Y, $Width) {
+        $t = New-Object System.Windows.Forms.TextBox
+        $t.Location = New-Object System.Drawing.Point($X, $Y); $t.Width = $Width
+        $t.BackColor = $Clr.Field; $t.ForeColor = $Clr.Text; $t.BorderStyle = 'FixedSingle'; $t.Font = $Fnt.Body
+        return $t
+    }
     function New-Button($Text, $X, $Y, $Width, [bool]$Primary) {
         $b = New-Object System.Windows.Forms.Button
         $b.Text = $Text; $b.Font = $Fnt.Btn; $b.FlatStyle = 'Flat'; $b.Cursor = [System.Windows.Forms.Cursors]::Hand
@@ -513,7 +881,14 @@ function Start-Gui {
     $accentBar.BackColor = $Clr.Accent
     $form.Controls.Add($accentBar)
     $form.Controls.Add((New-Label 'UI-overførsel' 20 18 $Fnt.Title $Clr.Text))
-    $form.Controls.Add((New-Label 'Tag addons, keybinds, macros, Edit Mode og chat med til din nye character.' 22 52 $Fnt.Sub $Clr.Muted))
+    $subtitle = New-Label '' 22 52 $Fnt.Sub $Clr.Muted 370
+    $form.Controls.Add($subtitle)
+
+    # ---- Faser: to knapper øverst til højre ----
+    $btnPhase1 = New-Button "Fase 1`nFør launch" 400 18 166 $false
+    $btnPhase2 = New-Button "Fase 2`nPå launch" 574 18 166 $false
+    $btnPhase1.Height = 54; $btnPhase2.Height = 54
+    $form.Controls.AddRange(@($btnPhase1, $btnPhase2))
 
     # ---- Banner (status: WoW kører / fejl / klar) ----
     $banner = New-Object System.Windows.Forms.Label
@@ -542,31 +917,41 @@ function Start-Gui {
     $card1.Controls.Add((New-Label 'Character' 252 46 $Fnt.Small $Clr.Muted))
     $cbSrcChar = New-Combo 252 64 458
     $card1.Controls.Add($cbSrcChar)
-    $srcHint = New-Label 'Den du senest har spillet på står øverst.' 16 104 $Fnt.Small $Clr.Muted 690
+    $srcHint = New-Label '' 16 104 $Fnt.Small $Clr.Muted 690
     $card1.Controls.Add($srcHint)
 
-    # ---- Kort 2: TIL ----
+    # ---- Kort 2: TIL (fase 1: kontonavn, fase 2: ny character) ----
     $card2 = New-Card 366 150
-    $card2.Controls.Add((New-Label '2   TIL  ·  din nye character' 16 12 $Fnt.Head $Clr.Accent))
+    $card2Head = New-Label '' 16 12 $Fnt.Head $Clr.Accent
+    $card2.Controls.Add($card2Head)
     $card2.Controls.Add((New-Label 'Spil' 16 46 $Fnt.Small $Clr.Muted))
     $cbTgtFlavor = New-Combo 16 64 220
     $card2.Controls.Add($cbTgtFlavor)
-    $card2.Controls.Add((New-Label 'Character' 252 46 $Fnt.Small $Clr.Muted))
+    $lblTgt = New-Label 'Character' 252 46 $Fnt.Small $Clr.Muted
+    $card2.Controls.Add($lblTgt)
     $cbTgtChar = New-Combo 252 64 340
     $card2.Controls.Add($cbTgtChar)
+    $txtAccount = New-TextBox 252 64 458
+    $txtAccount.CharacterCasing = 'Upper'
+    $card2.Controls.Add($txtAccount)
     $btnRefresh = New-Button 'Opdater' 604 62 106 $false
     $btnRefresh.Height = 30
     $card2.Controls.Add($btnRefresh)
     $tgtHint = New-Label '' 16 104 $Fnt.Small $Clr.Muted 690
     $card2.Controls.Add($tgtHint)
 
-    # ---- Kort 3: Indstillinger + opsummering ----
+    # ---- Kort 3: Indstillinger (fase 1) / realm-navne (fase 2) + opsummering ----
     $card3 = New-Card 528 190
     $chkAddons = New-Check 'Kopiér også addons (Interface-mappen)' 16 12
     $chkAddons.Checked = $true
     $card3.Controls.Add($chkAddons)
     $chkSync = New-Check 'Slå server-synkronisering fra (kun som nødløsning)' 16 38
     $card3.Controls.Add($chkSync)
+    $lblSrcRealm = New-Label 'Realm-navn før (fundet automatisk)' 16 8 $Fnt.Small $Clr.Muted
+    $txtSrcRealm = New-TextBox 16 28 330
+    $lblTgtRealm = New-Label 'Realm-navn nu (fra character select, eller tomt)' 362 8 $Fnt.Small $Clr.Muted
+    $txtTgtRealm = New-TextBox 362 28 330
+    $card3.Controls.AddRange(@($lblSrcRealm, $txtSrcRealm, $lblTgtRealm, $txtTgtRealm))
     $summary = New-Label '' 16 68 $Fnt.Small $Clr.Muted 690
     $summary.Height = 116
     $card3.Controls.Add($summary)
@@ -594,7 +979,9 @@ function Start-Gui {
     $script:Root = $null
     $script:LastResult = $null
     $script:Busy = $false
-    $script:WowRunning = $false
+    $script:WowRunning = Test-WowRunning
+    $script:Phase = $Phase
+    if (-not $script:Phase) { if ($script:WowRunning) { $script:Phase = '2' } else { $script:Phase = '1' } }
 
     $setBanner = {
         param([string]$Kind, [string]$Text)
@@ -659,38 +1046,123 @@ function Start-Gui {
         if ($cbTgtChar.Items.Count -gt 0) {
             $cbTgtChar.SelectedIndex = 0
             if ($keep) { for ($i = 0; $i -lt $cbTgtChar.Tag.Count; $i++) { if ($cbTgtChar.Tag[$i].Path -eq $keep) { $cbTgtChar.SelectedIndex = $i } } }
-            $tgtHint.Text = 'Den nyeste character står øverst. Har du lige oprettet en, er det den.'
-            $tgtHint.ForeColor = $Clr.Muted
-        } else {
-            $tgtHint.Text = 'Ingen character fundet her endnu. Opret den i spillet (tryk IKKE Enter World), og tryk så Opdater.'
-            $tgtHint.ForeColor = $Clr.Warn
         }
+    }
+
+    # Kontonavn: foreslå den senest brugte kontomappe i målet
+    $fillAccount = {
+        $tf = Get-ComboValue $cbTgtFlavor
+        $acc = ''
+        if ($script:Root -and $tf) { $acc = @(Get-Accounts $script:Root $tf) | Select-Object -First 1 }
+        $txtAccount.Text = [string]$acc
+    }
+
+    $fillRealms = {
+        $s = Get-ComboValue $cbSrcChar
+        $t = Get-ComboValue $cbTgtChar
+        $txtSrcRealm.Text = ''
+        $txtTgtRealm.Text = ''
+        if ($s) { $txtSrcRealm.Text = Find-RealmName $s.AccPath $s.Char }
+        if ($t) {
+            $tr = Find-TargetRealm $t $s
+            if (-not $tr) { $tr = Find-RealmFromLog $script:Root $t.Flavor }
+            $txtTgtRealm.Text = $tr
+        }
+    }
+
+    # Mål-objektet for den valgte fase (konto i fase 1, character i fase 2)
+    $getTarget = {
+        if ($script:Phase -eq '1') {
+            $tf = Get-ComboValue $cbTgtFlavor
+            if (-not $script:Root -or -not $tf -or -not $txtAccount.Text.Trim()) { return $null }
+            return (Get-TargetAccount $script:Root $tf $txtAccount.Text)
+        }
+        return (Get-ComboValue $cbTgtChar)
     }
 
     $updateState = {
         if ($script:Busy) { return }
+        $p1 = ($script:Phase -eq '1')
         $src = Get-ComboValue $cbSrcChar
-        $tgt = Get-ComboValue $cbTgtChar
+        $tgt = & $getTarget
         $sf = Get-ComboValue $cbSrcFlavor
         $tf = Get-ComboValue $cbTgtFlavor
         $diffFlavor = [bool]($sf -and $tf -and $sf -ne $tf)
         $chkAddons.Enabled = $diffFlavor
         if ($diffFlavor) { $chkAddons.ForeColor = $Clr.Text } else { $chkAddons.ForeColor = $Clr.Muted }
+
+        if ($p1) {
+            if ($tgt -and -not $tgt.Exists) { $tgtHint.Text = "Mappen $($tgt.Account) findes ikke endnu og bliver oprettet. Tjek at kontonavnet er stavet rigtigt."; $tgtHint.ForeColor = $Clr.Warn }
+            else { $tgtHint.Text = 'Dit kontonavn i WoW Forever (fx C00LPET). Konto-indstillinger lægges her, før du starter spillet.'; $tgtHint.ForeColor = $Clr.Muted }
+        } elseif ($cbTgtChar.Items.Count -gt 0) {
+            $tgtHint.Text = 'Den nyeste character står øverst. Har du lige oprettet en, er det den.'; $tgtHint.ForeColor = $Clr.Muted
+        } else {
+            $tgtHint.Text = 'Ingen character fundet her endnu. Opret den i spillet (tryk IKKE Enter World), og tryk så Opdater.'; $tgtHint.ForeColor = $Clr.Warn
+        }
+
+        $ready = [bool]($src -and $tgt)
+        if ($p1 -and $script:WowRunning) { $ready = $false }
         if ($src -and $tgt) {
-            $summary.Text = ((Get-PlanSummary $src $tgt ($chkAddons.Checked -and $diffFlavor) $chkSync.Checked $script:WowRunning) | ForEach-Object { "•  $_" }) -join "`n"
-            $btnGo.Enabled = $true
-            $btnGo.BackColor = $Clr.Accent
+            $summary.Text = ((Get-PlanSummary $script:Phase $src $tgt ($chkAddons.Checked -and $diffFlavor) $chkSync.Checked $txtSrcRealm.Text.Trim() $txtTgtRealm.Text.Trim()) | ForEach-Object { "•  $_" }) -join "`n"
+        } elseif ($p1) {
+            $summary.Text = 'Vælg din gamle character, og skriv dit kontonavn.'
         } else {
             $summary.Text = 'Vælg både en gammel og en ny character.'
-            $btnGo.Enabled = $false
-            $btnGo.BackColor = $Clr.Border
+        }
+        $btnGo.Enabled = $ready
+        if ($ready) { $btnGo.BackColor = $Clr.Accent } else { $btnGo.BackColor = $Clr.Border }
+    }
+
+    # Har målet allerede addons, er standardvalget IKKE at kopiere beta-versionerne ind over dem.
+    $defaultAddons = {
+        $chkAddons.Checked = -not (Test-HasAddons $script:Root (Get-ComboValue $cbTgtFlavor))
+    }
+
+    $refreshBanner = {
+        $script:WowRunning = Test-WowRunning
+        if (-not $script:Root) {
+            & $setBanner 'err' 'Kunne ikke finde World of Warcraft. Tryk "Skift…" og vælg mappen, der indeholder _forever_.'
+        } elseif ($script:Phase -eq '1' -and $script:WowRunning) {
+            & $setBanner 'err' 'Spillet kører. Luk WoW helt for at køre fase 1. Står du på character select på launch, så vælg Fase 2.'
+        } elseif ($script:Phase -eq '1') {
+            & $setBanner 'info' 'Spillet er lukket. Klar til fase 1.'
+        } elseif ($script:WowRunning) {
+            & $setBanner 'warn' 'WoW kører. Det er OK, så længe du står på character select og ikke har trykket Enter World.'
+        } else {
+            & $setBanner 'info' 'Klar. Vælg din gamle og din nye character, og tryk "Overfør UI".'
         }
     }
 
-    # Har målet allerede addons (fx kopieret og opdateret i CurseForge før launch), så er
-    # standardvalget IKKE at kopiere beta-versionerne ind over dem.
-    $defaultAddons = {
-        $chkAddons.Checked = -not (Test-HasAddons $script:Root (Get-ComboValue $cbTgtFlavor))
+    $setPhase = {
+        param([string]$P)
+        $script:Phase = $P
+        $p1 = ($P -eq '1')
+        foreach ($pair in @(@($btnPhase1, $p1), @($btnPhase2, -not $p1))) {
+            $b = $pair[0]
+            if ($pair[1]) { $b.BackColor = $Clr.Accent; $b.ForeColor = $Clr.OnAcc; $b.FlatAppearance.BorderSize = 0 }
+            else { $b.BackColor = $Clr.Field; $b.ForeColor = $Clr.Text; $b.FlatAppearance.BorderSize = 1 }
+        }
+        if ($p1) {
+            $subtitle.Text = 'Før launch, med spillet helt lukket.'
+            $card2Head.Text = '2   TIL  ·  din konto i WoW Forever'
+            $lblTgt.Text = 'Kontonavn'
+            $srcHint.Text = 'Alle characters på samme konto deler Edit Mode, keybinds og indstillinger. Vælg den du brugte mest.'
+        } else {
+            $subtitle.Text = 'På launch, mens du står på character select.'
+            $card2Head.Text = '2   TIL  ·  din nye character'
+            $lblTgt.Text = 'Character'
+            $srcHint.Text = 'Den du senest har spillet på står øverst.'
+        }
+        $txtAccount.Visible = $p1
+        $cbTgtChar.Visible = -not $p1
+        $btnRefresh.Visible = -not $p1
+        $chkAddons.Visible = $p1
+        $chkSync.Visible = $p1
+        foreach ($c in @($lblSrcRealm, $txtSrcRealm, $lblTgtRealm, $txtTgtRealm)) { $c.Visible = -not $p1 }
+        $btnBackup.Visible = $false
+        $script:LastResult = $null
+        & $refreshBanner
+        & $updateState
     }
 
     $setRoot = {
@@ -706,35 +1178,35 @@ function Start-Gui {
         & $fillFlavors
         & $fillSrcChars
         & $fillTgtChars
+        & $fillAccount
+        & $fillRealms
         & $defaultAddons
         & $updateState
     }
 
-    $refreshBanner = {
-        $script:WowRunning = Test-WowRunning
-        $sf = Get-ComboValue $cbSrcFlavor
-        $tf = Get-ComboValue $cbTgtFlavor
-        if (-not $script:Root) {
-            & $setBanner 'err' 'Kunne ikke finde World of Warcraft. Tryk "Skift…" og vælg mappen, der indeholder _forever_.'
-        } elseif ($script:WowRunning -and $sf -and $tf -and $sf -ne $tf -and -not (Test-HasAddons $script:Root $tf)) {
-            & $setBanner 'warn' "WoW kører, men der er ingen addons i $tf. Luk spillet helt, så addons, grafik og lyd kommer med."
-        } elseif ($script:WowRunning) {
-            & $setBanner 'warn' 'WoW kører. Det er OK, så længe du står på character select og ikke har trykket Enter World.'
-        } else {
-            & $setBanner 'info' 'Klar. Vælg din gamle og din nye character, og tryk "Overfør UI".'
-        }
-    }
-
     # ---- Hændelser ----
-    $cbSrcFlavor.Add_SelectedIndexChanged({ & $fillSrcChars; & $fillTgtChars; & $defaultAddons; & $refreshBanner; & $updateState })
-    $cbSrcChar.Add_SelectedIndexChanged({ & $fillTgtChars; & $updateState })
-    $cbTgtFlavor.Add_SelectedIndexChanged({ & $fillTgtChars; & $defaultAddons; & $refreshBanner; & $updateState })
-    $cbTgtChar.Add_SelectedIndexChanged({ & $updateState })
+    $cbSrcFlavor.Add_SelectedIndexChanged({ & $fillSrcChars; & $fillTgtChars; & $fillRealms; & $defaultAddons; & $updateState })
+    $cbSrcChar.Add_SelectedIndexChanged({ & $fillTgtChars; & $fillRealms; & $updateState })
+    $cbTgtFlavor.Add_SelectedIndexChanged({ & $fillTgtChars; & $fillAccount; & $fillRealms; & $defaultAddons; & $updateState })
+    $cbTgtChar.Add_SelectedIndexChanged({ & $fillRealms; & $updateState })
+    $txtAccount.Add_TextChanged({ & $updateState })
+    $txtSrcRealm.Add_TextChanged({ & $updateState })
+    $txtTgtRealm.Add_TextChanged({ & $updateState })
     $chkAddons.Add_CheckedChanged({ & $updateState })
     $chkSync.Add_CheckedChanged({ & $updateState })
-    $btnRefresh.Add_Click({ & $fillTgtChars; & $refreshBanner; & $updateState })
+    $btnPhase1.Add_Click({ if (-not $script:Busy) { & $setPhase '1' } })
+    $btnPhase2.Add_Click({ if (-not $script:Busy) { & $setPhase '2' } })
+    $btnRefresh.Add_Click({ $RealmCache.Clear(); & $fillTgtChars; & $fillRealms; & $refreshBanner; & $updateState })
     $btnClose.Add_Click({ $form.Close() })
-    $form.Add_Activated({ if (-not $script:Busy -and -not $script:LastResult) { & $refreshBanner } })
+    $form.Add_Activated({
+        if ($script:Busy) { return }
+        # Har man logget ud til character select imens, står realm-navnet nu i addon-filerne
+        $RealmCache.Clear()
+        $t = Get-ComboValue $cbTgtChar
+        if ($t -and -not $txtTgtRealm.Text.Trim()) { $txtTgtRealm.Text = Find-TargetRealm $t (Get-ComboValue $cbSrcChar) }
+        if (-not $script:LastResult) { & $refreshBanner }
+        & $updateState
+    })
 
     $btnBrowse.Add_Click({
         $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
@@ -755,22 +1227,30 @@ function Start-Gui {
     })
 
     $btnGo.Add_Click({
+        $ph = $script:Phase
         $src = Get-ComboValue $cbSrcChar
-        $tgt = Get-ComboValue $cbTgtChar
+        $tgt = & $getTarget
         if (-not $src -or -not $tgt) { return }
         $diffFlavor = ($src.Flavor -ne $tgt.Flavor)
         $copyAddons = ($chkAddons.Checked -and $diffFlavor)
         $noSync = $chkSync.Checked
-        $running = Test-WowRunning
+        $srcRealm = $txtSrcRealm.Text.Trim()
+        $tgtRealm = $txtTgtRealm.Text.Trim()
 
-        $msg = "Du er ved at kopiere dit UI:`n`n   FRA   $($src.Char)   ($($src.Flavor), realm $($src.Realm))`n   TIL   $($tgt.Char)   ($($tgt.Flavor), realm $($tgt.Realm))`n`n"
-        $msg += ((Get-PlanSummary $src $tgt $copyAddons $noSync $running) | ForEach-Object { "•  $_" }) -join "`n"
-        $msg += "`n`nHar du IKKE trykket Enter World på $($tgt.Char) endnu?"
+        if ($ph -eq '1') {
+            if (Test-WowRunning) { & $refreshBanner; & $updateState; return }
+            $msg = "Fase 1 kopierer dit UI:`n`n   FRA   $($src.Char)   ($($src.Flavor), konto $($src.Account))`n   TIL   kontoen $($tgt.Account)   ($($tgt.Flavor))`n`n"
+        } else {
+            $msg = "Fase 2 kopierer dit UI:`n`n   FRA   $($src.Char)   ($($src.Flavor), realm $($src.Realm))`n   TIL   $($tgt.Char)   ($($tgt.Flavor), realm $($tgt.Realm))`n`n"
+        }
+        $msg += ((Get-PlanSummary $ph $src $tgt $copyAddons $noSync $srcRealm $tgtRealm) | ForEach-Object { "•  $_" }) -join "`n"
+        if ($ph -eq '1') { $msg += "`n`nEr WoW helt lukket?" } else { $msg += "`n`nStår du på character select (ikke inde i verden)?" }
         $ans = [System.Windows.Forms.MessageBox]::Show($form, $msg, 'Bekræft overførsel', 'YesNo', 'Question')
         if ($ans -ne 'Yes') { return }
 
         $script:Busy = $true
-        $controls = @($btnGo, $btnClose, $btnBrowse, $btnRefresh, $cbSrcFlavor, $cbSrcChar, $cbTgtFlavor, $cbTgtChar, $chkAddons, $chkSync)
+        $controls = @($btnGo, $btnClose, $btnBrowse, $btnRefresh, $btnPhase1, $btnPhase2, $cbSrcFlavor, $cbSrcChar, $cbTgtFlavor, $cbTgtChar,
+                      $txtAccount, $txtSrcRealm, $txtTgtRealm, $chkAddons, $chkSync)
         foreach ($ctl in $controls) { $ctl.Enabled = $false }
         $btnGo.BackColor = $Clr.Border
         $btnBackup.Visible = $false
@@ -781,12 +1261,22 @@ function Start-Gui {
         [System.Windows.Forms.Application]::DoEvents()
         $before = @(Get-ChildItem -LiteralPath $script:Root -Directory -Filter 'UI-backup-*' | ForEach-Object { $_.FullName })
         try {
-            $r = Invoke-Transfer -Root $script:Root -Src $src -Tgt $tgt -CopyAddons $copyAddons -NoSync $noSync -SkipConfig $running `
-                -Log $log -Progress { param($p) $progressBar.Value = [Math]::Min(100, $p); [System.Windows.Forms.Application]::DoEvents() }
+            $r = Invoke-Transfer -Phase $ph -Root $script:Root -Src $src -Tgt $tgt -CopyAddons $copyAddons -NoSync $noSync `
+                -SrcRealm $srcRealm -TgtRealm $tgtRealm -Log $log `
+                -Progress { param($p) $progressBar.Value = [Math]::Min(100, $p); [System.Windows.Forms.Application]::DoEvents() }
             $script:LastResult = $r
-            & $setBanner 'ok' "Færdig! Du kan nu trykke Enter World på $($tgt.Char)."
             $btnBackup.Visible = $true
-            $done = "Dit UI er kopieret til $($tgt.Char).`n`n•  $($r.Files) filer kopieret`n•  $($r.Profiles) addon-profiler sat op`n•  $($r.Backups) overskrevne filer gemt i backup`n`nDu kan nu trykke Enter World.`n`nMangler der binds eller macros på barerne, så skriv /myslot, vælg din profil og tryk Import."
+            if ($ph -eq '1') {
+                & $setBanner 'ok' 'Fase 1 er færdig. Kør fase 2 på launch, når du har oprettet din character.'
+                $done = "Fase 1 er færdig.`n`n•  $($r.Files) filer kopieret`n•  $($r.Backups) overskrevne filer gemt i backup`n`nPå launch: log ind, opret din character (tryk IKKE Enter World), og kør så Overfoer-UI.bat igen og vælg Fase 2."
+            } else {
+                & $setBanner 'ok' "Færdig! Du kan nu trykke Enter World på $($tgt.Char)."
+                $done = "Dit UI er kopieret til $($tgt.Char).`n`n•  $($r.Files) filer kopieret`n•  $($r.Profiles) addons sat op`n•  $($r.Backups) overskrevne filer gemt i backup`n`nDu kan nu trykke Enter World."
+                if (-not ($srcRealm -and $tgtRealm)) {
+                    $done += "`n`nRealm-navnet manglede, så Titan Panel, X-Perl og AtlasLoot er ikke sat op endnu. Når du er inde i verden: skriv /logout (du kommer ikke i kø), kør fase 2 igen og tryk Enter World. Så findes realmen automatisk."
+                }
+                $done += "`n`nMangler der binds eller macros på barerne, så skriv /myslot, vælg din profil og tryk Import."
+            }
             [System.Windows.Forms.MessageBox]::Show($form, $done, 'Færdig', 'OK', 'Information') | Out-Null
         } catch {
             $err = $_.Exception.Message
@@ -814,7 +1304,7 @@ function Start-Gui {
     $initial = $WowRoot
     if (-not $initial) { $initial = Find-WowRoot }
     & $setRoot $initial
-    & $refreshBanner
+    & $setPhase $script:Phase
     & $log 'Klar. Intet bliver ændret, før du trykker "Overfør UI" og bekræfter.'
     [void]$form.ShowDialog()
     $form.Dispose()

@@ -5,14 +5,28 @@ Der er tre filer:
 - **`Overfoer-UI (konsol).bat`** gør det samme uden vindue, med spørgsmål i et sort konsolvindue. Den er en reserve, hvis vinduet ikke vil åbne.
 - **`Overfoer-UI.ps1`** er selve scriptet. Det er almindelig tekst, så du kan åbne det i Notepad og læse det. Vinduet og konsollen bruger præcis den samme kopi-logik.
 
+## To faser
+| | Fase 1: før launch | Fase 2: på launch |
+|---|---|---|
+| Spillet | Skal være **helt lukket** | Må gerne stå på **character select** |
+| Mål | Din konto (du skriver kontonavnet) | Din nye character |
+| Kopierer | Addons, grafik og lyd, Edit Mode, keybinds, macros, interface- og addon-indstillinger | Character-mappen (chat, character-keybinds og -macros, valgt Edit Mode-layout ...) |
+| Bagefter | | Addon-profiler og realm-indstillinger sættes op |
+
+Opdelingen skyldes, hvornår spillet læser filerne. Konto-filerne indlæses, når du logger ind (og en del af dem ved Enter World), og grafik og lyd (`Config.wtf`) gemmes, når spillet lukker. Character-filerne og addon-indstillingerne indlæses først ved Enter World, så de kan kopieres, mens du står på character select.
+
 ## Vinduet
-- **Statuslinjen** øverst siger, om WoW kører (det er OK på character select), om WoW-mappen ikke blev fundet, og når alt er færdigt.
+- **Fase 1 / Fase 2** øverst til højre. Kører WoW, åbner vinduet i fase 2, ellers i fase 1.
+- **Statuslinjen** siger, om WoW kører, om WoW-mappen ikke blev fundet, og når alt er færdigt. I fase 1 er den rød og knappen låst, så længe spillet kører.
 - **WoW-mappe** findes automatisk. Med **Skift…** kan du vælge en anden.
 - **1 FRA**: spil og gammel character. Den senest spillede står øverst.
-- **2 TIL**: spil og ny character. Den nyest oprettede står øverst, og en character oprettet inden for de sidste 2 timer er markeret **NY**. **Opdater** genindlæser listen, hvis du opretter din character, mens vinduet er åbent.
-- **Indstillinger**: "Kopiér også addons" (kun aktiv mellem to forskellige spil) og "Slå server-synkronisering fra" (fra som standard, kun en nødløsning).
+- **2 TIL**:
+  - Fase 1: spil og **kontonavn**. Udfyldes med den senest brugte kontomappe. Findes mappen ikke, bliver den oprettet, og vinduet beder dig tjekke stavningen.
+  - Fase 2: spil og ny character. Den nyest oprettede står øverst, og en character oprettet inden for de sidste 2 timer er markeret **NY**. **Opdater** genindlæser listen.
+- **Indstillinger** (fase 1): "Kopiér også addons" (kun hvis målet ikke allerede har addons) og "Slå server-synkronisering fra" (fra som standard, kun en nødløsning).
+- **Realm-navne** (fase 2): se afsnit 7.
 - **Opsummeringen** viser altid, hvad der vil ske med de valg, der er lavet.
-- **Overfør UI** viser først en bekræftelse. Under kopieringen er alle knapper låst, og der vises en fremdriftslinje og en log. Til sidst kommer en besked med antal filer, profiler og backups, og knappen **Åbn backup-mappe** dukker op.
+- **Overfør UI** viser først en bekræftelse. Under kopieringen er alle knapper låst, og der vises en fremdriftslinje og en log. Til sidst kommer en besked, og knappen **Åbn backup-mappe** dukker op.
 
 ## Grundregler
 - **Intet slettes eller flyttes.** Scriptet bruger kun kopiering.
@@ -22,89 +36,100 @@ Der er tre filer:
 - **Intet sker, før du bekræfter.** I vinduet trykker du *Overfør UI* og så *Ja*. I konsollen skriver du `j`. Fortryder du, er intet ændret.
 - **Ingen internetadgang og ingen installation.**
 
-## 0. Før første start (gøres i hånden, se guiden)
-Kommer dit UI fra en anden spilmappe (fx beta), skal `Interface` og `WTF\Config.wtf` kopieres over, **før spillet startes første gang**. Addons bliver kun fundet, når spillet starter, og spillet skriver sin egen `Config.wtf`, når det lukker. Så er grafik, lyd og addons indlæst fra start, inden resten af `WTF` bliver overført.
-
-## 1. Tjek om WoW kører
-Scriptet ser efter en proces der hedder noget med `Wow` (fx `Wow.exe` eller `WowB.exe`). Kører spillet, viser vinduet en gul statuslinje, og konsollen spørger, om du står på character select. Det er tilladt, fordi spillet først læser character-filerne, når du trykker Enter World.
-
-Kører spillet, og kopierer du mellem to forskellige spilmapper, sker der desuden to ting:
-- Ligger der ingen addons i målets `Interface\AddOns`, advarer statuslinjen (og konsollen) om, at Del 2 trin 4 i guiden ikke er gjort, og beder dig lukke spillet helt først. Din character er jo allerede oprettet, så scriptet kan sagtens køre med spillet lukket.
-- `Config.wtf` springes over (se 6b), fordi spillet overskriver den, når det lukker.
-
-## 2. Find WoW-mappen
+## 1. Find WoW-mappen
 1. Først læses Battle.net's registreringsnøgle (`HKLM\SOFTWARE\WOW6432Node\Blizzard Entertainment\World of Warcraft` → `InstallPath`). Den læses kun og ændres ikke.
 2. Virker det ikke, prøves de almindelige stier: `C:\Program Files (x86)\World of Warcraft`, `C:\Program Files\...`, `D:\World of Warcraft`, `D:\Games\...` og `E:\...`.
 3. Finder det stadig ikke mappen, viser vinduet en rød statuslinje, og du vælger mappen med **Skift…**. Konsollen beder dig indsætte stien.
 
-## 3. Vælg kilden (hvor du lavede dit UI)
-Du får vist de spilmapper, der har et `WTF\Account`, fx *Beta (_classic_beta_)*. Beta er valgt som standard. Bagefter vælger du character. Listen viser `navn · realm` (og konto, hvis du har flere), sorteret efter hvilken du senest har spillet på.
+Scriptet ser efter en proces, der hedder noget med `Wow` (fx `Wow.exe`), for at vide om spillet kører.
 
-Kilden er så: `<spil>\WTF\Account\<konto>\<realm>\<Fornavn-Efternavn>`.
-
-## 4. Vælg målet (din nye character)
-1. Du vælger spilmappen. *WoW Forever (_forever_)* er standard.
-2. Du får vist alle characters i den spilmappe, sorteret efter hvornår mappen blev oprettet. Den nyeste, altså den du lige har lavet, står øverst og er valgt. Kildens egen character er ikke med på listen.
-3. Er der ingen character endnu, siger vinduet det og beder dig oprette den og trykke **Opdater**. Knappen *Overfør UI* er låst, indtil både en gammel og en ny character er valgt.
-4. Peger kilde og mål på samme mappe, stopper scriptet.
-
-## 5. Opsummering
-Du får vist, hvad der kopieres hvorhen. I vinduet står opsummeringen hele tiden nederst og gentages i bekræftelsen. Intet er ændret, før du har bekræftet.
-
-## 6. Kopiering
+## 2. Fase 1: kopiering (spillet lukket)
 Kopieringen **fletter**. Hver fil fra kilden lægges ind på samme sted i målet. Filer der kun findes i målet, får lov at blive. Overskrives en fil, tages der først backup af den.
 
-**a) Addons, kun hvis kilde og mål er forskellige spilmapper (fx beta → forever)**
-- Du bliver spurgt om du vil kopiere `Interface`. Svarer du ja, kopieres hele `<kilde>\Interface` ind i `<mål>\Interface`. Addons der allerede ligger i målet, bliver liggende.
-- I vinduet er fluebenet sat som standard, kun hvis målet ikke allerede har addons. Har du kopieret `Interface` før første start som anbefalet, bliver dine opdaterede addons altså ikke overskrevet af beta-versionerne.
-- Kører spillet, bliver addons kopieret, men de indlæses først, når spillet startes igen.
+**a) Addons** (kun mellem to forskellige spilmapper, fx beta → forever): hele `<kilde>\Interface` kopieres ind i `<mål>\Interface`. Fluebenet er kun sat som standard, hvis målet ikke allerede har addons, så opdaterede addons ikke overskrives af beta-versionerne.
 
-**b) Grafik- og lydindstillinger (`WTF\Config.wtf`), kun ved forskellige spilmapper, og kun når spillet er lukket**
-- Kører spillet, springes dette trin over og skrives i loggen. En kopi ville alligevel blive overskrevet, når spillet lukker.
-- Backup af målets `Config.wtf`.
+**b) Grafik og lyd (`WTF\Config.wtf`)** (kun mellem forskellige spilmapper):
 - Kildens linjer kopieres, **bortset fra** login-linjerne `portal`, `realmList`, `realmListbn`, `realmName`, `lastCharacterIndex`, `lastSelectedRealm`, `accountName`, `accountList` og `gxApi`.
 - Målets egne login-linjer beholdes, så launch-klienten stadig logger ind på den rigtige server og ikke på beta.
 
-**c) Konto-niveau, når kilde og mål ikke er samme konto-mappe i samme spil**
-- Alle filer direkte i `<kilde-konto>\` (fx `bindings-cache.wtf`, `macros-cache.txt` og Edit Mode-cache) samt `<kilde-konto>\SavedVariables\` kopieres til målkontoen. Det er de konto-brede addon-indstillinger, fx WeakAuras, Details og Myslot-profiler.
-- De gamle realm-mapper kopieres **ikke**. Kun den character du valgte, kommer med (se d).
+**c) Konto-filer**: alle filer direkte i `<kilde-konto>\` kopieres til `<mål>\WTF\Account\<KONTONAVN>\`. Det er fx `edit-mode-cache-account.txt` (Edit Mode-layouts), `config-cache.wtf` (interface-indstillinger), `bindings-cache.wtf`, `macros-cache.txt` og `cache.md5`. Undtagelsen er `character-list-order.txt` (rækkefølgen på character select), der hører til den gamle konto. Desuden kopieres `<kilde-konto>\SavedVariables\`, altså de konto-brede addon-indstillinger.
 
-**d) Character-niveau, altid**
-- Alt indhold i den gamle character-mappe kopieres ind i den nye. Det dækker character-macros, keybinds, `chat-cache.txt`, `layout-local.txt`, Edit Mode og character-addon-indstillinger i `SavedVariables`.
+## 3. Serverens synkronisering og `cache.md5`
+Spillet gemmer konto-indstillingerne både på disken og på serveren. `cache.md5` holder styr på, hvornår hver fil sidst blev gemt: 24 bytes pr. fil = MD5 af filen, tidspunktet (unix-tid) og 4 ekstra bytes. I `_forever_\Logs\AccountData.log` kan man se, hvad spillet gør ved login og Enter World:
+```
+Data Type 0: Server Save Time 1792607558, Local Save Time 1792418430
+Requesting Data Download: Type 0
+...
+Data Type 0: Server Save Time 1792607558, Local Save Time 1792607558
+Loading Data From File: Type 0
+```
+- Er tidspunkterne **ens**, bruger spillet filen på disken.
+- Er de **forskellige**, henter spillet serverens version. Det gælder også, når filen på disken er nyest.
+- Har serveren ingen kopi (tidspunkt 0), bruger spillet filen på disken.
 
-## 7. Addon-profiler
-Mange addons (dem der bruger AceDB, fx Dominos, Quartz, Prat og OmniCC) gemmer i en `["profileKeys"]`-blok, hvilken profil hver character bruger. I WoW Forever ser det sådan ud (fra dine egne filer):
+Kopierede beta-filer har betaens tidspunkter og taber derfor altid til serveren. Efter kopieringen giver scriptet derfor hver kopieret fil **serverens tidspunkt** fra målets gamle `cache.md5`, sammen med filens egen MD5. Posterne for filer, der ikke blev kopieret, tages uændret fra målets gamle `cache.md5`. Målets `cache.md5` indeholder serverens tidspunkter fra sidste gang, spillet var åbent, og derfor må spillet ikke startes mellem fase 1 og launch.
+
+Det samme gøres for character-mappens `cache.md5` i fase 2.
+
+## 4. Fase 2: vælg din nye character
+1. Du vælger spilmappen. *WoW Forever (_forever_)* er standard.
+2. Du får vist alle characters i den spilmappe, sorteret efter hvornår mappen blev oprettet. Kildens egen character er ikke med på listen.
+3. Er der ingen character endnu, siger vinduet det og beder dig oprette den og trykke **Opdater**.
+4. Peger kilde og mål på samme mappe, stopper scriptet.
+
+## 5. Fase 2: kopiering
+Alt indhold i den gamle character-mappe kopieres ind i den nye. Det dækker character-macros, keybinds, `chat-cache.txt`, `layout-local.txt`, valgt Edit Mode-layout og character-addon-indstillinger i `SavedVariables`. Bagefter sættes tidspunkterne i `cache.md5` som beskrevet i afsnit 3.
+
+Vinduet advarer, hvis fase 1 ikke ser ud til at være kørt, dvs. hvis under halvdelen af kildens addon-filer findes i målkontoen.
+
+## 6. Addon-profiler
+Mange addons (dem der bruger AceDB, fx Dominos, Quartz, Prat og OmniCC) gemmer i en `["profileKeys"]`-blok, hvilken profil hver character bruger:
 ```lua
 ["profileKeys"] = {
 ["Darkfade Test"] = "Warrior",
 ["Darkfade Speedy"] = "Warrior",
 },
 ```
-For hver `.lua`-fil i målkontoens `SavedVariables` gør scriptet følgende:
-1. Det kigger **kun inde i `["profileKeys"]`-blokke**.
-2. Det finder linjen for din gamle character. Formatet er `"Fornavn Efternavn"`, og for en sikkerheds skyld også `"Fornavn-Efternavn"` og varianter med ` - Realm`.
-3. Lige under den linje indsætter det en **ny** linje for din nye character med **samme profil**, fx `["Darkfade Nytest"] = "Warrior",`.
-4. Den gamle linje bliver stående. Der tilføjes intet, hvis den nye character allerede står i blokken, så det er sikkert at køre scriptet flere gange.
+For hver `.lua`-fil i målkontoens `SavedVariables`:
+1. Scriptet kigger **kun inde i `["profileKeys"]`-blokke**.
+2. Det finder linjen for din gamle character: `"Fornavn Efternavn"` og `"Fornavn-Efternavn"`, og når realm-navnene kendes, også `"Fornavn - Realm"` (fx AtlasLoot: `"Darkfade - Classic Beta PvE 2"`). Fornavnet er det, spillet selv kalder characteren.
+3. Står den nye character allerede i blokken (fx fordi addonnet har lavet en standardprofil ved første login), får den samme profil som den gamle. Ellers indsættes en ny linje lige under den gamle.
+4. Den gamle linje bliver stående. Køres scriptet igen, ændres intet.
 5. Filen backes op, før den gemmes med de samme linjeskift (CRLF) og uden BOM, ligesom WoW selv skriver den.
 
-Andre dele af filerne bliver ikke rørt.
+## 7. Realm-navne (Titan Panel, X-Perl, AtlasLoot)
+WTF-mapperne bruger realm-numre (fx `70` og `93`), men nogle addons gemmer under realm-**navnet**:
+- **Titan Panel:** `TitanSettings.Players["Fornavn Efternavn@Realm"]`
+- **X-Perl:** `ZPerlConfigNew["Realm"]["Fornavn"]` (frame-positioner)
+- **AtlasLoot:** `profileKeys["Fornavn - Realm"]`
+
+Scriptet kopierer den gamle characters blok over under den nye characters nøgle. Findes den nye nøgle allerede, erstattes den.
+
+Kildens realm-navn findes automatisk i kildens addon-filer: først `"Fornavn Efternavn@Realm"`, ellers det hyppigste `"Fornavn - Realm"`.
+
+Den nye characters realm-navn står **ingen steder på disken, før du har trykket Enter World**. Spillets logfiler og glue-filer bliver først skrevet ved Enter World eller når spillet lukker. Derfor:
+- Skriv navnet fra character select, eller
+- lad feltet stå tomt, tryk Enter World, skriv `/logout` (ingen kø) og kør fase 2 igen. Nu står navnet i addon-filerne. Det findes via Titan Panels `"Fornavn Efternavn@Realm"`, eller ellers via `"Fornavn - Realm"`-nøgler med realms, der ikke også findes i kildens filer (fornavnet kan deles med gamle characters). Vinduet prøver igen, hver gang det får fokus, hvis feltet er tomt.
+
+`/reload` kan ikke bruges i stedet for `/logout`: ved en reload gemmer spillet først sine egne addon-indstillinger og overskriver dermed scriptets ændringer.
 
 ## 8. Valgfrit: slå server-synkronisering fra
-Det sker kun, hvis du sætter flueben i vinduet (eller starter konsollen med `-DisableSync`). Det er slået fra som standard. Så bliver `SET synchronizeConfig/Settings/Bindings/Macros "0"` skrevet i målets `Config.wtf`, så spillet bruger de lokale filer i stedet for serverens. Det er tænkt som en nødløsning. Ligesom grafik og lyd virker det kun, hvis spillet er lukket, mens scriptet kører.
+Det sker kun, hvis du sætter flueben i fase 1 (eller starter konsollen med `-DisableSync`). Så bliver `SET synchronizeConfig/Settings/Bindings/Macros "0"` skrevet i målets `Config.wtf`, så spillet bruger de lokale filer i stedet for serverens. Det er en nødløsning og burde ikke være nødvendig efter afsnit 3.
 
 ## 9. Afslutning
 En log over alt, hvad der blev gjort, gemmes som `overfoersel-log.txt` i backup-mappen.
 
-Du får at vide, hvor mange filer der blev kopieret, hvor mange addon-profiler der blev sat op, og hvor mange filer der ligger i backup. Opstår der en fejl undervejs, stopper scriptet med det samme og viser fejlen. Siger fejlen "adgang nægtet", foreslår det at køre `.bat` som administrator.
-
-**Bemærk:** Stopper scriptet midt i kopieringen, er de filer der nåede at blive kopieret, stadig kopieret. Backuppen af det de overskrev, ligger dog i `UI-backup-...`. Du kan bare køre scriptet igen.
+Opstår der en fejl undervejs, stopper scriptet med det samme og viser fejlen. Siger fejlen "adgang nægtet", foreslår det at køre `.bat` som administrator. Filer der nåede at blive kopieret, er stadig kopieret, men backuppen af det de overskrev, ligger i `UI-backup-...`. Du kan bare køre scriptet igen.
 
 ## Sådan fortryder du
 1. Luk WoW.
 2. Kopier indholdet af `UI-backup-<dato-tid>\` tilbage til WoW-mappen og vælg "Erstat".
 3. Filer der var helt nye (ikke overskrevne), kan du slette i hånden. Det er typisk dem i den nye character-mappe.
 
+## Testet
+- Begge faser er testet på WoW Forever-stresstesten 21/10-2026 (beta → stresstest): Edit Mode, interface-indstillinger, keybinds, macros og addon-profiler kom med. `AccountData.log` viste `Loading Data From File` for alle typer.
+- Kørsel af fase 2 igen efter første login (overskrivning af Titan Panel, X-Perl og AtlasLoot) er testet på kopier af de rigtige filer, ikke i spillet.
+
 ## Kendte begrænsninger
-- Kopi-logikken er testet på en kunstig mappestruktur og kopier af dine beta-filer med PowerShell 7 på Linux. Selve vinduet (Windows Forms) kan kun køre på Windows, så det er ikke testet. Prøv det selv, før du deler det.
-- Addons med deres eget profilformat (ikke AceDB) skal stadig have valgt profil manuelt.
-- Hvis et addon navngiver characters på en anden måde end `Fornavn Efternavn`, bliver dets profil ikke sat automatisk. Alt andet virker stadig.
+- Addons med deres eget profilformat (ikke AceDB og ikke de tre ovenfor) skal stadig have valgt profil manuelt.
+- Startes spillet mellem fase 1 og launch, gemmer serveren nye tidspunkter, og så skal fase 1 køres igen.
