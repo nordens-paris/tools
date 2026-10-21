@@ -1,3 +1,5 @@
+<p align="center"><img src=".github/assets/nordens-paris-emblem.png" alt="Nordens Paris Forever" width="320"></p>
+
 # Nordens Paris – tools & addons
 
 Fælles samling af værktøjer og addons, som folk i guilden **Nordens Paris** har lavet (ofte vibecodet med AI). Alt her er gratis, open source og til hele guilden, på tværs af raidhold.
