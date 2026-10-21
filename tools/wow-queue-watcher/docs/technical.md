@@ -15,9 +15,11 @@ built-in Windows OCR. It never reads or changes game memory or files.
 | Every 30 min | A quiet update: position, Blizzard ETA, measured-pace ETA, "in at ~03:40" |
 | ETA ≤ 30 min | High-priority heads-up |
 | ETA ≤ 15 min | **ALARM**: max priority, repeats until you tap **I'm up**. The PC speakers sound too. |
-| Queue finished (character select) | **ALARM** with an **Enter world** button you can tap from bed |
-| Disconnect, crash or closed game | Alert with a screenshot. With auto-reconnect on, it then tries to get back in automatically. |
+| Queue finished (ruleset screen or character select) | **ALARM** with an **Enter world** button you can tap from bed. The game shows "Choose Your Gameplay Ruleset" first; the watcher alarms there and never chooses for you. Tapping **I'm up** here tells the watcher you're at the PC: it stops clicking and relaunching (send `resume` to re-arm it), so closing the game yourself isn't treated as a crash. |
+| Disconnect, crash or closed game | Alert with a screenshot. Any alarm still ringing stops (it would be out of date). With auto-reconnect on, it then tries to get back in automatically. |
 | Not back in the queue after 20 min | **ALARM** |
+| Battle.net can't start the game | One alert. It keeps retrying quietly after that. |
+| A screen it doesn't know, for 3+ min | Alert with a screenshot and the text it could read (not once you're through the queue, e.g. character creation) |
 | The watcher itself stops | Alert |
 
 **ETA:** Blizzard's estimate is often off, so the watcher also measures how fast
@@ -27,10 +29,14 @@ sooner (`eta_source = "earliest"`).
 **Auto-reconnect** (`[reconnect]`, **off by default**, turn on with `enabled = true`): on an error or login screen it clicks
 `Okay` / `Login` / `Reconnect` (or presses Enter). If the game crashed or closed,
 it relaunches it through Battle.net (opens the game's page and clicks Play). If it's stuck for 8 minutes, it kills the
-game and relaunches. It never clicks anything while you're in the queue.
+game and relaunches. It never clicks anything while you're in the queue. If the
+window gets minimized, it restores it; your queue spot is kept and it never
+kills a queued game because of a hidden window.
 
 **Scheduled start** (`[schedule] start_at`, or `start 18:30` from your phone):
 leave it running before server opening and it launches the game at that time.
+If `start_at` can't be read (a typo), the watcher waits on standby instead of
+launching right away.
 Until then it keeps the PC awake. Once the game is up, it keeps retrying while
 the servers are still down.
 
@@ -86,8 +92,8 @@ Then, from anywhere, type in your ntfy alerts topic:
 | Send | What happens |
 |---|---|
 | `start` (or tap **Start now**) | Launches WoW and joins the queue right away |
-| `start 18:30` | Launches at 18:30. A time that has already passed today means tomorrow. |
-| `start in 45m` / `start in 1h30` / `start in 2 hours` | Launches after that delay |
+| `start 18:30` / `start kl 18.30` | Launches at 18:30. A time that has already passed today means tomorrow. |
+| `start in 45m` / `start in 1h30` / `start in 2 hours` / `start om 1t30` | Launches after that delay (Danish `om`, `kl`, `t`/`timer` work too; `start` can be left out) |
 | `cancel` | Cancels a scheduled start and goes back to standby |
 | `standby` | Stops watching and goes back to standby. The game is left as it is. |
 
@@ -102,8 +108,8 @@ All commands:
 | `status` | Status text plus a screenshot |
 | `ack` | Stops the alarm |
 | `enter` | Presses Enter World at character select |
-| `reconnect` | Kills and relaunches the game |
-| `pause` / `resume` | Stops or restarts clicking and relaunching. Alerts continue. |
+| `reconnect` | Kills and relaunches the game (from standby it also starts watching) |
+| `pause` / `resume` | Stops or restarts clicking and relaunching. Alerts continue. `resume` also re-arms the watcher after you're in the world or tapped I'm up at the end of the queue. |
 | `quit` | Stops the watcher |
 
 ## PC checklist for the night
@@ -127,8 +133,10 @@ All commands:
   like the Play button, with no clicking, and you go straight to character select
   with no password. `WoWF` is case-sensitive. It starts whichever version is picked
   in Battle.net's version dropdown on the Forever page, so on launch day select
-  **WoW: Forever**, not the Beta. If the game doesn't start within 30 s, the watcher
-  falls back to opening the Forever page and clicking **Play**.
+  **WoW: Forever**, not the Beta. On the live / stress-test product the command
+  only *selects* the game (verified 2026-10-21), so after 10 s the watcher opens
+  the Forever page and clicks **Play** itself. It picks the Play button, not a
+  "play ..." line in a news tile.
 - **Crash recovery:** with the game killed mid-run, the watcher relaunched it and
   was back at character select in about 30 s.
 - **Wrong version:** if Battle.net starts a different WoW version than the
@@ -151,8 +159,15 @@ All commands:
   "queue", "servers are full", "estimated" or "position in", and it never presses
   Enter blindly (on this dialog, Enter means Cancel).
 
-Still untested: whether `battlenet://wowf` picks the live Forever version on
-launch day. Once Forever is out, run `start.bat test-launch` once.
+## Tested on the Forever stress test (2026-10-21)
+
+Launch through the Play button, account screen accepted automatically (auto-reconnect on), and the
+"Choose Your Gameplay Ruleset" screen raised the queue-finished alarm without
+clicking anything. There was no queue to see yet.
+
+Still untested: a real queue on the live servers, and a disconnect on the live
+product. Before launch day, run `start.bat test-launch` once with **WoW: Forever**
+picked in Battle.net.
 
 To check the queue dialog early, use screenshots of a real queue:
 
@@ -194,3 +209,7 @@ game. The auto-reconnect and Enter-world features *do* send clicks and key
 presses to the game. Blizzard's Terms of Use don't allow unauthorized
 automation, though this does nothing during gameplay. That's why they're off by
 default. Turn them on with `[reconnect] enabled = true` at your own discretion.
+
+## Screens it knows
+
+Login / logged out (Reconnect), account selection (accepts the preselected account when auto-reconnect is on, otherwise asks you), queue, ruleset (= queue done), character select, disconnects, the password screen. On any other screen it clicks nothing, and warns the phone after `unknown_screen_minutes` (default 3) with a screenshot and the text it could read.

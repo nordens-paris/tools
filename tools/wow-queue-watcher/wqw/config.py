@@ -40,6 +40,8 @@ DEFAULTS = {
         "max_relaunches": 30,
         "click_buttons": ["Okay", "OK", "Reconnect", "Connect", "Retry"],
         "realm_name": "",
+        "account_name": "",  # account to pick on the account screen; empty = the preselected one
+        "unknown_screen_minutes": 3,  # warn me if the game sits on a screen I don't recognise this long
         "auto_enter_world": False,
         "auto_enter_world_after_minutes": 10,
     },
@@ -57,6 +59,8 @@ DEFAULTS = {
                        "getting server information", "server information",
                        "success"],
         "password": ["email or phone", "password"],
+        "ruleset": ["choose your gameplay ruleset", "gameplay ruleset"],
+        "account": ["select an account", "world of warcraft accounts"],
         "login": ["reconnect", "log out", "manage account", "cinematics", "credits"],
     },
 }

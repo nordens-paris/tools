@@ -236,7 +236,7 @@ button,input{font:inherit;color:inherit}
 const $=id=>document.getElementById(id);
 const STATES={QUEUE:['In queue','gold'],CHAR_SELECT:['Character select','green'],IN_GAME:['In the world','green'],
  CONNECTING:['Connecting','blue'],DISCONNECTED:['Disconnected','red'],LOGIN:['Logged out','amber'],PASSWORD:['Needs password','red'],
- REALM_LIST:['Realm list','amber'],NO_PROCESS:['Game not running','amber'],NO_WINDOW:['Window hidden','amber'],UNKNOWN:['Reading screen','blue']};
+ REALM_LIST:['Realm list','amber'],NO_PROCESS:['Game not running','amber'],NO_WINDOW:['Window hidden','amber'],UNKNOWN:['Reading screen','blue'],ACCOUNT:['Choose account','amber'],RULESET:['Through the queue','green']};
 let D=null,lastOk=0,hidden=new Set(),chartPts=null;
 const fm=m=>m==null?'—':m>=60?Math.floor(m/60)+'h '+String(Math.round(m%60)).padStart(2,'0')+'m':Math.max(0,Math.round(m))+' min';
 const hm=t=>new Date(t*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',hour12:false});
@@ -251,10 +251,10 @@ $('shotBox').onclick=()=>{const lb=document.createElement('div');lb.className='l
 function eventColor(t){
  const to=(t.split(' -> ')[1]||'').split(' ')[0];  // transitions: colour by the new state
  if(to)return {QUEUE:'gold',CHAR_SELECT:'green',IN_GAME:'green',CONNECTING:'blue',UNKNOWN:'',DISCONNECTED:'red',
-  PASSWORD:'red',NO_PROCESS:'red',LOGIN:'amber',NO_WINDOW:'amber',REALM_LIST:'amber'}[to]??'';
+  PASSWORD:'red',NO_PROCESS:'red',LOGIN:'amber',NO_WINDOW:'amber',REALM_LIST:'amber',ACCOUNT:'amber',RULESET:'green'}[to]??'';
  if(/ALARM|Disconnected|crash|Stuck|Gave up|Wrong WoW|password|DISCONNECTED|NO_PROCESS/i.test(t))return'red';
  if(/-> QUEUE|queue/i.test(t))return'gold';
- if(/CHAR_SELECT|IN_GAME|Enter|world/i.test(t))return'green';
+ if(/CHAR_SELECT|RULESET|IN_GAME|Enter|world/i.test(t))return'green';
  if(/Launch|Starting|Clicking|Relaunch|Scheduled/i.test(t))return'blue';
  if(/Command|Standby|Paused|pause|resume/i.test(t))return'amber';
  return'';
@@ -324,20 +324,20 @@ function render(d){
  if(!active){$('schedAt').textContent=d.mode==='scheduled'?hm(d.start_at):'Not set';
   $('schedSub').textContent=d.mode==='scheduled'?'Pick another time below to change it.':'Start the queue later, so it finishes when you\'re back.'}
  if(active){
-  const done=d.state==='CHAR_SELECT'||d.state==='IN_GAME';
+  const done=['CHAR_SELECT','RULESET','IN_GAME'].includes(d.state);
   $('pos').textContent=done&&d.in_line!==false?'Done':d.state==='QUEUE'||d.position!=null?nf(d.position):'—';
   const sp=d.queue_start_pos,p=d.position;
   if(sp&&p!=null&&d.state==='QUEUE'){const pct=Math.max(0,Math.min(100,100*(sp-p)/sp));$('barFill').style.width=pct+'%';
    $('progress').textContent=Math.round(pct)+'% through the queue';$('startPos').textContent='started at #'+nf(sp)}
-  else if(d.state==='CHAR_SELECT'||d.state==='IN_GAME'){$('barFill').style.width='100%';$('progress').textContent=d.state==='IN_GAME'?'You are in the world':'Queue finished';$('startPos').textContent=''}
+  else if(['CHAR_SELECT','RULESET','IN_GAME'].includes(d.state)){$('barFill').style.width='100%';$('progress').textContent=d.state==='IN_GAME'?'You are in the world':'Queue finished';$('startPos').textContent=''}
   else{$('barFill').style.width='0';$('progress').textContent=STATES[d.state]?STATES[d.state][0]+'…':'Waiting for queue data';$('startPos').textContent=''}
  }else{
   $('idleLabel').textContent=d.mode==='scheduled'?'Launching in':'On standby';
   $('idleText').textContent=d.mode==='scheduled'?'WoW starts at '+hm(d.start_at)+'. Use Cancel start to call it off.':'Nothing is running. Press Start now, or type a time below, e.g. "start in 45m".';
  }
- const fin=active&&(d.state==='CHAR_SELECT'||d.state==='IN_GAME');
+ const fin=active&&['CHAR_SELECT','RULESET','IN_GAME'].includes(d.state);
  $('inat').textContent=fin?'Now':(active&&d.in_at)||'—';
- $('left').textContent=d.state==='CHAR_SELECT'?'Waiting at character select':d.state==='IN_GAME'?'You are in the world':(active&&d.eta!=null)?fm(d.eta)+' left':'No estimate yet';
+ $('left').textContent=d.state==='CHAR_SELECT'?'Waiting at character select':d.state==='RULESET'?'Waiting at the ruleset screen':d.state==='IN_GAME'?'You are in the world':(active&&d.eta!=null)?fm(d.eta)+' left':'No estimate yet';
  $('bl').textContent=fm(d.blizzard_eta);$('pace').textContent=fm(d.pace_eta);
  $('rate').textContent=d.rate?Math.round(d.rate).toLocaleString()+' / min':'—';$('rl').textContent=d.relaunches;
 
