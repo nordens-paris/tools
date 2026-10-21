@@ -139,25 +139,27 @@ class LocalAlarm:
         self.enabled = enabled
         self.sound_file = sound_file
         self._stop = threading.Event()
-        self._thread = None
+        self._stop.set()
 
     def start(self):
-        if not self.enabled or (self._thread and self._thread.is_alive()):
-            return
+        if not self.enabled or not self._stop.is_set():
+            return  # off, or already sounding
         import os
         import winsound
-        self._stop.clear()
+        # A fresh event per alarm: an old loop still finishing its last chime can't keep a new
+        # alarm silent.
+        stop = self._stop = threading.Event()
         custom = self.sound_file if self.sound_file and os.path.isfile(self.sound_file) else None
         soft, louder = (None, None) if custom else (chime_wav(0.25), chime_wav(0.5))
 
         def loop():
             started = time.time()
-            while not self._stop.is_set():
+            while not stop.is_set():
                 if custom:
                     winsound.PlaySound(custom, winsound.SND_FILENAME)
                 else:
                     winsound.PlaySound(soft if time.time() - started < 60 else louder, winsound.SND_MEMORY)
-                self._stop.wait(1.5)
+                stop.wait(1.5)
 
         self._thread = threading.Thread(target=loop, daemon=True)
         self._thread.start()

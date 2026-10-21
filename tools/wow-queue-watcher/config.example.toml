@@ -59,6 +59,10 @@ max_relaunches = 30
 # Knapper den må klikke på fejl-/login-skærme. Den klikker ALDRIG mens du er i køen.
 click_buttons = ["Okay", "OK", "Reconnect", "Connect", "Retry"]
 realm_name = ""
+# Konto-skærmen ("Select an account"): tom = den forvalgte konto, eller skriv kontoens navn.
+account_name = ""
+# Besked til telefonen hvis spillet står på en skærm programmet ikke kender (eller venter på dig) så længe.
+unknown_screen_minutes = 3
 # Tryk "Enter World" automatisk hvis ingen reagerer på alarmen, så du ikke bliver smidt
 # ud af character select. Din karakter står så AFK i spillet. Virker kun når enabled = true.
 auto_enter_world = false

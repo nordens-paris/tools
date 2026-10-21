@@ -12,6 +12,8 @@ DISCONNECTED = "DISCONNECTED"
 REALM_LIST = "REALM_LIST"
 CONNECTING = "CONNECTING"
 PASSWORD = "PASSWORD"  # login screen asking for email/password (game started without Battle.net)
+ACCOUNT = "ACCOUNT"    # "World of Warcraft Accounts - Select an account" (Accept / Cancel)
+RULESET = "RULESET"    # "Choose Your Gameplay Ruleset" (Normal / PvP / Roleplay, then Select)
 LOGIN = "LOGIN"
 UNKNOWN = "UNKNOWN"
 # Set by the watcher rather than read off the screen:
@@ -21,7 +23,8 @@ IN_GAME = "IN_GAME"
 
 # Checked in this order; the first screen whose keywords appear wins. Queue goes first: its
 # dialog ("Login Servers are Full ... [Cancel]") must never be mistaken for an error screen.
-CLASSIFY_ORDER = [("queue", QUEUE), ("disconnected", DISCONNECTED), ("char_select", CHAR_SELECT),
+CLASSIFY_ORDER = [("queue", QUEUE), ("disconnected", DISCONNECTED), ("ruleset", RULESET), ("account", ACCOUNT),
+                  ("char_select", CHAR_SELECT),
                   ("realm_list", REALM_LIST), ("connecting", CONNECTING), ("password", PASSWORD),
                   ("login", LOGIN)]
 
@@ -48,6 +51,9 @@ class Reading:
     blizzard_eta: float | None = None  # minutes
     error_code: str | None = None
     all_text: str = ""  # text from every OCR pass, for the hands-off check
+    image: object = None  # the screenshot, so find_text can look again with the gold-text pass
+    lang: str = "en-US"
+    gold_lines: dict = field(default_factory=dict)  # scale -> lines, filled lazily by find_text
 
 
 def norm(s):
@@ -96,7 +102,7 @@ def ocr(img, lang="en-US", scale=2.0, mode="enhance"):
     mode: "enhance" (grey + autocontrast), "rgb" (as is) or "gold" (dialog text only)."""
     w, h = img.size
     # Upscaling helps small windows but hurts at 1440p+, so cap the longest side at ~2600 px.
-    s = min(1.0 if mode == "gold" else scale, 2600 / max(w, h))
+    s = min(scale, 2600 / max(w, h))
     if mode == "gold":
         prepared = _gold_text(img)
     elif mode == "rgb":
@@ -137,7 +143,7 @@ def read(img, cfg):
     best = _reading(*ocr(img, lang, scale), cfg)
     seen = [best.text]
     if best.state != QUEUE or best.position is None:
-        gold = _reading(*ocr(img, lang, scale, mode="gold"), cfg)
+        gold = _reading(*ocr(img, lang, 1.0, mode="gold"), cfg)
         seen.append(gold.text)
         if gold.state == QUEUE or (best.state == UNKNOWN and gold.state != UNKNOWN):
             best = gold
@@ -147,6 +153,7 @@ def read(img, cfg):
         if rgb.state != UNKNOWN:
             best = rgb
     best.all_text = "\n".join(seen)
+    best.image, best.lang = img, lang
     return best
 
 
@@ -161,20 +168,58 @@ def _reading(text, lines, cfg):
     return reading
 
 
+def _find_in(lines, want):
+    """Centre of the first run of adjacent words on one line that spell `want` (no spaces),
+    so "PLAYER 1" matches "PLAYER1" and "Enter World" matches "EnterWorld"."""
+    for line in lines:
+        toks = [norm(wd.text).replace(" ", "") for wd in line]
+        for i in range(len(toks)):
+            acc = ""
+            for j in range(i, len(toks)):
+                acc += toks[j]
+                if acc == want:
+                    ws = line[i:j + 1]
+                    x0, y0 = min(w.x for w in ws), min(w.y for w in ws)
+                    x1, y1 = max(w.x + w.w for w in ws), max(w.y + w.h for w in ws)
+                    return (x0 + x1) / 2, (y0 + y1) / 2
+                if not want.startswith(acc):
+                    break
+    return None
+
+
 def find_text(reading, label):
-    """Centre (x, y) of the words spelling `label` (e.g. "Enter World"), or None."""
-    want = norm(label).split()
+    """Centre (x, y) of the words spelling `label` (e.g. "Enter World"), or None. Looks in the
+    normal OCR first, then re-reads the screenshot keeping only gold text: the red buttons on
+    dimmed dialogs (Accept, Cancel, Select) are often invisible to the normal pass."""
+    want = norm(label).replace(" ", "")
     if not want:
         return None
-    for line in reading.lines:
-        toks = [norm(wd.text) for wd in line]
-        for i in range(len(toks) - len(want) + 1):
-            if toks[i:i + len(want)] == want:
-                ws = line[i:i + len(want)]
-                x0, y0 = min(w.x for w in ws), min(w.y for w in ws)
-                x1, y1 = max(w.x + w.w for w in ws), max(w.y + w.h for w in ws)
-                return (x0 + x1) / 2, (y0 + y1) / 2
+    if pt := _find_in(reading.lines, want):
+        return pt
+    if reading.image is not None:
+        # Full size reads big windows best; small windows need enlarging first.
+        scales = (1.0,) if max(reading.image.size) >= 2000 else (1.0, 2.0)
+        for scale in scales:
+            if scale not in reading.gold_lines:
+                reading.gold_lines[scale] = ocr(reading.image, reading.lang, scale, mode="gold")[1]
+            if pt := _find_in(reading.gold_lines[scale], want):
+                return pt
+        # Two buttons close together on one line (Accept / Cancel) can make the OCR drop both;
+        # reading the left and right halves separately finds them.
+        if "halves" not in reading.gold_lines:
+            reading.gold_lines["halves"] = _ocr_halves(reading.image, reading.lang, scales[-1])
+        return _find_in(reading.gold_lines["halves"], want)
     return None
+
+
+def _ocr_halves(img, lang, scale):
+    """Gold-text OCR of the left and right halves (with some overlap), in full-image coordinates."""
+    w, h = img.size
+    lines = []
+    for x0, x1 in ((0, w // 2 + w // 32), (w // 2 - w // 32, w)):
+        for line in ocr(img.crop((x0, 0, x1, h)), lang, scale, mode="gold")[1]:
+            lines.append([Word(wd.text, wd.x + x0, wd.y, wd.w, wd.h) for wd in line])
+    return lines
 
 
 def pick_language(preferred):

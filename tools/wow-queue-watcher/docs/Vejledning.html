@@ -44,7 +44,7 @@ footer{margin-top:60px;color:var(--text-3);font-size:13px}
 
 <div class="hero">
  <div class="logo"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#17130a" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12M6 21h12M7 3v3a5 5 0 0 0 10 0V3M7 21v-3a5 5 0 0 1 10 0v3"/></svg></div>
- <div><h1>WoW Queue Watcher</h1><div style="color:var(--text-3)">Vejledning til WoW Forever · version 1.0</div></div>
+ <div><h1>WoW Queue Watcher</h1><div style="color:var(--text-3)">Vejledning til WoW Forever · version 1.2</div></div>
 </div>
 <p class="lead">Holder øje med login-køen i WoW Forever for dig. Den sender beskeder til din telefon med din plads og tid tilbage, vækker dig med en alarm når der er under 15 minutter tilbage, og kommer selv tilbage i køen hvis du bliver smidt ud.</p>
 
@@ -80,7 +80,7 @@ footer{margin-top:60px;color:var(--text-3);font-size:13px}
   </ul>
   <span style="color:var(--text-2)">iPhone: tillad notifikationer og kritiske beskeder for ntfy. Alarmen er mindre insisterende på iPhone end på Android.</span></li>
  <li><b>Tjek Battle.net</b>Gå til WoW Forever-siden og vælg <b>"WoW: Forever"</b> i versions-menuen (ikke Beta).
-  Battle.net skal kunne åbne uden at bede om din adgangskode, for programmet bruger dit gemte login. Åbner Battle.net direkte uden login, er det allerede i orden. Ellers så log ud og ind igen, og sæt flueben i <b>"Hold mig logget ind"</b> (<i>Keep me logged in</i>) under adgangskoden på login-skærmen. Kør evt. <code>Test-start-spil.bat</code> for at se at programmet kan starte spillet.</li>
+  Battle.net skal kunne åbne uden at bede om din adgangskode, for programmet bruger dit gemte login. Åbner Battle.net direkte uden login, er det allerede i orden. Ellers så log ud og ind igen, og sæt flueben i <b>"Hold mig logget ind"</b> (<i>Keep me logged in</i>) under adgangskoden på login-skærmen. Programmet starter spillet ved selv at trykke <b>Play</b> i Battle.net, så Battle.net skal være installeret og logget ind (det må gerne ligge i baggrunden). Kør evt. <code>Test-start-spil.bat</code> for at se at programmet kan starte spillet.</li>
 </ol>
 <div class="ok">Klar! Programmet finder selv Battle.net og din WoW-mappe. Du behøver normalt ikke røre <code>config.toml</code>.</div>
 
@@ -115,9 +115,11 @@ footer{margin-top:60px;color:var(--text-3);font-size:13px}
  <tr><td>Hver 30. minut</td><td>Stille status: plads, ETA og "in at ~21:40"</td></tr>
  <tr><td>Ca. 30 min tilbage</td><td>"Heads up", høj prioritet</td></tr>
  <tr><td>Ca. 15 min tilbage</td><td><b>ALARM</b>, ringer igen indtil du trykker <b>I'm up</b></td></tr>
- <tr><td>Køen er færdig</td><td><b>ALARM</b> med knappen <b>Enter world</b></td></tr>
- <tr><td>Disconnect eller crash</td><td>Besked med billede (med auto-reconnect slået til prøver programmet også selv at komme ind igen)</td></tr>
+ <tr><td>Køen er færdig</td><td><b>ALARM</b> med knappen <b>Enter world</b>. Spillet viser først skærmen "Choose Your Gameplay Ruleset" og derefter character select. Alarmen går ved den første af dem, og programmet vælger eller klikker ikke noget her. Når du trykker <b>I'm up</b>, ved programmet at du sidder ved PC'en: med auto-reconnect slået til holder det op med at klikke og genstarte, så du selv kan lukke spillet (send <code>resume</code> for at slå det til igen).</td></tr>
+ <tr><td>Disconnect eller crash</td><td>Besked med billede (med auto-reconnect slået til prøver programmet også selv at komme ind igen). En alarm der stadig ringer, stopper (den passer ikke længere).</td></tr>
  <tr><td>Kan ikke komme tilbage i 20 min</td><td><b>ALARM</b></td></tr>
+ <tr><td>Battle.net kan ikke starte spillet</td><td>Én besked. Programmet prøver stille videre bagefter.</td></tr>
+ <tr><td>Ukendt skærm i 3 min</td><td>Besked med billede og den tekst programmet kunne læse (ikke efter køen, fx når du laver en karakter)</td></tr>
 </table>
 <p style="color:var(--text-2)">Beskederne fra programmet er på engelsk, men knapperne er lige til: <b>I'm up</b> stopper alarmen, <b>Screenshot</b> sender et billede af skærmen, og <b>Enter world</b> logger ind.</p>
 
@@ -126,8 +128,9 @@ footer{margin-top:60px;color:var(--text-3);font-size:13px}
 <ol style="padding-left:20px">
  <li>Gå til WoW Forever i Battle.net og vælg <b>"WoW: Forever - Beta"</b> i versions-menuen.</li>
  <li>Kør <code>Start-beta.bat</code>. Programmet starter betaen via Battle.net og går til character select.</li>
- <li>Du får en "Queue finished!"-alarm på telefonen. Prøv knapperne <b>I'm up</b> og <b>Enter world</b>.</li>
- <li>Har du slået auto-reconnect til: prøv også at lukke spillet (uden at sende <code>pause</code> først). Programmet opdager det og starter spillet igen.</li>
+ <li>Du får en "Queue finished!"-alarm på telefonen. Prøv knappen <b>Screenshot</b>.</li>
+ <li>Har du slået auto-reconnect til: luk spillet <b>mens alarmen ringer</b>. Programmet opdager det, stopper alarmen og starter spillet igen.</li>
+ <li>Tryk <b>I'm up</b> (eller <b>Enter world</b>), når alarmen ringer. Så ved programmet, at du er ved PC'en, og du kan selv lukke spillet.</li>
 </ol>
 <div class="note">Betaen har normalt ingen kø, så selve kø-visningen kan kun ses ved launch. Husk at skifte tilbage til <b>"WoW: Forever"</b> i Battle.net, før du bruger <code>Start.bat</code> på launch-dagen.</div>
 
@@ -136,14 +139,14 @@ footer{margin-top:60px;color:var(--text-3);font-size:13px}
 <table>
  <tr><th>Send</th><th>Det sker</th></tr>
  <tr><td><code>start</code></td><td>Starter WoW og går i kø med det samme</td></tr>
- <tr><td><code>start 18:30</code> · <code>start kl 18.30</code></td><td>Starter kl. 18:30 (er tiden passeret i dag, bliver det i morgen)</td></tr>
- <tr><td><code>start om 45m</code> · <code>start om 1t30</code> · <code>start in 2h</code></td><td>Starter om så lang tid (dansk og engelsk virker begge)</td></tr>
+ <tr><td><code>start 18:30</code> · <code>kl 18.30</code></td><td>Starter kl. 18:30 (er tiden passeret i dag, bliver det i morgen)</td></tr>
+ <tr><td><code>start om 45m</code> · <code>om 1t30</code> · <code>start in 2h</code></td><td>Starter om så lang tid (dansk og engelsk virker begge, og <code>start</code> kan udelades)</td></tr>
  <tr><td><code>cancel</code></td><td>Annullerer en planlagt start</td></tr>
  <tr><td><code>status</code></td><td>Status og et billede af skærmen</td></tr>
  <tr><td><code>ack</code></td><td>Stopper alarmen (det samme som <b>I'm up</b>)</td></tr>
  <tr><td><code>enter</code></td><td>Trykker Enter World på character select</td></tr>
- <tr><td><code>reconnect</code></td><td>Lukker og genstarter spillet</td></tr>
- <tr><td><code>pause</code> / <code>resume</code></td><td>Stopper/genstarter klik og genstart (beskederne fortsætter)</td></tr>
+ <tr><td><code>reconnect</code></td><td>Lukker og genstarter spillet (fra standby begynder den også at overvåge)</td></tr>
+ <tr><td><code>pause</code> / <code>resume</code></td><td>Stopper/genstarter klik og genstart (beskederne fortsætter). <code>resume</code> slår også programmet til igen, efter du er kommet ind i spillet.</td></tr>
  <tr><td><code>standby</code></td><td>Holder op med at overvåge, men lader spillet være</td></tr>
  <tr><td><code>quit</code></td><td>Lukker programmet</td></tr>
 </table>
@@ -151,15 +154,17 @@ footer{margin-top:60px;color:var(--text-3);font-size:13px}
 
 <h2 id="nat">Tjekliste før du går i seng</h2>
 <div class="card"><ul style="margin:0">
- <li>WoW kører i <b>vindue eller windowed fullscreen</b> og er <b>ikke minimeret</b>. Andre vinduer foran er OK.</li>
+ <li>WoW kører i <b>vindue eller windowed fullscreen</b> og er <b>ikke minimeret</b>. Andre vinduer foran er OK. Med auto-reconnect slået til henter programmet et minimeret spil frem igen, og du beholder din plads i køen.</li>
  <li><b>Lås ikke PC'en</b> (Windows+L). Windows blokerer skærmbilleder og klik når PC'en er låst. Programmet sørger selv for at PC'en og skærmen ikke går i dvale.</li>
  <li>Windows Update: sæt <b>aktive timer</b>, så PC'en ikke genstarter om natten.</li>
  <li>Telefonen er ikke på lydløs uden at ntfy må tilsidesætte "Forstyr ikke" (se trin 5).</li>
  <li>Lyd på PC'en er en god ekstra sikkerhed. Alarmen spiller også i højttalerne.</li>
 </ul></div>
-<div class="note">Vil du selv lukke spillet mens programmet kører, så send <code>standby</code> eller <code>pause</code> først. Ellers tror programmet at spillet er crashet og starter det igen.</div>
+<div class="note">Vil du selv lukke spillet mens programmet kører, så send <code>standby</code> eller <code>pause</code> først. Ellers tror programmet at spillet er crashet og starter det igen (kun med auto-reconnect slået til). Har du trykket <b>I'm up</b> efter køen, behøver du ikke.</div>
 
 <h2 id="fejl">Fejlfinding</h2>
+<h3>Spillet står på en skærm programmet ikke kender</h3>
+<p>Efter 3 minutter får du en besked med et billede og teksten på skærmen ("WoW is on a screen I don't recognise"). Er der slet ingen tekst, er PC'en måske låst, eller spillet viser en sort skærm. Programmet klikker ikke noget på en ukendt skærm. Konto-skærmen ("Select an account") accepterer det automatisk med den forvalgte konto (eller kontoen i <code>account_name</code> i <code>config.toml</code>), når auto-reconnect er slået til. Ellers får du en besked om at vælge kontoen på PC'en.</p>
 <h3>Jeg får ingen beskeder</h3>
 <p>Tjek at du abonnerer på præcis det emne der står i <code>config.toml</code> (linjen <code>topic = …</code>), og at ntfy har ubegrænset batteri. Kør <code>Test-telefon.bat</code>.</p>
 <h3>"Wrong WoW version running"</h3>
@@ -170,6 +175,8 @@ footer{margin-top:60px;color:var(--text-3);font-size:13px}
 <p>Kør <code>Test-skaerm.bat</code> med WoW åbent. Spillet skal være på <b>engelsk</b>. Hvis Windows mangler engelsk tekstgenkendelse, så tilføj <b>Engelsk (USA)</b> under <i>Indstillinger → Tid og sprog → Sprog og område</i>.</p>
 <h3>Antivirus brokker sig</h3>
 <p>Programmer der er pakket med PyInstaller bliver nogle gange fejlagtigt markeret. Kildekoden ligger på guildens GitHub, hvis du vil se hvad programmet gør.</p>
+<h3>Starttidspunktet i config.toml virker ikke</h3>
+<p>Kan programmet ikke læse <code>start_at</code> (skriv fx <code>"2026-11-04 18:00"</code>), venter det på standby i stedet for at starte spillet, og du får en besked om det. Send <code>start</code> eller ret tidspunktet.</p>
 <h3>"A watcher is already running"</h3>
 <p>Programmet kører allerede, måske uden vindue. Kør <code>Stop.bat</code> og start igen.</p>
 
@@ -181,5 +188,5 @@ footer{margin-top:60px;color:var(--text-3);font-size:13px}
  <li>Programmet læser ikke spillets hukommelse eller filer. Det kigger kun på skærmen, ligesom et kamera.</li>
 </ul>
 
-<footer>WoW Queue Watcher 1.0 · lavet af en spiller til Nordens Paris · ikke tilknyttet Blizzard Entertainment.</footer>
+<footer>WoW Queue Watcher 1.2 · lavet af en spiller til Nordens Paris · ikke tilknyttet Blizzard Entertainment.</footer>
 </main></body></html>

@@ -9,6 +9,7 @@ through ntfy, and (optionally) reconnects for you.
     python watch.py test-capture       screenshot + OCR the running game once
     python watch.py test-ocr IMG...     OCR saved screenshots (e.g. from a stream)
     python watch.py test-launch        launch the game the way the watcher will
+    python watch.py test-sound         play the PC alarm sound for 15 s
 """
 import argparse
 import logging

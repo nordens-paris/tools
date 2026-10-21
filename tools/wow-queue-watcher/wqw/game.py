@@ -77,7 +77,9 @@ class GameSource:
         It starts whichever version is selected in Battle.net's version dropdown."""
         self.log.info('Starting through Battle.net (--exec="launch %s")', self.g.launch_family)
         subprocess.Popen([self.g.battlenet_exe, f"--exec=launch {self.g.launch_family}"])
-        for _ in range(15):
+        # On the beta this starts the game within 2 s. On the live / stress-test product Battle.net
+        # only selects the game and nothing starts, so don't wait long before clicking Play.
+        for _ in range(5):
             time.sleep(2)
             if self.process_running():
                 return True
@@ -115,7 +117,7 @@ class GameSource:
             if self.process_running():
                 self.log.info("Battle.net says the game is already running")
                 return True
-            if pt := vision.find_text(reading, "Play"):
+            if pt := _play_button(reading):
                 winapi.focus(hwnd)
                 winapi.click(hwnd, *pt)
                 self.log.info("Clicked Play in Battle.net")
@@ -132,3 +134,15 @@ class GameSource:
             self.log.info("Killing Wow.exe pid %s", pid)
             winapi.kill_pid(pid)
         time.sleep(3)
+
+
+def _play_button(reading):
+    """Centre of Battle.net's Play button. The button's text stands on a line of its own, so prefer
+    that over a "Play ..." sentence in a news tile; the biggest such text is the button."""
+    alone = [ln for ln in reading.lines if vision.norm(" ".join(w.text for w in ln)) == "play"]
+    if alone:
+        ln = max(alone, key=lambda ln: max(w.h for w in ln))
+        x0, y0 = min(w.x for w in ln), min(w.y for w in ln)
+        x1, y1 = max(w.x + w.w for w in ln), max(w.y + w.h for w in ln)
+        return (x0 + x1) / 2, (y0 + y1) / 2
+    return vision.find_text(reading, "Play")
