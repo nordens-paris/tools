@@ -1,5 +1,10 @@
 # Addons
 
-WoW-addons (Lua) til guilden. Hvert addon får sin egen mappe, der kan lægges direkte i `Interface\AddOns`. Se [CONTRIBUTING.md](../CONTRIBUTING.md).
+WoW-addons og WeakAura-packs til guilden. Hvert projekt har sin egen mappe med en `README.md`. Se [CONTRIBUTING.md](../CONTRIBUTING.md).
 
-Her er ingen addons endnu.
+| Projekt | Type | Hvad det er |
+| --- | --- | --- |
+| [Darkfade's Forever Warrior](darkfade-forever-warrior) | WeakAura-pack | Komplet Warrior-UI til ForeverAuras: cooldowns, procs, swing og Rage, Battle Shout-påmindelser og tank-announces |
+
+**Addon:** en mappe, der lægges direkte i `Interface\AddOns`.
+**WeakAura-pack:** en tekstfil med en import-streng (`!WA:2!...`), som du kopierer ind via `/wa` → **Import**. Den kræver ForeverAuras.

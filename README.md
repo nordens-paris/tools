@@ -10,6 +10,7 @@ Fælles samling af værktøjer og addons, som folk i guilden **Nordens Paris** h
 |---|---|---|
 | [WoW Queue Watcher](tools/wow-queue-watcher) | Overvåger login-køen og sender alarmer til din telefon | Windows, Python |
 | [UI-overførsel](tools/wow-ui-transfer) | Flytter addons, keybinds, macros, Edit Mode og chat fra Beta til din nye character på launch | Windows, PowerShell |
+| [Darkfade's Forever Warrior](addons/darkfade-forever-warrior) | Komplet WeakAura-UI til Warrior: cooldowns, procs, swing og Rage, Battle Shout-påmindelser og tank-announces | WeakAura (ForeverAuras) |
 
 ## Sådan hentes et værktøj
 
@@ -22,7 +23,7 @@ Kør kun ting, du har hentet herfra eller fra en Release, ikke filer sendt rundt
 
 ```
 tools/     Programmer og scripts, der kører uden for spillet
-addons/    WoW-addons (Lua), der lægges i Interface\AddOns   (tom endnu)
+addons/    WoW-addons (Interface\AddOns) og WeakAura-packs (import-strenge)
 ```
 
 Hvert projekt har sin egen mappe med en `README.md`, der forklarer, hvad det gør, hvordan man installerer det, og hvem der vedligeholder det.

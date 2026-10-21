@@ -11,7 +11,7 @@ Alle i Nordens Paris er velkomne til at lægge værktøjer og addons her, også 
 
 ## Læg noget op (ingen git-erfaring nødvendig)
 
-1. Åbn repoet og gå ind i `addons` (WoW-addons) eller `tools` (programmer og scripts).
+1. Åbn repoet og gå ind i `addons` (WoW-addons og WeakAura-packs) eller `tools` (programmer og scripts).
 2. Tryk **Add file → Upload files** og træk din mappe ind. Så får dine filer stien `addons/<navn>/...` eller `tools/<navn>/...`.
 3. Nederst: vælg **Create a new branch for this commit and start a pull request** → **Propose changes** → **Create pull request**.
 4. Vent på review. Kommer der kommentarer, så ret filerne på samme måde, og pull requesten bliver opdateret.
@@ -25,15 +25,17 @@ Bruger du git eller Claude Code lokalt, så lav en branch, push den og åbn en p
 - Pusher du nye ændringer efter godkendelsen, skal de godkendes igen.
 - Alle kommentarer i pull requesten skal være løst, før den kan merges.
 
-Når du reviewer: læs koden, før du godkender, især `.bat`- og `.ps1`-filer og alt der henter noget fra nettet. Forstår du ikke, hvad noget gør, så spørg.
+Når du reviewer: læs koden, før du godkender, især `.bat`- og `.ps1`-filer og alt der henter noget fra nettet. En WeakAura-streng kan ikke læses direkte, så importér den selv i spillet og kig custom-koden igennem (fanen **Custom** og Lua i triggers), før du godkender. Forstår du ikke, hvad noget gør, så spørg.
 
 ## Nyt projekt
 
-Lav en mappe: `tools/<navn>` for programmer og scripts, `addons/<navn>` for WoW-addons. Brug små bogstaver og bindestreger, fx `tools/raid-roster-export`. Læg en `README.md` i mappen med:
+Lav en mappe: `tools/<navn>` for programmer og scripts, `addons/<navn>` for WoW-addons og WeakAura-packs. Brug små bogstaver og bindestreger, fx `tools/raid-roster-export`. Læg en `README.md` i mappen med:
 - hvad det gør (et par linjer)
 - hvordan man installerer og bruger det
-- om det klikker, skriver filer eller sender noget over nettet
+- om det klikker, skriver filer eller sender noget over nettet (også chat-beskeder som /yell eller /raid)
 - hvem der vedligeholder det (dit Discord- eller karakternavn)
+
+**WeakAura-packs:** læg import-strengen i en `.txt`-fil (den skal starte med `!WA:2!`) ved siden af README'en, så den kan kopieres med **Copy raw file**. Gem den fra WeakAuras' egen **Export**, ikke fra Wago. Skriv i README'en, hvilken klasse og hvilket WeakAuras-addon den er lavet til, fx ForeverAuras. Indeholder packen custom Lua-kode, så nævn det, så reviewer kan kigge den igennem.
 
 ## Regler
 
