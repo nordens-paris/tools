@@ -5,6 +5,8 @@
   til din nye character på launch.
 
   Brug:
+    0. Kommer dit UI fra en anden spilmappe (fx beta): kopiér Interface og WTF\Config.wtf over,
+       FØR du starter spillet første gang (se guiden).
     1. Opret din character i spillet. Tryk IKKE "Enter World".
     2. Dobbeltklik på Overfoer-UI.bat (spillet må gerne stå åbent på character select).
     3. Vælg din gamle character og din nye character, og tryk "Overfør UI".
@@ -84,6 +86,14 @@ function Test-WowRunning {
     return (@(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match '^Wow' }).Count -gt 0)
 }
 
+# Addons bliver kun fundet, når spillet starter. Ligger der ingen i målet, er Interface (og
+# dermed typisk også Config.wtf) ikke kopieret over før første start.
+function Test-HasAddons([string]$Root, [string]$Flavor) {
+    if (-not $Root -or -not $Flavor) { return $false }
+    $addonDir = Join-Path $Root "$Flavor\Interface\AddOns"
+    return ((Test-Path -LiteralPath $addonDir) -and (@(Get-ChildItem -LiteralPath $addonDir -Directory).Count -gt 0))
+}
+
 # Alle spilmapper (_forever_, _classic_beta_ ...). -WithAccounts: kun dem der har et WTF\Account.
 function Get-Flavors([string]$Root, [switch]$WithAccounts) {
     if (-not $Root -or -not (Test-Path -LiteralPath $Root)) { return @() }
@@ -123,12 +133,18 @@ function Get-Characters([string]$Root, [string]$Flavor) {
 }
 
 # Beskriver hvad der kommer til at ske (bruges til opsummering i både vindue og konsol).
-function Get-PlanSummary($Src, $Tgt, [bool]$CopyAddons, [bool]$NoSync) {
+function Get-PlanSummary($Src, $Tgt, [bool]$CopyAddons, [bool]$NoSync, [bool]$WowRunning) {
     $sameFlavor = ($Src.Flavor -eq $Tgt.Flavor)
     $sameAccount = ($sameFlavor -and $Src.Account -eq $Tgt.Account)
     $lines = @()
-    if (-not $sameFlavor -and $CopyAddons) { $lines += "Addons kopieres fra $($Src.Flavor) til $($Tgt.Flavor)" }
-    if (-not $sameFlavor) { $lines += "Grafik- og lydindstillinger kopieres (uden beta-loginlinjer)" }
+    if (-not $sameFlavor -and $CopyAddons) {
+        if ($WowRunning) { $lines += "Addons kopieres fra $($Src.Flavor) til $($Tgt.Flavor) (indlæses først, når spillet genstartes)" }
+        else { $lines += "Addons kopieres fra $($Src.Flavor) til $($Tgt.Flavor)" }
+    }
+    if (-not $sameFlavor) {
+        if ($WowRunning) { $lines += "Grafik og lyd (Config.wtf) springes over: spillet kører og overskriver den, når det lukker" }
+        else { $lines += "Grafik- og lydindstillinger kopieres (uden beta-loginlinjer)" }
+    }
     if (-not $sameAccount) { $lines += "Konto-indstillinger kopieres: addons, keybinds, macros, Edit Mode" }
     $lines += "Character-indstillinger kopieres: $($Src.Char)  ->  $($Tgt.Char)"
     $lines += "Addon-profiler for $($Src.Char) bliver valgt på $($Tgt.Char)"
@@ -141,7 +157,7 @@ function Get-PlanSummary($Src, $Tgt, [bool]$CopyAddons, [bool]$NoSync) {
 function Invoke-Transfer {
     param(
         [string]$Root, $Src, $Tgt,
-        [bool]$CopyAddons, [bool]$NoSync,
+        [bool]$CopyAddons, [bool]$NoSync, [bool]$SkipConfig,
         [scriptblock]$Log, [scriptblock]$Progress
     )
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
@@ -213,8 +229,11 @@ function Invoke-Transfer {
     & $say "Filer kopieret."
 
     # ---- Config.wtf (grafik/lyd) uden beta-loginlinjer ----
+    # Kører spillet, skriver det sin egen Config.wtf, når det lukker, så en kopi nu ville gå tabt.
     $loginLines = '^\s*SET\s+(portal|realmList|realmListbn|realmName|lastCharacterIndex|lastSelectedRealm|accountName|accountList|gxApi)\s'
-    if (-not $sameFlavor) {
+    if (-not $sameFlavor -and $SkipConfig) {
+        & $say "Grafik og lyd (Config.wtf) sprunget over, fordi spillet kører. Kopiér den, mens spillet er lukket."
+    } elseif (-not $sameFlavor) {
         $srcConfig = Join-Path $srcBase 'WTF\Config.wtf'
         if (Test-Path -LiteralPath $srcConfig) {
             $tgtConfig = Join-Path $tgtBase 'WTF\Config.wtf'
@@ -333,7 +352,8 @@ function Confirm-Console([string]$Question) {
 
 function Start-Console {
     Write-Host "=== $AppTitle ===" -ForegroundColor Green
-    if (Test-WowRunning) {
+    $running = Test-WowRunning
+    if ($running) {
         Write-Host "WoW kører. Det er OK, så længe du står på character select og ikke har trykket Enter World." -ForegroundColor Yellow
         if (-not (Confirm-Console "Står du på character select?")) { Write-Host "Afbrudt. Intet er ændret."; return 1 }
     }
@@ -357,6 +377,11 @@ function Start-Console {
     if ($TargetFlavor) { $tgtFlavors = @($tgtFlavors | Where-Object { $_ -eq $TargetFlavor }) }
     $def = [Math]::Max(0, [Array]::IndexOf($tgtFlavors, '_forever_'))
     $tf = Select-FromList "Hvor spiller du nu? (TIL)" $tgtFlavors { param($x) Get-FlavorLabel $x } $def
+    if ($running -and $sf -ne $tf -and -not (Test-HasAddons $root $tf)) {
+        Write-Host "Der ligger ingen addons i $tf, og spillet kører. Addons, grafik og lyd skal på plads, før spillet starter." -ForegroundColor Yellow
+        Write-Host "Luk spillet helt og kør scriptet igen. Din character er allerede oprettet, så det er nok." -ForegroundColor Yellow
+        if (-not (Confirm-Console "Fortsæt alligevel?")) { Write-Host "Afbrudt. Intet er ændret."; return 1 }
+    }
 
     $tgtChars = @(Get-Characters $root $tf | Where-Object { $_.Path -ne $src.Path } | Sort-Object Created -Descending)
     if ($TargetChar) { $tgtChars = @($tgtChars | Where-Object { $_.Char -eq $TargetChar }) }
@@ -371,10 +396,10 @@ function Start-Console {
 
     Write-Host ""
     Write-Host "Det her sker:" -ForegroundColor Cyan
-    Get-PlanSummary $src $tgt $copyAddons $DisableSync.IsPresent | ForEach-Object { Write-Host "  - $_" }
+    Get-PlanSummary $src $tgt $copyAddons $DisableSync.IsPresent $running | ForEach-Object { Write-Host "  - $_" }
     if (-not (Confirm-Console "Fortsæt?")) { Write-Host "Afbrudt. Intet er ændret."; return 1 }
 
-    $r = Invoke-Transfer -Root $root -Src $src -Tgt $tgt -CopyAddons $copyAddons -NoSync $DisableSync.IsPresent `
+    $r = Invoke-Transfer -Root $root -Src $src -Tgt $tgt -CopyAddons $copyAddons -NoSync $DisableSync.IsPresent -SkipConfig $running `
         -Log { param($t) Write-Host "  $t" } -Progress $null
     Write-Host ""
     Write-Host "Færdig! Du kan nu trykke 'Enter World'." -ForegroundColor Green
@@ -569,6 +594,7 @@ function Start-Gui {
     $script:Root = $null
     $script:LastResult = $null
     $script:Busy = $false
+    $script:WowRunning = $false
 
     $setBanner = {
         param([string]$Kind, [string]$Text)
@@ -651,7 +677,7 @@ function Start-Gui {
         $chkAddons.Enabled = $diffFlavor
         if ($diffFlavor) { $chkAddons.ForeColor = $Clr.Text } else { $chkAddons.ForeColor = $Clr.Muted }
         if ($src -and $tgt) {
-            $summary.Text = ((Get-PlanSummary $src $tgt ($chkAddons.Checked -and $diffFlavor) $chkSync.Checked) | ForEach-Object { "•  $_" }) -join "`n"
+            $summary.Text = ((Get-PlanSummary $src $tgt ($chkAddons.Checked -and $diffFlavor) $chkSync.Checked $script:WowRunning) | ForEach-Object { "•  $_" }) -join "`n"
             $btnGo.Enabled = $true
             $btnGo.BackColor = $Clr.Accent
         } else {
@@ -664,13 +690,7 @@ function Start-Gui {
     # Har målet allerede addons (fx kopieret og opdateret i CurseForge før launch), så er
     # standardvalget IKKE at kopiere beta-versionerne ind over dem.
     $defaultAddons = {
-        $tf = Get-ComboValue $cbTgtFlavor
-        $hasAddons = $false
-        if ($script:Root -and $tf) {
-            $addonDir = Join-Path $script:Root "$tf\Interface\AddOns"
-            $hasAddons = (Test-Path -LiteralPath $addonDir) -and (@(Get-ChildItem -LiteralPath $addonDir -Directory).Count -gt 0)
-        }
-        $chkAddons.Checked = -not $hasAddons
+        $chkAddons.Checked = -not (Test-HasAddons $script:Root (Get-ComboValue $cbTgtFlavor))
     }
 
     $setRoot = {
@@ -691,9 +711,14 @@ function Start-Gui {
     }
 
     $refreshBanner = {
+        $script:WowRunning = Test-WowRunning
+        $sf = Get-ComboValue $cbSrcFlavor
+        $tf = Get-ComboValue $cbTgtFlavor
         if (-not $script:Root) {
             & $setBanner 'err' 'Kunne ikke finde World of Warcraft. Tryk "Skift…" og vælg mappen, der indeholder _forever_.'
-        } elseif (Test-WowRunning) {
+        } elseif ($script:WowRunning -and $sf -and $tf -and $sf -ne $tf -and -not (Test-HasAddons $script:Root $tf)) {
+            & $setBanner 'warn' "WoW kører, men der er ingen addons i $tf. Luk spillet helt, så addons, grafik og lyd kommer med."
+        } elseif ($script:WowRunning) {
             & $setBanner 'warn' 'WoW kører. Det er OK, så længe du står på character select og ikke har trykket Enter World.'
         } else {
             & $setBanner 'info' 'Klar. Vælg din gamle og din nye character, og tryk "Overfør UI".'
@@ -701,9 +726,9 @@ function Start-Gui {
     }
 
     # ---- Hændelser ----
-    $cbSrcFlavor.Add_SelectedIndexChanged({ & $fillSrcChars; & $fillTgtChars; & $defaultAddons; & $updateState })
+    $cbSrcFlavor.Add_SelectedIndexChanged({ & $fillSrcChars; & $fillTgtChars; & $defaultAddons; & $refreshBanner; & $updateState })
     $cbSrcChar.Add_SelectedIndexChanged({ & $fillTgtChars; & $updateState })
-    $cbTgtFlavor.Add_SelectedIndexChanged({ & $fillTgtChars; & $defaultAddons; & $updateState })
+    $cbTgtFlavor.Add_SelectedIndexChanged({ & $fillTgtChars; & $defaultAddons; & $refreshBanner; & $updateState })
     $cbTgtChar.Add_SelectedIndexChanged({ & $updateState })
     $chkAddons.Add_CheckedChanged({ & $updateState })
     $chkSync.Add_CheckedChanged({ & $updateState })
@@ -736,9 +761,10 @@ function Start-Gui {
         $diffFlavor = ($src.Flavor -ne $tgt.Flavor)
         $copyAddons = ($chkAddons.Checked -and $diffFlavor)
         $noSync = $chkSync.Checked
+        $running = Test-WowRunning
 
         $msg = "Du er ved at kopiere dit UI:`n`n   FRA   $($src.Char)   ($($src.Flavor), realm $($src.Realm))`n   TIL   $($tgt.Char)   ($($tgt.Flavor), realm $($tgt.Realm))`n`n"
-        $msg += ((Get-PlanSummary $src $tgt $copyAddons $noSync) | ForEach-Object { "•  $_" }) -join "`n"
+        $msg += ((Get-PlanSummary $src $tgt $copyAddons $noSync $running) | ForEach-Object { "•  $_" }) -join "`n"
         $msg += "`n`nHar du IKKE trykket Enter World på $($tgt.Char) endnu?"
         $ans = [System.Windows.Forms.MessageBox]::Show($form, $msg, 'Bekræft overførsel', 'YesNo', 'Question')
         if ($ans -ne 'Yes') { return }
@@ -755,7 +781,7 @@ function Start-Gui {
         [System.Windows.Forms.Application]::DoEvents()
         $before = @(Get-ChildItem -LiteralPath $script:Root -Directory -Filter 'UI-backup-*' | ForEach-Object { $_.FullName })
         try {
-            $r = Invoke-Transfer -Root $script:Root -Src $src -Tgt $tgt -CopyAddons $copyAddons -NoSync $noSync `
+            $r = Invoke-Transfer -Root $script:Root -Src $src -Tgt $tgt -CopyAddons $copyAddons -NoSync $noSync -SkipConfig $running `
                 -Log $log -Progress { param($p) $progressBar.Value = [Math]::Min(100, $p); [System.Windows.Forms.Application]::DoEvents() }
             $script:LastResult = $r
             & $setBanner 'ok' "Færdig! Du kan nu trykke Enter World på $($tgt.Char)."

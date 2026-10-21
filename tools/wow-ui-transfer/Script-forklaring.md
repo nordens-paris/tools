@@ -22,8 +22,15 @@ Der er tre filer:
 - **Intet sker, før du bekræfter.** I vinduet trykker du *Overfør UI* og så *Ja*. I konsollen skriver du `j`. Fortryder du, er intet ændret.
 - **Ingen internetadgang og ingen installation.**
 
+## 0. Før første start (gøres i hånden, se guiden)
+Kommer dit UI fra en anden spilmappe (fx beta), skal `Interface` og `WTF\Config.wtf` kopieres over, **før spillet startes første gang**. Addons bliver kun fundet, når spillet starter, og spillet skriver sin egen `Config.wtf`, når det lukker. Så er grafik, lyd og addons indlæst fra start, inden resten af `WTF` bliver overført.
+
 ## 1. Tjek om WoW kører
 Scriptet ser efter en proces der hedder noget med `Wow` (fx `Wow.exe` eller `WowB.exe`). Kører spillet, viser vinduet en gul statuslinje, og konsollen spørger, om du står på character select. Det er tilladt, fordi spillet først læser character-filerne, når du trykker Enter World.
+
+Kører spillet, og kopierer du mellem to forskellige spilmapper, sker der desuden to ting:
+- Ligger der ingen addons i målets `Interface\AddOns`, advarer statuslinjen (og konsollen) om, at Del 2 trin 4 i guiden ikke er gjort, og beder dig lukke spillet helt først. Din character er jo allerede oprettet, så scriptet kan sagtens køre med spillet lukket.
+- `Config.wtf` springes over (se 6b), fordi spillet overskriver den, når det lukker.
 
 ## 2. Find WoW-mappen
 1. Først læses Battle.net's registreringsnøgle (`HKLM\SOFTWARE\WOW6432Node\Blizzard Entertainment\World of Warcraft` → `InstallPath`). Den læses kun og ændres ikke.
@@ -49,8 +56,11 @@ Kopieringen **fletter**. Hver fil fra kilden lægges ind på samme sted i målet
 
 **a) Addons, kun hvis kilde og mål er forskellige spilmapper (fx beta → forever)**
 - Du bliver spurgt om du vil kopiere `Interface`. Svarer du ja, kopieres hele `<kilde>\Interface` ind i `<mål>\Interface`. Addons der allerede ligger i målet, bliver liggende.
+- I vinduet er fluebenet sat som standard, kun hvis målet ikke allerede har addons. Har du kopieret `Interface` før første start som anbefalet, bliver dine opdaterede addons altså ikke overskrevet af beta-versionerne.
+- Kører spillet, bliver addons kopieret, men de indlæses først, når spillet startes igen.
 
-**b) Grafik- og lydindstillinger (`WTF\Config.wtf`), kun ved forskellige spilmapper**
+**b) Grafik- og lydindstillinger (`WTF\Config.wtf`), kun ved forskellige spilmapper, og kun når spillet er lukket**
+- Kører spillet, springes dette trin over og skrives i loggen. En kopi ville alligevel blive overskrevet, når spillet lukker.
 - Backup af målets `Config.wtf`.
 - Kildens linjer kopieres, **bortset fra** login-linjerne `portal`, `realmList`, `realmListbn`, `realmName`, `lastCharacterIndex`, `lastSelectedRealm`, `accountName`, `accountList` og `gxApi`.
 - Målets egne login-linjer beholdes, så launch-klienten stadig logger ind på den rigtige server og ikke på beta.
@@ -80,7 +90,7 @@ For hver `.lua`-fil i målkontoens `SavedVariables` gør scriptet følgende:
 Andre dele af filerne bliver ikke rørt.
 
 ## 8. Valgfrit: slå server-synkronisering fra
-Det sker kun, hvis du sætter flueben i vinduet (eller starter konsollen med `-DisableSync`). Det er slået fra som standard. Så bliver `SET synchronizeConfig/Settings/Bindings/Macros "0"` skrevet i målets `Config.wtf`, så spillet bruger de lokale filer i stedet for serverens. Det er tænkt som en nødløsning.
+Det sker kun, hvis du sætter flueben i vinduet (eller starter konsollen med `-DisableSync`). Det er slået fra som standard. Så bliver `SET synchronizeConfig/Settings/Bindings/Macros "0"` skrevet i målets `Config.wtf`, så spillet bruger de lokale filer i stedet for serverens. Det er tænkt som en nødløsning. Ligesom grafik og lyd virker det kun, hvis spillet er lukket, mens scriptet kører.
 
 ## 9. Afslutning
 En log over alt, hvad der blev gjort, gemmes som `overfoersel-log.txt` i backup-mappen.
