@@ -130,7 +130,11 @@ function Get-Accounts([string]$Root, [string]$Flavor) {
 function Get-TargetAccount([string]$Root, [string]$Flavor, [string]$Name) {
     $Name = $Name.Trim().ToUpperInvariant()
     $path = Join-Path $Root "$Flavor\WTF\Account\$Name"
-    return [pscustomobject]@{ Flavor = $Flavor; Account = $Name; AccPath = $path; Exists = (Test-Path -LiteralPath $path) }
+    # HasCache: uden cache.md5 kendes serverens tidspunkter ikke (se Update-CacheTimes)
+    return [pscustomobject]@{
+        Flavor = $Flavor; Account = $Name; AccPath = $path; Exists = (Test-Path -LiteralPath $path)
+        HasCache = (Test-Path -LiteralPath (Join-Path $path 'cache.md5'))
+    }
 }
 
 # Alle characters i en spilmappe: WTF\Account\<konto>\<realm>\<Fornavn-Efternavn>
@@ -255,7 +259,8 @@ function Find-RealmFromLog([string]$Root, [string]$Flavor) {
 # Målets cache.md5 indeholder serverens tidspunkter fra sidste gang, spillet var åbent. Her får de
 # kopierede filer de tidspunkter (og deres egen MD5), så spillet tror, filerne er serverens version.
 #   $OldBytes: målets cache.md5 fra før kopieringen. Poster for filer der ikke blev kopieret, tages derfra.
-function Update-CacheTimes([string]$Dir, [byte[]]$OldBytes) {
+#   $Copied: stierne på de filer der lige er kopieret. Kun de tæller (en .old-fil kan have samme indhold).
+function Update-CacheTimes([string]$Dir, [byte[]]$OldBytes, [hashtable]$Copied) {
     $path = Join-Path $Dir 'cache.md5'
     if (-not (Test-Path -LiteralPath $path)) { return 0 }
     $b = [IO.File]::ReadAllBytes($path)
@@ -263,7 +268,7 @@ function Update-CacheTimes([string]$Dir, [byte[]]$OldBytes) {
     $md5 = [System.Security.Cryptography.MD5]::Create()
     $hashes = @{}
     foreach ($f in Get-ChildItem -LiteralPath $Dir -File) {
-        if ($f.Name -eq 'cache.md5') { continue }
+        if ($f.Name -eq 'cache.md5' -or -not $Copied.ContainsKey($f.FullName)) { continue }
         $hashes[[BitConverter]::ToString($md5.ComputeHash([IO.File]::ReadAllBytes($f.FullName)))] = $true
     }
     $sameSize = ($OldBytes -and $OldBytes.Length -eq $b.Length)
@@ -307,11 +312,13 @@ function Get-PlanSummary([string]$Phase, $Src, $Tgt, [bool]$CopyAddons, [bool]$N
         if ($Src.AccPath -ne $Tgt.AccPath) {
             $lines += "Konto-indstillinger kopieres til kontoen $($Tgt.Account): Edit Mode, keybinds, macros, interface- og addon-indstillinger"
             if (-not $Tgt.Exists) { $lines += "Kontomappen $($Tgt.Account) findes ikke endnu og bliver oprettet. Tjek at navnet er stavet rigtigt" }
+            if (-not $Tgt.HasCache) { $lines += "OBS: Spillet har ikke været startet på denne konto på pc'en. Mangler Edit Mode eller keybinds efter Enter World: skriv /logout og kør fase 2 igen" }
         }
         if ($NoSync) { $lines += "Server-synkronisering slås fra (nødløsning)" }
     } else {
         if (-not (Test-Phase1Done $Src $Tgt)) { $lines += "OBS: Fase 1 ser ikke ud til at være kørt. Edit Mode, keybinds og indstillinger kommer ikke med" }
         $lines += "Character-indstillinger kopieres: $($Src.Char)  ->  $($Tgt.Char)"
+        if ($Src.AccPath -ne $Tgt.AccPath) { $lines += "Edit Mode, keybinds og macros på kontoen kopieres igen med serverens tidspunkter" }
         $lines += "Addon-profiler for $($Src.Char) bliver valgt på $($Tgt.Char)"
         if ($SrcRealm -and $TgtRealm) { $lines += "Realm-indstillinger (Titan Panel, X-Perl, AtlasLoot) flyttes: $SrcRealm  ->  $TgtRealm" }
         else { $lines += "Intet realm-navn: Titan Panel, X-Perl og AtlasLoot venter. Tryk Enter World, skriv /logout, og kør fase 2 igen" }
@@ -495,13 +502,27 @@ function Invoke-Transfer {
         }
     } else {
         & $addTree $Src.Path $Tgt.Path
+        if ($Src.AccPath -ne $Tgt.AccPath) {
+            # Edit Mode, keybinds og macros på kontoniveau hentes først fra serveren ved Enter World.
+            # Kendte fase 1 ikke serverens tidspunkter (fx ingen cache.md5 i målet), har spillet hentet
+            # serverens version ved første Enter World. Efter /logout står tidspunkterne i cache.md5,
+            # så filerne kopieres igen her. Interface-indstillingerne (config-cache) læses kun ved login.
+            foreach ($f in Get-ChildItem -LiteralPath $Src.AccPath -File -Force) {
+                if ($f.Name -like 'character-list-order*' -or $f.Name -like 'config-cache*') { continue }
+                $ops.Add(@($f.FullName, (Join-Path $Tgt.AccPath $f.Name)))
+            }
+        }
     }
 
     # Målets cache.md5 gemmes inden kopieringen (se Update-CacheTimes)
-    if ($Phase -eq '1') { $cacheDir = $Tgt.AccPath } else { $cacheDir = $Tgt.Path }
-    $oldCache = $null
-    $oldCachePath = Join-Path $cacheDir 'cache.md5'
-    if (Test-Path -LiteralPath $oldCachePath) { $oldCache = [IO.File]::ReadAllBytes($oldCachePath) }
+    $cacheDirs = @()
+    if ($Phase -eq '2') { $cacheDirs += $Tgt.Path }
+    if ($Src.AccPath -ne $Tgt.AccPath) { $cacheDirs += $Tgt.AccPath }
+    $oldCaches = @{}
+    foreach ($dir in $cacheDirs) {
+        $p = Join-Path $dir 'cache.md5'
+        if (Test-Path -LiteralPath $p) { $oldCaches[$dir] = [IO.File]::ReadAllBytes($p) } else { $oldCaches[$dir] = $null }
+    }
 
     # ---- Kopiér ----
     & $say "Kopierer $($ops.Count) filer..."
@@ -518,9 +539,13 @@ function Invoke-Transfer {
     $state.Files = $ops.Count
     & $say "Filer kopieret."
 
-    if ($Phase -eq '2' -or $Src.AccPath -ne $Tgt.AccPath) {
-        $n = Update-CacheTimes $cacheDir $oldCache
-        if ($n -gt 0) { & $say "$n filer fik serverens tidspunkt, så spillet bruger dem frem for at hente serverens kopi." }
+    $n = 0
+    $copied = @{}
+    foreach ($op in $ops) { $copied[(Get-Item -LiteralPath $op[1]).FullName] = $true }
+    foreach ($dir in $cacheDirs) { $n += Update-CacheTimes $dir $oldCaches[$dir] $copied }
+    if ($n -gt 0) { & $say "$n filer fik serverens tidspunkt, så spillet bruger dem frem for at hente serverens kopi." }
+    if ($Src.AccPath -ne $Tgt.AccPath -and -not $oldCaches[$Tgt.AccPath]) {
+        & $say "Målkontoen havde ingen cache.md5, så serverens tidspunkter kendes ikke endnu. Mangler Edit Mode eller keybinds efter Enter World: skriv /logout og kør fase 2 igen."
     }
 
     if ($Phase -eq '1') {
@@ -759,10 +784,15 @@ function Start-Console {
     Write-Host ""
     if ($ph -eq '1') {
         Write-Host "Fase 1 færdig! Kør fase 2 på launch, når du har oprettet din character." -ForegroundColor Green
+        if ($src.AccPath -ne $tgt.AccPath -and -not $tgt.HasCache) {
+            Write-Host "  Spillet har ikke været startet på denne konto på pc'en. Mangler Edit Mode eller keybinds efter Enter World: skriv /logout, kør fase 2 igen, og tryk Enter World." -ForegroundColor Yellow
+        }
     } else {
         Write-Host "Færdig! Du kan nu trykke 'Enter World'." -ForegroundColor Green
         if (-not ($srcRealm -and $tgtRealm)) {
             Write-Host "  Realm-navnet manglede: skriv /logout når du er inde i verden, kør fase 2 igen, og tryk Enter World." -ForegroundColor Yellow
+        } else {
+            Write-Host "  Mangler Edit Mode eller keybinds i spillet: skriv /logout, kør fase 2 igen, og tryk Enter World."
         }
         Write-Host "  Mangler binds eller macros på barerne: /myslot -> vælg profil -> Import."
     }
@@ -1269,11 +1299,17 @@ function Start-Gui {
             if ($ph -eq '1') {
                 & $setBanner 'ok' 'Fase 1 er færdig. Kør fase 2 på launch, når du har oprettet din character.'
                 $done = "Fase 1 er færdig.`n`n•  $($r.Files) filer kopieret`n•  $($r.Backups) overskrevne filer gemt i backup`n`nPå launch: log ind, opret din character (tryk IKKE Enter World), og kør så Overfoer-UI.bat igen og vælg Fase 2."
+                if ($src.AccPath -ne $tgt.AccPath -and -not $tgt.HasCache) {
+                    $done += "`n`nOBS: Spillet har ikke været startet på denne konto på pc'en, så serverens tidspunkter kendes ikke. Mangler Edit Mode eller keybinds, når du er inde i verden: skriv /logout (du kommer ikke i kø), kør fase 2 igen og tryk Enter World."
+                }
             } else {
                 & $setBanner 'ok' "Færdig! Du kan nu trykke Enter World på $($tgt.Char)."
                 $done = "Dit UI er kopieret til $($tgt.Char).`n`n•  $($r.Files) filer kopieret`n•  $($r.Profiles) addons sat op`n•  $($r.Backups) overskrevne filer gemt i backup`n`nDu kan nu trykke Enter World."
                 if (-not ($srcRealm -and $tgtRealm)) {
-                    $done += "`n`nRealm-navnet manglede, så Titan Panel, X-Perl og AtlasLoot er ikke sat op endnu. Når du er inde i verden: skriv /logout (du kommer ikke i kø), kør fase 2 igen og tryk Enter World. Så findes realmen automatisk."
+                    $done += "`n`nRealm-navnet manglede, så Titan Panel, X-Perl og AtlasLoot er ikke sat op endnu. Når du er inde i verden: skriv /logout (du kommer ikke i kø), kør fase 2 igen og tryk Enter World. Så findes realmen automatisk, og mangler Edit Mode eller keybinds, kommer de også med."
+                }
+                else {
+                    $done += "`n`nMangler Edit Mode eller keybinds, når du er inde i verden: skriv /logout (du kommer ikke i kø), kør fase 2 igen og tryk Enter World."
                 }
                 $done += "`n`nMangler der binds eller macros på barerne, så skriv /myslot, vælg din profil og tryk Import."
             }

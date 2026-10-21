@@ -69,7 +69,11 @@ Loading Data From File: Type 0
 
 Kopierede beta-filer har betaens tidspunkter og taber derfor altid til serveren. Efter kopieringen giver scriptet derfor hver kopieret fil **serverens tidspunkt** fra målets gamle `cache.md5`, sammen med filens egen MD5. Posterne for filer, der ikke blev kopieret, tages uændret fra målets gamle `cache.md5`. Målets `cache.md5` indeholder serverens tidspunkter fra sidste gang, spillet var åbent, og derfor må spillet ikke startes mellem fase 1 og launch.
 
+Kun de filer, scriptet lige har kopieret, tæller. En `.old`-fil kan have samme indhold som en kopieret fil og må ikke give en post forkert MD5.
+
 Det samme gøres for character-mappens `cache.md5` i fase 2.
+
+**Hvis målet ikke har nogen `cache.md5`** (spillet har aldrig været startet på pc'en, eller `WTF` er slettet), kender fase 1 ikke serverens tidspunkter. Har serveren data for kontoen, henter spillet så serverens version. Interface-indstillingerne (Type 0) hentes ved login, mens Edit Mode (Type 13), keybinds (Type 2) og macros (Type 4) hentes ved Enter World. Fase 1 advarer om det i opsummeringen, i "Færdig"-beskeden og i loggen. Løsningen er at skrive `/logout` efter første Enter World og køre fase 2 igen (se afsnit 5).
 
 ## 4. Fase 2: vælg din nye character
 1. Du vælger spilmappen. *WoW Forever (_forever_)* er standard.
@@ -78,7 +82,11 @@ Det samme gøres for character-mappens `cache.md5` i fase 2.
 4. Peger kilde og mål på samme mappe, stopper scriptet.
 
 ## 5. Fase 2: kopiering
-Alt indhold i den gamle character-mappe kopieres ind i den nye. Det dækker character-macros, keybinds, `chat-cache.txt`, `layout-local.txt`, valgt Edit Mode-layout og character-addon-indstillinger i `SavedVariables`. Bagefter sættes tidspunkterne i `cache.md5` som beskrevet i afsnit 3.
+Alt indhold i den gamle character-mappe kopieres ind i den nye. Det dækker character-macros, keybinds, `chat-cache.txt`, `layout-local.txt`, valgt Edit Mode-layout og character-addon-indstillinger i `SavedVariables`.
+
+Desuden kopieres konto-filerne igen, bortset fra `config-cache.wtf` (læses kun ved login) og `character-list-order.txt`. Det er Edit Mode, keybinds og macros på kontoniveau, som spillet først synkroniserer ved Enter World. Efter første Enter World og `/logout` står serverens tidspunkter for dem i kontoens `cache.md5`, så de kan sættes korrekt, også selvom fase 1 ikke kendte dem.
+
+Bagefter sættes tidspunkterne i både character-mappens og kontoens `cache.md5` som beskrevet i afsnit 3.
 
 Vinduet advarer, hvis fase 1 ikke ser ud til at være kørt, dvs. hvis under halvdelen af kildens addon-filer findes i målkontoen.
 
@@ -128,8 +136,10 @@ Opstår der en fejl undervejs, stopper scriptet med det samme og viser fejlen. S
 
 ## Testet
 - Begge faser er testet på WoW Forever-stresstesten 21/10-2026 (beta → stresstest): Edit Mode, interface-indstillinger, keybinds, macros og addon-profiler kom med. `AccountData.log` viste `Loading Data From File` for alle typer.
-- Kørsel af fase 2 igen efter første login (overskrivning af Titan Panel, X-Perl og AtlasLoot) er testet på kopier af de rigtige filer, ikke i spillet.
+- Fase 2 igen efter `/logout` er testet i spillet for addon-profiler (Titan Panel, X-Perl, AtlasLoot) på Darkfade-Testsix.
+- At fase 2 også kopierer Edit Mode, keybinds og macros på kontoen igen, er testet på kopier af de rigtige filer, ikke i spillet.
 
 ## Kendte begrænsninger
 - Addons med deres eget profilformat (ikke AceDB og ikke de tre ovenfor) skal stadig have valgt profil manuelt.
 - Startes spillet mellem fase 1 og launch, gemmer serveren nye tidspunkter, og så skal fase 1 køres igen.
+- Har spillet aldrig været startet på pc'en (ingen `cache.md5`), og har serveren data for kontoen, kommer interface-indstillingerne ikke med. Edit Mode, keybinds og macros kommer med ved `/logout` og fase 2 igen. Interface-indstillingerne kan hentes ved at køre fase 1 igen, efter spillet har været lukket.

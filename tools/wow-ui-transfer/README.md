@@ -34,7 +34,9 @@ Overførslen sker i to faser:
 4. **Realm-navn nu:** skriv navnet på realmen, som det står på character select. Kan du ikke se det, så lad feltet stå tomt (se trin 7).
 5. Tryk **Overfør UI** → **Ja**. Fase 2 kopierer din characters egne indstillinger (chat, character-keybinds og -macros osv.) og sætter dine addons til at bruge din gamle profil.
 6. Når der står **Færdig**, trykker du **Enter World**.
-7. **Var realm-feltet tomt?** Så mangler Titan Panel, X-Perl og AtlasLoot, fordi de gemmer under realm-navnet. Skriv `/logout` (du kommer ikke i kø, du ryger bare tilbage til character select), kør `Overfoer-UI.bat` igen i fase 2, og tryk Enter World. Nu står realm-navnet i addon-filerne, så det udfyldes automatisk.
+7. **Var realm-feltet tomt, eller mangler Edit Mode eller keybinds?** Skriv `/logout` (du kommer ikke i kø, du ryger bare tilbage til character select), kør `Overfoer-UI.bat` igen i fase 2, og tryk Enter World.
+   - Titan Panel, X-Perl og AtlasLoot gemmer under realm-navnet. Det står nu i addon-filerne, så det udfyldes automatisk.
+   - Edit Mode, keybinds og macros kan mangle, hvis spillet ikke havde været startet på pc'en før fase 1 (fx ny pc, eller hvis du har slettet `WTF`-mappen). Efter første Enter World kender scriptet serverens tidspunkter, så anden gang virker det.
 8. Mangler der stadig binds eller macros på barerne: `/myslot` → vælg din profil → **Import** (evt. to gange). Er Edit Mode nulstillet: Edit Mode → **Import** → indsæt teksten fra din tekstfil.
 
 Vil vinduet ikke åbne, så brug `Overfoer-UI (konsol).bat`. Den gør præcis det samme med tekst i stedet for et vindue.
