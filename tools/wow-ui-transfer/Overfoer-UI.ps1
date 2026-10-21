@@ -8,7 +8,7 @@
     Addons (Interface), grafik og lyd (Config.wtf) og alt på kontoniveau: Edit Mode-layouts,
     keybinds, macros, interface-indstillinger og addon-indstillinger. Spillet indlæser de filer,
     allerede når du logger ind, så de skal ligge klar, før du starter spillet.
-    Du skriver dit kontonavn (fx C00LPET), så scriptet ved, hvor filerne skal hen.
+    Du skriver dit kontonavn (fx ABCD1234), så scriptet ved, hvor filerne skal hen.
 
   Fase 2  -  på launch, på character select (spillet må gerne køre, du mister ikke din plads)
     1. Opret din character. Tryk IKKE "Enter World".
@@ -752,7 +752,7 @@ function Start-Console {
     $tgtRealm = ''
     if ($ph -eq '1') {
         $acc = $TargetAccount
-        if (-not $acc) { $acc = Read-WithDefault "Dit kontonavn i $tf (fx C00LPET)" (@(Get-Accounts $root $tf) | Select-Object -First 1) }
+        if (-not $acc) { $acc = Read-WithDefault "Dit kontonavn i $tf (fx ABCD1234)" (@(Get-Accounts $root $tf) | Select-Object -First 1) }
         if (-not $acc) { throw "Intet kontonavn angivet." }
         $tgt = Get-TargetAccount $root $tf $acc
         if ($sf -ne $tf) {
@@ -1123,7 +1123,7 @@ function Start-Gui {
 
         if ($p1) {
             if ($tgt -and -not $tgt.Exists) { $tgtHint.Text = "Mappen $($tgt.Account) findes ikke endnu og bliver oprettet. Tjek at kontonavnet er stavet rigtigt."; $tgtHint.ForeColor = $Clr.Warn }
-            else { $tgtHint.Text = 'Dit kontonavn i WoW Forever (fx C00LPET). Konto-indstillinger lægges her, før du starter spillet.'; $tgtHint.ForeColor = $Clr.Muted }
+            else { $tgtHint.Text = 'Dit kontonavn i WoW Forever (fx ABCD1234). Konto-indstillinger lægges her, før du starter spillet.'; $tgtHint.ForeColor = $Clr.Muted }
         } elseif ($cbTgtChar.Items.Count -gt 0) {
             $tgtHint.Text = 'Den nyeste character står øverst. Har du lige oprettet en, er det den.'; $tgtHint.ForeColor = $Clr.Muted
         } else {

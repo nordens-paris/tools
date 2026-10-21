@@ -8,13 +8,15 @@ Fælles samling af værktøjer og addons, som folk i guilden **Nordens Paris** h
 
 ## Indhold
 
-| Projekt | Hvad det gør | Platform |
-|---|---|---|
-| [WoW Queue Watcher](tools/wow-queue-watcher) | Overvåger login-køen og sender alarmer til din telefon | Windows, Python |
-| [UI-overførsel](tools/wow-ui-transfer) | Flytter addons, keybinds, macros, Edit Mode og chat fra Beta til din nye character på launch | Windows, PowerShell |
-| [NP Roster](tools/raid-roster) | Planlægger raid-rosters ud fra Raid-Helper: buffs, grupper, bænk-rotation og fremmøde | Web (Claude-artifact) |
-| [NPRoster-addon](addons/NPRoster) | Importerer rosteret i spillet: invitér, sortér grupper, bænk-whispers og fremmøde | WoW-addon |
-| [Darkfade's Forever Warrior](addons/darkfade-forever-warrior) | Komplet WeakAura-UI til Warrior: cooldowns, procs, swing og Rage, Battle Shout-påmindelser og tank-announces | WeakAura (ForeverAuras) |
+| Projekt | Hvad det gør | Platform | Hent |
+|---|---|---|---|
+| [WoW Queue Watcher](tools/wow-queue-watcher) | Overvåger login-køen og sender alarmer til din telefon | Windows, Python | [Releases](https://github.com/nordens-paris/tools/releases?q=queue-watcher&expanded=true) |
+| [UI-overførsel](tools/wow-ui-transfer) | Flytter addons, keybinds, macros, Edit Mode og chat fra Beta til din nye character på launch | Windows, PowerShell | [Releases](https://github.com/nordens-paris/tools/releases?q=ui-overfoersel&expanded=true) |
+| [NP Roster](tools/raid-roster) | Planlægger raid-rosters ud fra Raid-Helper: buffs, grupper, bænk-rotation og fremmøde | Web (Claude-artifact) | Link fra Darkfade (officerer) |
+| [NPRoster-addon](addons/NPRoster) | Importerer rosteret i spillet: invitér, sortér grupper, bænk-whispers og fremmøde | WoW-addon | [Releases](https://github.com/nordens-paris/tools/releases?q=np-roster&expanded=true) |
+| [Darkfade's Forever Warrior](addons/darkfade-forever-warrior) | Komplet WeakAura-UI til Warrior: cooldowns, procs, swing og Rage, Battle Shout-påmindelser og tank-announces | WeakAura (ForeverAuras) | [Import-streng](addons/darkfade-forever-warrior/Darkfade-Forever-Warrior.txt) |
+
+Hvert værktøj har sine egne versioner. Linkene under **Hent** viser kun det værktøjs releases, med den nyeste øverst.
 
 ## Sådan hentes et værktøj
 

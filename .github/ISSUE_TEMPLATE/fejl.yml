@@ -10,6 +10,9 @@ body:
       options:
         - WoW Queue Watcher
         - UI-overførsel
+        - NP Roster (web-værktøj)
+        - NPRoster-addon
+        - Darkfade's Forever Warrior (WeakAura)
         - Andet
     validations:
       required: true
@@ -30,4 +33,4 @@ body:
     id: version
     attributes:
       label: Version
-      placeholder: fx queue-watcher-v1.1
+      placeholder: fx queue-watcher-v1.2

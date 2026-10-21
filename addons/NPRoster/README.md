@@ -8,7 +8,7 @@ Kun raidlederen behøver addon'et. Alle andre ser rosteret på Discord.
 
 ## Installation
 
-Kopiér mappen `NPRoster` til `World of Warcraft\_forever_\Interface\AddOns\`.
+Hent zip-filen fra den nyeste [NPRoster-release](https://github.com/nordens-paris/tools/releases?q=np-roster&expanded=true), og kopiér mappen `NPRoster` til `World of Warcraft\_forever_\Interface\AddOns\`.
 
 `## Interface: 16001` er taget fra WoW Forever-betaen. Viser addon'et sig som "out of date" på live, så slå **Load out of date AddOns** til, eller ret tallet i `NPRoster.toc` til det, `/dump select(4, GetBuildInfo())` viser.
 

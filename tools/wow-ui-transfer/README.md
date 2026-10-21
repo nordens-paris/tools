@@ -15,11 +15,11 @@ Overførslen sker i to faser:
 
 ### Del 2: Før launch (fase 1)
 1. Preinstaller spillet i Battle.net, så mappen `_forever_` findes.
-2. Download `UI-overfoersel.zip` fra repoets [Releases](https://github.com/nordens-paris/tools/releases) (eller hent filerne i denne mappe). Højreklik på den → **Egenskaber** → sæt flueben i **Fjern blokering** → OK. Så spørger Windows ikke om lov hver gang.
+2. Download `UI-overfoersel.zip` fra den nyeste [UI-overførsel-release](https://github.com/nordens-paris/tools/releases?q=ui-overfoersel&expanded=true), som står øverst på siden. Du kan også hente filerne i denne mappe. Højreklik på den → **Egenskaber** → sæt flueben i **Fjern blokering** → OK. Så spørger Windows ikke om lov hver gang.
 3. Højreklik på zip-filen → **Udpak alle**, fx til skrivebordet.
 4. **Luk WoW helt** (Menu → Exit Game, ikke Alt+F4), og dobbeltklik på `Overfoer-UI.bat`. Vinduet åbner i **Fase 1**.
 5. Under **1 FRA** vælger du, hvor du lavede dit UI (fx *Beta*), og din gamle character.
-6. Under **2 TIL** vælger du *WoW Forever* og skriver dit **kontonavn** (fx `C00LPET`). Har du spillet WoW Forever før, er det udfyldt på forhånd.
+6. Under **2 TIL** vælger du *WoW Forever* og skriver dit **kontonavn** (fx `ABCD1234`). Har du spillet WoW Forever før, er det udfyldt på forhånd.
 7. Tryk **Overfør UI** → **Ja**. Fase 1 kopierer:
    - addons (`Interface`), hvis de ikke allerede ligger i `_forever_`,
    - grafik og lyd (`Config.wtf`, uden beta-loginlinjerne),
