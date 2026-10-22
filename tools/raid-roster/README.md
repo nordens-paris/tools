@@ -1,6 +1,6 @@
 # NP Roster (web-værktøj)
 
-**Version 1.0**
+**Version 1.1**
 
 Planlægger Holdets raids ud fra Raid-Helper-tilmeldinger: et optimeret 20-mands roster med roterende bænk og to 10-mands rosters. Officererne arbejder i det samme roster på samme tid, og alt, hvad de ændrer, kan fortrydes.
 
@@ -21,9 +21,15 @@ En typisk uge:
 
 ## Week
 
+### This week (tjekliste)
+
+Øverst på ugen er en række mærker, der viser, hvad der er gjort, og hvad der mangler: tilmeldinger importeret pr. dag, hvert raid planlagt og fuldt, postet på Discord, fremmøde for de raids, der er spillet, og om ugen er markeret final. Grøn = klaret, gul = noget at gøre nu, grå = senere. Klik på et mærke for at komme derhen.
+
+**Forældede tilmeldinger:** er en kommende raiddag importeret for mere end et døgn siden, bliver mærket gult ("re-import"), og dagens kort viser "Imported 2 days ago" i gult.
+
 ### Noter
 
-Under ugevælgeren er et felt til **officer-noter for ugen** (fx "vores off-tank kommer sent søndag"), og hvert raid har sit eget notefelt øverst (fx "Fire resist på Rag"). Noterne gemmes, når du forlader feltet, ses kun i værktøjet (ikke på Discord eller i addon'et) og logges, så de kan fortrydes.
+Under tjeklisten øverst er et felt til **officer-noter for ugen** (fx "vores off-tank kommer sent søndag"), og hvert raid har sit eget notefelt øverst (fx "Fire resist på Rag"). Noterne gemmes, når du forlader feltet, ses kun i værktøjet (ikke på Discord eller i addon'et) og logges, så de kan fortrydes.
 
 ### Raid days
 
@@ -35,7 +41,7 @@ Under ugevælgeren er et felt til **officer-noter for ugen** (fx "vores off-tank
 
 ### Availability
 
-En tabel over alle spillere og deres status på hver raiddag. Status kan rettes med rullemenuen, fx hvis nogen har meldt fra i Discord uden at rette i Raid-Helper: Signed up, Tentative, Late, Bench, Absent eller Not signed up. Hold musen over menuen for at se, hvilken spec de har tilmeldt sig som. Tabellen kan klappes sammen.
+En tabel over alle spillere og deres status på hver raiddag. Status kan rettes med rullemenuen, fx hvis nogen har meldt fra i Discord uden at rette i Raid-Helper: Signed up, Tentative, Late, Bench, Absent eller Not signed up. Hold musen over menuen for at se, hvilken spec de har tilmeldt sig som. En status, en officer har sat, får en blå streg i venstre side og bliver stående, når dagen importeres igen, indtil nogen ændrer den. Tabellen kan klappes sammen.
 
 ### Plan the week
 
@@ -55,6 +61,8 @@ Optimeringen vælger i denne rækkefølge, og et højere trin vinder altid over 
 
 Raids af samme størrelse er samme lockout: ingen kommer med i begge 10-mænd. Optimeringen fordeler spillerne mellem dem, så de får omtrent lige mange buffs (vægten **Raid balance**), og er der for få spillere til begge, fordeles de ligeligt.
 
+**Faste 10-mands-hold:** optimeringen prøver at holde spillere, der var på samme 10-mand sidste gang, sammen igen (vægten **Fixed teams**). Det er par af spillere, der tæller, ikke navnet A eller B, så holdene følger med, også når de to 10-mænd bytter dag. Buffs og roller går stadig forud. Hver 10-mand viser fx **8/10 same team**: hvor mange i rosteret der spillede sammen sidste gang. I en simulering på det nuværende roster (12 uger, 90 % fremmøde) steg andelen fra 51 % uden vægten til 80 % med standardvægten 400.
+
 **Bænk-retfærdighed:** hver uge inden for de sidste 8, hvor en spiller sad på bænken i en raidstørrelse, giver et "tilgodehavende", der vægter mindre, jo længere det er siden (×0,85 pr. uge). En uge, hvor de spillede, trækker en smule fra. En lockout tæller én gang pr. uge. Kun uger, der er markeret final, eller raids med registreret fremmøde tæller med.
 
 ### Raids
@@ -65,6 +73,7 @@ Raids af samme størrelse er samme lockout: ingen kommer med i begge 10-mænd. O
 - **Mærkerne** viser antal spillere, rollerne (rød, hvis tanks eller healere ikke passer), dækkede buffs og hvem der sidst rettede raidet. Buff-listen viser hver buff med flueben eller kryds; hold musen over for at se, hvem der giver den.
 - **Mangler en buff**, som en på bænken kan give, står det under mærkerne, med et hint om at trykke **Re-optimize** eller fjerne en officers valg.
 - **Re-optimize** vælger rosteret igen på den nuværende dag (for lockouten: begge 10-mænd) og beholder de spillere, en officer har placeret.
+- **Explain** åbner "Why this roster": tanks og healere med begrundelse (fast tank, off-spec, holdt inde), hvilke buffs der mangler og hvorfor (ingen tilgængelig, spiller i den anden 10-mand, holdt ude eller på bænken), off-specs, officerernes valg, hvor meget af holdet der er det samme som sidst, hvorfor hver bænkspiller sidder over, og hvem der er væk eller har meldt fra. **Copy for Discord** kopierer det hele som tekst.
 - **Re-sort groups** laver grupperne om ud fra rosteret uden at ændre, hvem der er med.
 - **Clear picks (… kept in, … kept out)** fjerner alle officerernes valg i raidet, så optimeringen bestemmer frit igen (to klik).
 - **Off-spec:** en spec i gul/amber betyder, at spilleren er med på sin anden spec.
@@ -114,6 +123,10 @@ Under hvert raid (for 10-mændene: én for hele lockouten) kan officeren selv v�
 - **Record attendance from the plan:** hvis addon'et ikke blev brugt, registreres fremmødet ud fra rosteret og bænken.
 - **Delete week** sletter ugen (to klik). Den kan hentes tilbage under Log.
 
+### Gemning
+
+Alt gemmes med det samme. Øverst til højre står **Saving…** med en gul prik, mens en ændring er på vej til databasen, og derefter **Shared · live** igen. Lukker man siden, før alt er gemt, spørger browseren, om man vil blive.
+
 ### Fortryd
 
 **Undo** øverst eller **Ctrl+Z** fortryder din seneste ændring i ugen, også efter en genindlæsning; tryk igen for at gå et skridt længere tilbage. Officerer kan rette i hver sit raid samtidig uden at overskrive hinanden. Se **Log** for at fortryde ældre ændringer eller andres.
@@ -126,6 +139,7 @@ Hele historien om én spiller i et vindue: klik på navnet i Availability, Decid
 - fremmøde i procent, antal spillede, bænk, no-shows, afbud efter roster, tentative/late-tilmeldinger og parse
 - bænk-retfærdighed pr. raidstørrelse: bænk de sidste 8 uger og hvor meget de har til gode
 - hvilke specs de har spillet, og hvor ofte
+- planlagt fravær og spillerens karakterer (main og alts)
 - uge for uge: tilmelding pr. dag (med "dropped" ved afbud efter roster) og hvad der skete i hvert raid: spillede (med spec), bænk med begrundelsen, no-show eller planlagt
 
 Kortet er godt til at svare på "hvorfor sad jeg over igen?". Indstillingerne rettes stadig under Players.
@@ -140,6 +154,16 @@ Værktøjet holder selv øje med to ting:
 En no-show giver 1 point og et afbud ½ point. Har en spiller 2 point eller mere inden for de sidste 8 uger, får de et rødt **!** på spillerchippen, under Players, i Attendance og i Decide the bench, med forklaringen, når man holder musen over. Vægten **Reliability** under Settings bestemmer, om pointene også trækker ned, når DPS-pladserne fordeles. Den står på 0 fra start, så den kun advarer.
 
 ## Players
+
+### Away (fraværskalender)
+
+Under Players kan man skrive planlagt fravær ind: spiller, fra-dato, til-dato og en note (fx "ferie"). På de dage tæller spilleren som absent i alle raids, også før de har tilmeldt sig i Raid-Helper. I Availability står de med en gul streg og datoerne, når man holder musen over. Sætter en officer status i hånden, vinder den over fraværet. Fravær, der er slut, forsvinder af sig selv fra listen.
+
+### Alts
+
+På spillerkortet under **Characters** kan man tilføje en spillers alts (navn, klasse, main- og off-spec). Tilmelder spilleren sig som alt'ens klasse, bruger rosteret, Discord-teksten, billedet og addon-strengen alt'ens navn, og chippen er mærket **alt**. Fremmøde-strenge fra addon'et genkender også alt-navne. En spiller spiller stadig kun ét raid pr. lockout, uanset hvilken karakter.
+
+### Spillerliste
 
 Spillere oprettes, når de tilmelder sig, og kan også tilføjes i hånden nederst (**Add player**).
 
@@ -172,6 +196,7 @@ Store/små bogstaver og mellemrum i stedet for bindestreg betyder ikke noget, n�
 
 - **Import attendance:** efter raidet skriver raidlederen `/nproster` i spillet, åbner Attendance og kopierer strengen; indsæt den her. Alle på den planlagte bænk tæller som bænk. Kender værktøjet ikke et navn fra spillet, vælger du, hvem det er, og navnet gemmes som spillerens karakter.
 - **Check recent raids:** de seneste tre ugers raids med fremmøde. Klik på en spiller for at skifte mellem played, bench og no-show, fx en bænkspiller, der ikke var til at få fat i på Discord.
+- **Bench rotation:** hvor mange gange hver spiller har siddet over pr. raidstørrelse (fx "2 / 9" = bænket 2 af 9 lockouts), i alt, andel og hvornår sidst. Tæller alle uger markeret final og alle raids med fremmøde. **Copy for Discord** giver en kort liste til at vise guilden, at rotationen er fair.
 - **Tabellen:** hver uge tæller 20-manden og 10-mands-lockouten én gang hver. Spillet eller bænk (tilgængelig) tæller som fremmøde. **P** = spillede, **B** = bænk, **✕** = planlagt, men kom ikke, **·** = ikke med. Desuden antal sene og parse.
 
 ## Log
@@ -201,7 +226,10 @@ Alle ændringer på tværs af uger (rosters, flyt, bænk, tilmeldinger, import, 
 | Signed up as bench | Prisen for at vælge en, der har tilmeldt sig som bænk. |
 | Raid balance | Pr. buff i forskel mellem raids af samme størrelse. Ved 1500 kan den bytte den lavest prioriterede buff for balance, aldrig en højere. 0 slår det fra. |
 | Reliability | Pr. no-show de sidste 8 uger (et afbud efter roster tæller halvt). 0 = kun advarsel. |
+| Fixed teams | Pr. spiller, der holdes sammen med sidste uges holdkammerater, når raids af samme størrelse deler spillerne. Ved 400 koster det ca. 800 at flytte én spiller, mindre end den lavest prioriterede buff. 0 slår det fra. |
 | Spec spread | Pr. ekstra spiller af samme spec (den 4. Fury warrior koster 3×). 0 slår det fra. |
+
+Standardværdierne (Bench fairness 600, Player priority 300, Fixed teams 400, Raid balance 1500) er valgt ud fra en simulering af 12 uger med 90 % fremmøde på det nuværende roster. Med dem kom ingen på bænken mere end 4–5 uger i træk, mens buffs og faste hold holdt sig som før. Hvert trin i Priority flytter en DPS' chance for at spille med ca. 7–10 procentpoint (−2: ca. 60 %, 0: ca. 80 %, +2: ca. 93 %). Player priority over ca. 400 kan holde en spiller med −2 på bænken i mange uger i træk.
 
 - **Reset all settings to defaults** (to klik).
 
@@ -214,7 +242,7 @@ Alle ændringer på tværs af uger (rosters, flyt, bænk, tilmeldinger, import, 
 - `np-roster.html`: siden (layout og styles)
 - `core.js`: Raid-Helper-import, optimering, grupper og streng-formater (ingen DOM, kan testes uden browser)
 - `app.js`: brugerflade, fælles database og historik
-- `icons/`: Blizzards klasse- og spec-ikoner (fra Wowheads ikonserver)
+- `icons/`: Blizzards klasse- og spec-ikoner (fra Wowheads ikonserver) og guildens emblem (`emblem.png`)
 
 ## Netværk og data
 

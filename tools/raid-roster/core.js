@@ -55,7 +55,7 @@ const DEFAULT_SETTINGS = {
   ],
   defaultDays: [3, 0],
   maxRaidsPerDay: 2,
-  weights: { fair: 400, prio: 300, parse: 2, offspec: 150, tentative: 250, late: 120, benchSignup: 600, specSpread: 80, raidBalance: 1500, reliability: 0 },
+  weights: { fair: 600, prio: 300, parse: 2, offspec: 150, tentative: 250, late: 120, benchSignup: 600, specSpread: 80, raidBalance: 1500, reliability: 0, teams: 400 },
 };
 
 function withDefaults(s) {
@@ -194,18 +194,31 @@ function playerOpts(player, signup) {
   const add = (c, s) => { if (c && s && CLASSES[c] && CLASSES[c][s] && !out.some(o => o.c === c && o.s === s)) out.push({ c, s, r: roleOf(c, s) }); };
   if (signup && signup.opts) for (const o of signup.opts) add(o.c, o.s);
   if (player && (!out.length || out[0].c === player.cls)) { add(player.cls, player.main); add(player.cls, player.off); }
+  // Alts: their specs too, when the signup is for that class or there is no signup to go by.
+  for (const a of (player && Array.isArray(player.alts) ? player.alts : [])) {
+    if (a && (!signup || !(signup.opts || []).length || (out[0] && out[0].c === a.cls))) { add(a.cls, a.main); add(a.cls, a.off); }
+  }
   return out.map((o, i) => ({ ...o, off: i > 0 }));
+}
+
+// A planned absence (Players → Away) covering the date, or null.
+function awayOn(pl, date) {
+  return (pl && Array.isArray(pl.away) && date ? pl.away : []).find(a => a && a.from <= date && date <= a.to) || null;
 }
 
 function availability(week, dayId, players) {
   const m = new Map();
   const list = (week.signups && week.signups[dayId]) || [];
+  const date = ((week.days || {})[dayId] || {}).date;
   for (const su of list) {
     const pl = players[su.p];
-    if (pl && pl.active === false) continue;
+    // 'none' is an officer's "not signed up", kept so a re-import doesn't bring the signup back.
+    if (su.st === 'none' || (pl && pl.active === false)) continue;
     const opts = playerOpts(pl, su);
     if (!opts.length) continue;
-    m.set(su.p, { pid: su.p, st: su.st, opts, t: su.t || 0 });
+    // A planned absence counts as absent, unless an officer set the status by hand.
+    const away = su.manual ? null : awayOn(pl, date);
+    m.set(su.p, { pid: su.p, st: away ? 'absence' : su.st, opts, t: su.t || 0, away });
   }
   return m;
 }
@@ -280,6 +293,29 @@ function reliability(pid, weekId, weeks, settings, opts = {}) {
 // Two no-shows, or one and two drops, within the window earns a warning.
 const UNRELIABLE_POINTS = 2;
 
+// ---------- Fixed teams ----------
+// For each player, the raid of this size they were last in (within the last `n` weeks), as
+// "<week>:<raid>". Players with the same key played together; attendance wins over the plan.
+function lastTeams(type, weekId, weeks, settings, n = 4) {
+  const out = {};
+  const prev = Object.values(weeks || {}).filter(w => w && w.id < weekId).sort((a, b) => b.id.localeCompare(a.id)).slice(0, n);
+  for (const w of prev) {
+    for (const def of settings.raids) {
+      const raid = (w.raids || {})[def.id];
+      if (def.type !== type || !raid || !raid.dayId) continue;
+      const att = (w.attendance || {})[def.id];
+      for (const p of att ? (att.present || []) : (raid.roster || []).map(e => e.p)) if (!(p in out)) out[p] = `${w.id}:${def.id}`;
+    }
+  }
+  return out;
+}
+// The largest group in a roster that played together last time: [count, key].
+function teamCore(roster, teams) {
+  const n = {};
+  for (const e of roster) { const k = teams[e.p]; if (k) n[k] = (n[k] || 0) + 1; }
+  return Object.entries(n).reduce((best, [k, c]) => (c > best[0] ? [c, k] : best), [0, null]);
+}
+
 // ---------- Optimizer ----------
 // "Never bench" beats every buff combined but never breaks the tank and healer rules.
 const NEVER_BENCH_BONUS = 2e6;
@@ -315,6 +351,10 @@ function optimizeType(raids, typeCfg, ctx) {
   const relCost = pid => (W.reliability ? W.reliability * reliability(pid, week.id, weeks || {}, settings).points : 0);
   // A player kept in one raid of the lockout is no candidate for the others.
   const keptIn = {};
+  // Fixed teams only matter when several raids of this size split the players between them.
+  const TEAMS = raids.length > 1 ? (Number(W.teams) || 0) : 0;
+  const teamOf = TEAMS ? lastTeams(type, week.id, weeks, settings) : {};
+  const teamIdx = {};
   for (const rd of raids) for (const [pid, l] of Object.entries(rd.locks || {})) if (l === 'in' && !keptIn[pid]) keptIn[pid] = rd.rid;
 
   const prep = raids.map(rd => {
@@ -330,7 +370,8 @@ function optimizeType(raids, typeCfg, ctx) {
         const role = o.r === 'Tank' ? 1 : o.r === 'Healer' ? 2 : 0;
         return { ...o, mask, role, ci: SPREAD_INDEX[spreadKey(o.c, o.s)] ?? 0, tankBonus: role === 1 && isDesignatedTank(pl, type) ? TANK_BONUS : 0 };
       });
-      cands.set(pid, { pid, st: info.st, opts, base });
+      const tk = teamOf[pid];
+      cands.set(pid, { pid, st: info.st, opts, base, team: tk ? (teamIdx[tk] ??= Object.keys(teamIdx).length) : -1 });
     };
     for (const [pid, info] of av) if (AVAILABLE.has(info.st) && locks[pid] !== 'out' && (!keptIn[pid] || keptIn[pid] === rd.rid)) addCand(pid, info);
     for (const [pid, l] of Object.entries(locks)) {
@@ -371,6 +412,13 @@ function optimizeType(raids, typeCfg, ctx) {
     if (h > typeCfg.healMax) sc -= 1e7 * (h - typeCfg.healMax);
     sc -= 800 * Math.abs(h - typeCfg.healTarget);
     for (let k = 0; k < R; k++) if (cnt[k] >= (rules[k].min || 1)) sc += bw[k];
+    // Fixed teams: every pair that played together last time again, scaled so a whole team kept
+    // together is worth TEAMS per player. At 400 one player costs about 800, below the lowest buff.
+    if (TEAMS) {
+      const tc = new Map();
+      for (const m of mem) if (m.info.team >= 0) tc.set(m.info.team, (tc.get(m.info.team) || 0) + 1);
+      for (const n of tc.values()) sc += TEAMS * n * (n - 1) / Math.max(1, typeCfg.size - 1);
+    }
     return sc;
   }
 
@@ -721,41 +769,110 @@ function benchCandidates(week, rid, settings, players, weeks) {
   return { rows, rids, size: typeCfg.size * n, typeCfg, toBench: Math.max(0, pool.length - typeCfg.size * n) };
 }
 
+// Why each bench player sits, in words an officer can pass on.
 function explainBench(week, rid, settings, players, weeks) {
   const raid = week.raids[rid];
   const def = settings.raids.find(r => r.id === rid);
   if (!raid || !def) return [];
   const typeCfg = settings.types[def.type];
+  const W = settings.weights;
   const roster = raid.roster || [];
   const rc = roleCounts(roster);
   const av = availability(week, raid.dayId, players);
+  const locks = raid.locks || {};
+  const name = (p, c) => charName(players, p, null, c);
+  const debtOf = p => benchDebt(p, def.type, week.id, weeks || {}, settings);
+  const relOf = p => (W.reliability ? reliability(p, week.id, weeks || {}, settings).points : 0);
+  // What a player is worth for a DPS spot, the same way the optimizer weighs it.
+  const value = p => playerValue(players[p] || {}, (av.get(p) || {}).st, debtOf(p), W) - (Number(W.reliability) || 0) * relOf(p);
+  const dps = roster.filter(e => e.r === 'Melee' || e.r === 'Ranged');
+  // Buffs this roster would lose without the player.
+  const carries = e => settings.buffs.filter(ru => ruleMatches(ru, e.c, e.s) && roster.filter(x => ruleMatches(ru, x.c, x.s)).length <= (ru.min || 1)).map(ru => ru.label);
   return benchFor(week, rid, settings, players).map(pid => {
     const info = av.get(pid);
     const why = [];
-    if ((raid.locks || {})[pid] === 'out') why.push('Moved out by an officer');
+    const pl = players[pid] || {};
+    if (locks[pid] === 'out') why.push('Kept out by an officer');
     else if (info.st === 'bench') why.push('Signed up as bench');
     else {
       const roles = new Set(info.opts.map(o => o.r));
       if (roles.size === 1 && roles.has('Tank') && rc.Tank >= typeCfg.tanks) why.push('Tank spots are full');
       else if (roles.size === 1 && roles.has('Healer') && rc.Healer >= typeCfg.healTarget) why.push('Healer spots are full');
       else {
-        const debt = benchDebt(pid, def.type, week.id, weeks, settings);
-        const inDps = roster.filter(e => e.r === 'Melee' || e.r === 'Ranged').map(e => benchDebt(e.p, def.type, week.id, weeks, settings));
-        const lower = inDps.filter(d => d < debt - 1e-9).length;
-        if (lower) why.push(`DPS spots went to players who bring a needed buff`);
-        else if (debt > 0) why.push('DPS spots full, others were owed a spot more');
-        else why.push('DPS spots full, no bench history yet (earlier signups first)');
+        const v = value(pid);
+        // DPS who got in although they weigh the same or less: say what kept them in.
+        const notAbove = dps.filter(e => value(e.p) <= v + 1e-6);
+        // Only buffs this player could not have brought instead count as a reason.
+        const short = l => l.replace(/\s*\(.*\)\s*/, '');
+        const canBring = ru => info.opts.some(o => ruleMatches(ru, o.c, o.s));
+        const held = notAbove.map(e => {
+          if (locks[e.p] === 'in') return `${name(e.p, e.c)} (kept in by an officer)`;
+          if ((players[e.p] || {}).noBench) return `${name(e.p, e.c)} (never bench)`;
+          const c = carries(e).filter(l => !canBring(settings.buffs.find(ru => ru.label === l)));
+          return c.length ? `${name(e.p, e.c)} (${c.map(short).join(', ')})` : null;
+        }).filter(Boolean);
+        if (held.length) why.push(`DPS spots went to players the raid needs: ${held.slice(0, 3).join(', ')}${held.length > 3 ? ` and ${held.length - 3} more` : ''}`);
+        else if (notAbove.length) {
+          // Same footing as some who play: the spec mix or the signup time decided.
+          const o = info.opts[0];
+          const same = roster.filter(e => spreadKey(e.c, e.s) === spreadKey(o.c, o.s)).length;
+          const label = ONE_GROUP_CLASSES.has(o.c) ? `${o.c}s` : `${o.s} ${o.c}s`;
+          const later = notAbove.every(e => ((av.get(e.p) || {}).t || 0) <= (info.t || 0));
+          why.push(W.specSpread && same >= 2 ? `DPS spots full: already ${same} ${label} in the raid`
+            : later ? 'DPS spots full: signed up later than the others' : 'DPS spots went to a better mix of specs and teams');
+        } else {
+          // Everyone in weighs more: name what counts most against this player.
+          const others = dps.map(e => e.p);
+          const avg = f => others.length ? others.reduce((n, p) => n + f(p), 0) / others.length : 0;
+          const parts = [];
+          if (info.st === 'tentative' || info.st === 'late') parts.push(`signed up ${info.st}`);
+          if (debtOf(pid) < avg(debtOf) - 0.05) parts.push('benched less lately than the others');
+          if ((Number(pl.prio) || 0) < avg(p => Number((players[p] || {}).prio) || 0) - 0.01) parts.push('lower priority');
+          if (W.parse && (Number(pl.parse) || 0) < avg(p => Number((players[p] || {}).parse) || 0) - 5) parts.push('lower parse');
+          if (relOf(pid) > 0) parts.push('recent no-shows or drops');
+          why.push(parts.length ? `DPS spots full: ${parts.join(', ')}` : 'DPS spots full: the others weigh more');
+        }
       }
     }
-    if (info.st === 'tentative' || info.st === 'late') why.push(`signed up ${info.st}`);
-    const debt = benchDebt(pid, def.type, week.id, weeks, settings);
-    return { p: pid, why: why.join(', '), debt };
+    if (why[0] && !/^DPS spots full/.test(why[0]) && (info.st === 'tentative' || info.st === 'late')) why.push(`signed up ${info.st}`);
+    return { p: pid, why: why.join(', '), debt: debtOf(pid) };
   });
 }
 
+// ---------- Bench statistics ----------
+// Per player and raid size, over every week that counts (final, or with recorded attendance): how many
+// lockouts they played, sat on the bench, and the last week they sat. A lockout counts once a week.
+function benchStats(weeks, settings) {
+  const out = {};
+  const types = [...new Set(settings.raids.map(r => r.type))];
+  const list = Object.values(weeks || {}).filter(Boolean).sort((a, b) => a.id.localeCompare(b.id));
+  for (const w of list) {
+    for (const type of types) {
+      const played = new Set(), benched = new Set();
+      for (const def of settings.raids) {
+        const raid = (w.raids || {})[def.id];
+        if (def.type !== type || !raid) continue;
+        const att = (w.attendance || {})[def.id];
+        if (!att && w.status !== 'final') continue;
+        (att ? att.present || [] : (raid.roster || []).map(e => e.p)).forEach(p => played.add(p));
+        (att ? att.bench || [] : raid.bench || []).forEach(p => benched.add(p));
+      }
+      for (const p of new Set([...played, ...benched])) {
+        const s = ((out[p] ||= {})[type] ||= { played: 0, bench: 0, last: null });
+        if (played.has(p)) s.played++;
+        else { s.bench++; s.last = w.id; }
+      }
+    }
+  }
+  return out;
+}
+
 // ---------- Export / import strings ----------
-function charName(players, pid, fallback) {
+// The character a player is on: an alt's name when they play that alt's class, else their main.
+function charName(players, pid, fallback, cls) {
   const pl = players[pid];
+  const alt = pl && cls && cls !== pl.cls && Array.isArray(pl.alts) ? pl.alts.find(a => a && a.cls === cls && a.char) : null;
+  if (alt) return alt.char;
   return (pl && pl.char) || guessChar(fallback || (pl && pl.name) || pid);
 }
 
@@ -808,7 +925,7 @@ function benchByTurn(week, rid, settings, players, weeks) {
 // Each player is "Name:Class:Spec" so the addon can show class icons and colours.
 function exportAddon(week, settings, players, weeks) {
   const lines = ['!NPR1!', `W;${week.id}`];
-  const tag = (p, o) => `${charName(players, p)}${o ? `:${o.c}:${o.s}` : ''}`;
+  const tag = (p, o) => `${charName(players, p, null, o && o.c)}${o ? `:${o.c}:${o.s}` : ''}`;
   for (const def of settings.raids) {
     const raid = week.raids && week.raids[def.id];
     if (!raid || !raid.dayId || !(raid.roster || []).length) continue;
@@ -826,7 +943,7 @@ function exportAddon(week, settings, players, weeks) {
 
 // opts.mentions: write players as Discord @mentions (players imported from Raid-Helper have their Discord ID).
 function exportDiscord(week, settings, players, opts = {}) {
-  const tag = p => (opts.mentions && /^\d{15,22}$/.test(p) ? `<@${p}>` : charName(players, p));
+  const tag = (p, c) => (opts.mentions && /^\d{15,22}$/.test(p) ? `<@${p}>` : charName(players, p, null, c));
   const fmtDay = iso => parseIso(iso).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
   const out = [`**Raid roster, ${weekName(week.id).toLowerCase()} (${weekSpan(week.id)})**`];
   const days = week.days || {};
@@ -838,7 +955,7 @@ function exportDiscord(week, settings, players, opts = {}) {
     out.push('', `__${fmtDay(week.days[raid.dayId].date)}: ${def.name}__`);
     (raid.groups || []).forEach((g, i) => {
       if (!g.length) return;
-      out.push(`G${i + 1}: ${g.map(p => `${tag(p)} (${byP[p] ? shortSpec(byP[p].s) + ' ' + byP[p].c : '?'})`).join(', ')}`);
+      out.push(`G${i + 1}: ${g.map(p => `${tag(p, byP[p] && byP[p].c)} (${byP[p] ? shortSpec(byP[p].s) + ' ' + byP[p].c : '?'})`).join(', ')}`);
     });
     const sb = sharedBench(week, settings, def.id);
     const sbl = sb.show ? sharedBenchList(week, settings, players, opts.weeks, sb) : { list: [], days: 1 };
@@ -853,7 +970,10 @@ function parseAttendance(text, players) {
   const lines = String(text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   if (lines[0] !== '!NPA1!') throw new Error('This is not an NP Roster attendance string. In game, type /nproster, open Attendance and copy the string.');
   const byName = {};
-  for (const [pid, pl] of Object.entries(players)) if (pl && pl.char) byName[nameKey(pl.char)] = pid;
+  for (const [pid, pl] of Object.entries(players)) {
+    if (pl && pl.char) byName[nameKey(pl.char)] = pid;
+    for (const a of (pl && Array.isArray(pl.alts) ? pl.alts : [])) if (a && a.char) byName[nameKey(a.char)] = pid;
+  }
   // unknown: in-game names no player has yet, with the list each came from, so officers can match them.
   const res = { weekId: '', rid: '', date: '', present: [], bench: [], late: [], unknown: [], unknownIn: {} };
   const map = (list, where) => list.split(',').map(s => s.trim()).filter(Boolean).map(n => {
@@ -880,6 +1000,6 @@ function parseAttendance(text, players) {
 if (typeof module !== 'undefined') {
   module.exports = {
     CLASSES, DEFAULT_SETTINGS, withDefaults, spreadKey, isoWeek, weekName, weekSpan, parseRaidHelper, parseRaidHelperMany, splitJsonObjects, benchByTurn, guessChar, nameKey, availability, playerOpts, optimizeType, planWeek,
-    makeGroups, coverage, roleCounts, benchFor, attendanceCellOf, reliability, UNRELIABLE_POINTS, explainBench, benchCandidates, sharedBench, sharedBenchList, benchDayTag, benchLabel, benchHistory, playerValue, isDesignatedTank, exportAddon, exportDiscord, parseAttendance, resetOf, addDays, benchDebt,
+    makeGroups, coverage, roleCounts, benchFor, attendanceCellOf, lastTeams, awayOn, benchStats, charName, teamCore, reliability, UNRELIABLE_POINTS, explainBench, benchCandidates, sharedBench, sharedBenchList, benchDayTag, benchLabel, benchHistory, playerValue, isDesignatedTank, exportAddon, exportDiscord, parseAttendance, resetOf, addDays, benchDebt,
   };
 }

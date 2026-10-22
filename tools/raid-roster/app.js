@@ -5,7 +5,7 @@ const S = {
   view: 'week', weekId: null, sel: null, drafts: {}, suggestions: null, importOpen: null, confirm: null,
   db: null, canWrite: true, loaded: 0, pending: false, benchDraft: {}, decideOpen: {},
   history: {}, histLocal: {}, histData: {}, histReady: false, historyLast: 0, busy: false, logLimit: 200,
-  me: null, userApi: null, names: {}, namesPending: new Set(), restore: null, card: null,
+  me: null, userApi: null, names: {}, namesPending: new Set(), restore: null, card: null, explain: null,
 };
 const view = document.getElementById('view');
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -25,7 +25,8 @@ const ICON = {
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const clone = o => JSON.parse(JSON.stringify(o ?? null));
 const fmtDay = iso => parseIso(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-const charOf = pid => charName(S.players, pid);
+// A player's character name; with a class, an alt's name when they play that alt.
+const charOf = (pid, cls) => charName(S.players, pid, null, cls);
 const week = () => S.weeks[S.weekId] || null;
 const ctx = () => ({ week: week(), players: S.players, weeks: S.weeks, settings: S.settings });
 const raidDef = rid => S.settings.raids.find(r => r.id === rid);
@@ -46,14 +47,27 @@ function setConn(state, text) {
 
 // ---------- persistence ----------
 let queue = Promise.resolve();
+// Writes still on their way. The status in the top bar says "Saving…" until they have landed.
+let writing = 0;
+function saveState() {
+  if (!S.db || S.connLost) return;
+  const busy = writing > 0 || !!S.settingsDirty;
+  if (busy === S.busyShown) return;
+  S.busyShown = busy;
+  setConn(busy ? 'busy' : 'on', busy ? 'Saving…' : S.connText);
+}
 function enqueue(fn) {
+  writing++;
+  saveState();
   queue = queue.then(fn).catch(e => {
     if (e && e.code === 'invalid_argument') { S.canWrite = false; toast('You have view access, so your changes are not saved. Ask the owner for Contributor or Editor access.'); }
     else if (e && e.code === 'quota_exceeded') toast('Storage is full: ' + e.message);
     else toast('Could not save: ' + ((e && e.message) || e));
-  });
+  }).finally(() => { writing--; saveState(); });
   return queue;
 }
+// Closing the page while changes are still on their way would lose them.
+window.addEventListener('beforeunload', e => { if (writing > 0 || S.settingsDirty) { e.preventDefault(); e.returnValue = ''; } });
 function deepMerge(t, p) {
   for (const [k, v] of Object.entries(p)) {
     if (v && typeof v === 'object' && !Array.isArray(v) && t[k] && typeof t[k] === 'object' && !Array.isArray(t[k])) deepMerge(t[k], v);
@@ -61,13 +75,30 @@ function deepMerge(t, p) {
   }
   return t;
 }
+// Writes waiting in the queue or on their way. A snapshot that arrives before they land does not have
+// them yet, so they are laid over it again; otherwise the next change would be built on the older
+// data and quietly undo the ones before it.
+const unsaved = [];
+function enqueueTracked(u, write) {
+  unsaved.push(u);
+  return enqueue(() => write().finally(() => { const i = unsaved.indexOf(u); if (i >= 0) unsaved.splice(i, 1); }));
+}
+function overlayUnsaved(kind, docs) {
+  for (const u of unsaved) {
+    if (u.kind !== kind) continue;
+    if (u.op === 'delete') delete docs[u.id];
+    else if (u.op === 'set' || !docs[u.id]) docs[u.id] = clone(u.data);
+    else deepMerge(docs[u.id], clone(u.data));
+  }
+}
+
 // Each save also goes into the history (see History below); `text` is its line in the Log.
 function saveWeek(wid, patch, text) {
   const old = S.weeks[wid] || null;
   const local = old ? deepMerge(clone(old), patch) : clone(patch);
   S.weeks[wid] = local;
   schedule();
-  if (S.db) enqueue(() => old ? S.db.doc('weeks/' + wid).update(patch) : S.db.doc('weeks/' + wid).set(local));
+  if (S.db) enqueueTracked({ kind: 'week', id: wid, op: old ? 'merge' : 'set', data: clone(old ? patch : local) }, () => old ? S.db.doc('weeks/' + wid).update(patch) : S.db.doc('weeks/' + wid).set(local));
   record(weekChanges(wid, old, local, patch), text || `Changed ${weekName(wid)}`);
 }
 function deleteWeek(wid, text) {
@@ -75,14 +106,14 @@ function deleteWeek(wid, text) {
   delete S.weeks[wid];
   if (S.weekId === wid) S.weekId = null;
   schedule();
-  if (S.db) enqueue(() => S.db.doc('weeks/' + wid).delete());
+  if (S.db) enqueueTracked({ kind: 'week', id: wid, op: 'delete' }, () => S.db.doc('weeks/' + wid).delete());
   record([{ p: 'w/' + wid, b: old, a: null }], text || `Deleted ${weekName(wid)}`);
 }
 function savePlayer(pid, data, text) {
   const old = S.players[pid] || null;
   S.players[pid] = data;
   schedule();
-  if (S.db) enqueue(() => S.db.doc('players/' + pid).set(data));
+  if (S.db) enqueueTracked({ kind: 'player', id: pid, op: 'set', data: clone(data) }, () => S.db.doc('players/' + pid).set(data));
   record([{ p: 'p/' + pid, b: old, a: data }], text || `Changed ${charOf(pid)}`);
 }
 function deletePlayer(pid, text) {
@@ -90,7 +121,7 @@ function deletePlayer(pid, text) {
   const name = charOf(pid);
   delete S.players[pid];
   schedule();
-  if (S.db) enqueue(() => S.db.doc('players/' + pid).delete());
+  if (S.db) enqueueTracked({ kind: 'player', id: pid, op: 'delete' }, () => S.db.doc('players/' + pid).delete());
   record([{ p: 'p/' + pid, b: old, a: null }], text || `Deleted ${name}`);
 }
 let settingsTimer;
@@ -100,7 +131,13 @@ function saveSettings(next, text) {
   S.settings = withDefaults(next);
   schedule();
   clearTimeout(settingsTimer);
-  if (S.db) settingsTimer = setTimeout(() => enqueue(() => S.db.doc('settings/main').set(clone(next))), 400);
+  if (!S.db) return;
+  S.settingsDirty = true;
+  saveState();
+  settingsTimer = setTimeout(() => {
+    S.settingsDirty = false;
+    enqueueTracked({ kind: 'settings', id: 'main', op: 'set', data: clone(next) }, () => S.db.doc('settings/main').set(clone(next)));
+  }, 400);
 }
 function settingsCopy() { return clone(S.settingsRaw ? withDefaults(S.settingsRaw) : S.settings); }
 
@@ -113,17 +150,22 @@ async function connect() {
     return;
   }
   S.db = db;
-  setConn('on', 'Shared · live');
-  const fail = e => { setConn('off', 'Connection lost, reload the page'); toast((e && e.message) || 'Connection lost'); };
+  S.connText = 'Shared · live';
+  setConn('on', S.connText);
+  const fail = e => { S.connLost = true; setConn('off', 'Connection lost, reload the page'); toast((e && e.message) || 'Connection lost'); };
   db.collection('players').onSnapshot(snap => {
     S.players = Object.fromEntries(snap.docs.map(d => [d.id, clone(d.data())]));
+    overlayUnsaved('player', S.players);
     S.loaded |= 1; schedule();
   }, fail);
   db.collection('weeks').onSnapshot(snap => {
     S.weeks = Object.fromEntries(snap.docs.map(d => [d.id, { ...clone(d.data()), id: d.id }]));
+    overlayUnsaved('week', S.weeks);
     S.loaded |= 2; schedule();
   }, fail);
   db.doc('settings/main').onSnapshot(d => {
+    // A change of ours that has not landed yet wins; the snapshot after it lands brings the rest.
+    if (S.settingsDirty || unsaved.some(u => u.kind === 'settings')) return;
     S.settingsRaw = d.exists ? clone(d.data()) : null;
     S.settings = withDefaults(S.settingsRaw);
     schedule();
@@ -142,7 +184,7 @@ async function connect() {
     S.userApi = user;
     S.me = await user.id();
     const can = await user.can('data.write');
-    if (can === false) { S.canWrite = false; setConn('on', 'Shared · view only'); }
+    if (can === false) { S.canWrite = false; S.connText = 'Shared · view only'; setConn('on', S.connText); }
   }
   setTimeout(pruneHistory, 8000);
 }
@@ -160,11 +202,14 @@ function schedule() {
 
 function render() {
   const ae = document.activeElement;
+  // Waiting only makes sense while the same tab stays open.
+  const sameView = S.renderedView === S.view;
   // Don't wipe a field someone is typing in; render again when they leave it.
-  if (ae && view.contains(ae) && /^(INPUT|TEXTAREA)$/.test(ae.tagName) && !ae.dataset.draft && ae.type !== 'checkbox' && ae.value !== ae.defaultValue) { S.pending = true; return; }
+  if (sameView && ae && view.contains(ae) && /^(INPUT|TEXTAREA)$/.test(ae.tagName) && !ae.dataset.draft && ae.type !== 'checkbox' && ae.value !== ae.defaultValue) { S.pending = true; return; }
   // Nor replace the availability dropdowns while someone works through them: a redraw would close
   // the one they just opened. The rest of the page catches up when they click elsewhere.
-  if (isStatusSelect(ae)) { S.pending = true; return; }
+  if (sameView && isStatusSelect(ae)) { S.pending = true; return; }
+  S.renderedView = S.view;
   const fid = ae && ae.id;
   let ss = null, se = null;
   try { ss = ae.selectionStart; se = ae.selectionEnd; } catch (e) { /* not a text field */ }
@@ -255,13 +300,17 @@ function renderWeek() {
           <button data-act="new-week">Create week</button>
         </div>
       </div>
+      ${w ? renderChecklist(w) + weekNote(w) : ''}
     </section>`;
   if (!w) {
     return head + `<div class="empty"><h2>Plan your first raid week</h2><div>Weeks are named by week number and run from reset on Wednesday to Tuesday. Create one above, then import each raid day's Raid-Helper signups.</div></div>`;
   }
-  const note = (w.notes || {}).week || '';
-  const notes = `<section class="panel"><label class="f">Officer notes for ${esc(weekName(w.id))}<textarea id="note-week" data-act="note" data-k="week" class="note" placeholder="Only officers see this, e.g. who is late on Sunday or what to remind people of.">${esc(note)}</textarea></label></section>`;
-  return head + notes + renderSummary(w) + renderDays(w) + renderAvailability(w) + renderPlan(w) + renderRaids(w) + renderExports(w);
+  return head + renderSummary(w) + renderDays(w) + renderAvailability(w) + renderPlan(w) + renderRaids(w) + renderExports(w);
+}
+
+// The week's officer note: one line that grows with its text.
+function weekNote(w) {
+  return `<textarea id="note-week" data-act="note" data-k="week" class="note" rows="1" aria-label="Officer notes for ${esc(weekName(w.id))}" placeholder="Officer notes for ${esc(weekName(w.id))}, e.g. who is late on Sunday">${esc((w.notes || {}).week || '')}</textarea>`;
 }
 
 function renderSummary(w) {
@@ -314,6 +363,7 @@ function renderDays(w) {
         <div class="row spread"><span class="date">${esc(fmtDay(d.date))}</span>
           <button class="ghost danger sm" data-act="remove-day" data-day="${did}">${S.confirm === 'day-' + did ? 'Confirm remove' : 'Remove'}</button></div>
         <div class="evt" title="${esc(d.eventTitle || '')}">${d.eventTitle ? esc(d.eventTitle) : 'No signups imported yet'}</div>
+        ${d.importedAt ? `<div class="small ${staleImport(d) ? 'stale' : 'muted'}" title="${staleImport(d) ? 'More than a day old: re-import to catch changes in Raid-Helper' : ''}">Imported ${esc(ago(d.importedAt))}</div>` : ''}
         <div class="row small"><b class="mono">${n}</b><span class="muted">available</span></div>
         <div class="rolecount">${rcell('Tank', 'Tanks')}${rcell('Healer', 'Healers')}${rcell('Melee', 'Melee')}${rcell('Ranged', 'Ranged')}</div>
         ${(raidsHere.length || st.tentative || st.late || st.bench || st.absence) ? `<div class="daytags">${raidsHere.map(def => `<span class="pill acc">${esc(def.name)}</span>`).join('')}${['tentative', 'late', 'bench', 'absence'].filter(k => st[k]).map(k => `<span class="pill ${k === 'absence' ? 'bad' : 'warn'}">${st[k]} ${STATUS_LABEL[k].toLowerCase()}</span>`).join('')}</div>` : ''}
@@ -349,20 +399,27 @@ function renderAvailability(w) {
     const p = S.players[pid];
     const cells = days.map(([did]) => {
       const su = ((w.signups || {})[did] || []).find(s => s.p === pid);
-      const st = su ? su.st : 'none';
+      const aw = su && su.manual ? null : awayOn(p, w.days[did].date);
+      const st = aw && su ? 'absence' : su ? su.st : 'none';
       // A signup added by hand has no spec, so fall back to the player's registered main spec.
       const o = su ? playerOpts(S.players[pid], su)[0] : null;
-      return `<td class="st"><select id="st-${did}-${pid}" class="stsel sd-${st}" data-act="set-st" data-day="${did}" data-pid="${pid}" aria-label="${esc(charOf(pid))} on ${esc(fmtDay(w.days[did].date))}" title="${o ? esc(`Signed up as ${o.s} ${o.c}`) : ''}">${ST_ORDER.map(k => `<option value="${k}" ${k === st ? 'selected' : ''}>${ST_TEXT[k]}</option>`).join('')}</select></td>`;
+      const tip = [aw ? `Away ${fmtRange(aw)}${aw.note ? `: ${aw.note}` : ''}` : '', o && st !== 'none' ? `Signed up as ${o.s} ${o.c}` : '', su && su.manual ? 'Set by an officer: re-imports keep it until you change it' : ''].filter(Boolean).join('. ');
+      return `<td class="st"><select id="st-${did}-${pid}" class="stsel sd-${st}${su && su.manual ? ' man' : ''}${aw ? ' away' : ''}" data-act="set-st" data-day="${did}" data-pid="${pid}" aria-label="${esc(charOf(pid))} on ${esc(fmtDay(w.days[did].date))}" title="${esc(tip)}">${ST_ORDER.map(k => `<option value="${k}" ${k === st ? 'selected' : ''}>${ST_TEXT[k]}</option>`).join('')}</select></td>`;
     }).join('');
     return `<tr><td>${cardLink(pid, who(pid))}${relWarn(pid)}</td><td class="muted small">${esc(p.main || '')}</td>${cells}</tr>`;
-  }).join('');
+  });
+  // A long list splits into two tables side by side, so the plan and the raids are not far below.
+  const half = body.length > 14 && days.length <= 3 ? Math.ceil(body.length / 2) : body.length;
+  const thead = `<thead><tr><th>Player</th><th>Main spec</th>${days.map(([, d]) => `<th>${esc(fmtDay(d.date))}</th>`).join('')}</tr></thead>`;
+  const tables = [body.slice(0, half), body.slice(half)].filter(p => p.length)
+    .map(p => `<div class="scroll-x"><table class="grid-av">${thead}<tbody>${p.join('')}</tbody></table></div>`).join('');
   const legend = ST_ORDER.map(s => `<span class="sd sd-${s}">${ST_TEXT[s]}</span>`).join('');
   return `
     <section class="panel">
       <details class="big" ${load('av-open') === '0' ? '' : 'open'} data-act="av-toggle">
         <summary><h2 style="display:inline">Availability</h2></summary>
         <div class="row spread" style="margin-top:10px"><div class="legend">${legend}</div><span class="small muted">Change a status with its dropdown. Hover it to see the spec they signed up as.</span></div>
-        <div class="scroll-x" style="margin-top:8px"><table class="grid-av"><thead><tr><th>Player</th><th>Main spec</th>${days.map(([, d]) => `<th style="text-align:center">${esc(fmtDay(d.date))}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>
+        <div class="avcols">${tables}</div>
       </details>
     </section>`;
 }
@@ -416,9 +473,10 @@ function chipHtml(w, rid, pid, entry, opts) {
   if (st === 'bench') tags.push('<span class="tag acc">bench</span>');
   const rw = relWarn(pid);
   if (rw) tags.push(rw);
+  if (entry && p.cls && entry.c !== p.cls && charOf(pid, entry.c) !== charOf(pid)) tags.push(`<span class="tag" title="Alt of ${esc(charOf(pid))}">alt</span>`);
   if (opts && opts.dayTag) tags.push(`<span class="tag" title="Only signed up for some of this lockout's raid days">${esc(opts.dayTag)}</span>`);
   const title = `${charOf(pid)}: ${s || ''} ${c || ''}${entry && entry.off ? ' (off-spec)' : ''}${buffs.length ? '\nBrings: ' + buffs.join(', ') : ''}${!st && entry ? '\nNot signed up for this day' : ''}${opts && opts.why ? '\n' + opts.why : ''}`;
-  return `<div class="chip c-${esc(c)} ${entry && entry.off ? 'off' : ''} ${entry && !st ? 'unavail' : ''} ${sel ? 'sel' : ''}" draggable="true" tabindex="0" role="button" data-pid="${pid}" data-rid="${rid}" title="${esc(title)}">${classIcon(c, s)}<span class="nm">${esc(charOf(pid))}</span><span class="sp">${esc(shortSpec(s || ''))}</span><span class="ic">${tags.join('')}</span></div>`;
+  return `<div class="chip c-${esc(c)} ${entry && entry.off ? 'off' : ''} ${entry && !st ? 'unavail' : ''} ${sel ? 'sel' : ''}" draggable="true" tabindex="0" role="button" data-pid="${pid}" data-rid="${rid}" title="${esc(title)}">${classIcon(c, s)}<span class="nm">${esc(charOf(pid, c))}</span><span class="sp">${esc(shortSpec(s || ''))}</span><span class="ic">${tags.join('')}</span></div>`;
 }
 
 // Raids of one size share players and a bench, so two or more of them render as one lockout card.
@@ -493,6 +551,14 @@ function renderRaid(w, def, sub) {
         <span class="pill ${roster.length === typeCfg.size ? '' : 'warn'} mono">${roster.length}/${typeCfg.size}</span>
         <span class="pill ${roleOk ? '' : 'bad'}" title="${roleOk ? 'Role count of this roster' : `Needs ${typeCfg.tanks} tanks and ${typeCfg.healMin}–${typeCfg.healMax} healers`}">${rc.Tank} tanks · ${rc.Healer} healers · ${rc.Melee} melee · ${rc.Ranged} ranged</span>
         <span class="pill ${okN === cov.length ? 'ok' : 'warn'}">${okN}/${cov.length} buffs</span>
+        ${(() => {
+          // Fixed teams: how much of this roster played together in one raid last time.
+          if (!sub || !roster.length) return '';
+          const teams = lastTeams(def.type, w.id, S.weeks, S.settings);
+          if (!Object.keys(teams).length) return '';
+          const [n] = teamCore(roster, teams);
+          return `<span class="pill" title="The largest group in this roster that played in the same ${esc(typeCfg.size)}-man last time. The weight Fixed teams under Settings keeps teams together.">${n}/${roster.length} same team</span>`;
+        })()}
         ${raid.updatedAt ? `<span class="small muted" title="${esc(new Date(raid.updatedAt).toLocaleString('en-GB'))}">Edited by ${esc(nameOf(raid.updatedBy))} · ${esc(new Date(raid.updatedAt).toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' }))}</span>` : ''}
         <div class="acts">${(() => {
           const lk = Object.values(raid.locks || {}).filter(Boolean);
@@ -500,7 +566,7 @@ function renderRaid(w, def, sub) {
           const nIn = lk.filter(v => v === 'in').length, nOut = lk.length - nIn;
           const what = [nIn ? `${nIn} kept in` : '', nOut ? `${nOut} kept out` : ''].filter(Boolean).join(', ');
           return `<button class="sm ghost" data-act="clear-locks" data-rid="${def.id}" title="Officer picks: ${what}. Re-optimize and Suggest plan always follow them. Clear them to let the optimizer choose freely again.">${S.confirm === 'locks-' + def.id ? 'Confirm: clear picks' : `Clear picks (${what})`}</button>`;
-        })()}<button class="sm" data-act="regroup" data-rid="${def.id}">Re-sort groups</button>${sub ? '' : `<button class="sm" data-act="reopt" data-rid="${def.id}" title="Re-pick the roster on its current day, keeping players an officer placed">Re-optimize</button>`}</div>
+        })()}<button class="sm" data-act="explain" data-rid="${def.id}" title="Why the roster looks like this, ready to paste on Discord">Explain</button><button class="sm" data-act="regroup" data-rid="${def.id}">Re-sort groups</button>${sub ? '' : `<button class="sm" data-act="reopt" data-rid="${def.id}" title="Re-pick the roster on its current day, keeping players an officer placed">Re-optimize</button>`}</div>
       </div>
       ${sub ? '' : '<div class="body">'}
         ${sub ? '<div class="sr-notes">' : ''}<input id="note-${def.id}" class="rnote" data-act="note" data-k="${def.id}" value="${esc((w.notes || {})[def.id] || '')}" placeholder="Note for ${esc(def.name)} (officers only)" aria-label="Note for ${esc(def.name)}">${renderChanges(w, def)}
@@ -548,7 +614,7 @@ function renderExports(w) {
   if (IMG.sig !== imageSig(w) && IMG.failed !== imageSig(w)) buildImage(w);
   return `
     <section class="panel">
-      ${panelHead('Share the roster', 'Post the image or text on Discord, and paste the addon string in game with /nproster.',
+      <span id="share"></span>${panelHead('Share the roster', 'Post the image or text on Discord, and paste the addon string in game with /nproster.',
         `${postedPill(w)}${w.status === 'final' ? '<button data-act="unfinal">Back to draft</button>' : '<button class="primary" data-act="final" title="Final weeks count toward bench fairness">Mark week as final</button>'}`)}
       <div class="stack">
         <div class="row spread"><b>Roster image</b><div class="row"><button class="sm" data-act="img-copy" ${IMG.blob ? '' : 'disabled'}>Copy image</button><button class="sm" data-act="img-save" ${IMG.blob ? '' : 'disabled'}>Save image</button></div></div>
@@ -994,7 +1060,7 @@ function drawRoster(w) {
       const av = availability(w, w.raids[e.rids[0]].dayId, S.players).get(e.p);
       const o = av && av.opts[0];
       const d = benchDayTag(w, sb, e, sbl.days);
-      return { name: charOf(e.p), cls: o ? o.c : (S.players[e.p] || {}).cls, spec: (o ? shortSpec(o.s) : '') + (d ? ` · ${d}` : ''), specFull: o ? o.s : '' };
+      return { name: charOf(e.p, o && o.c), cls: o ? o.c : (S.players[e.p] || {}).cls, spec: (o ? shortSpec(o.s) : '') + (d ? ` · ${d}` : ''), specFull: o ? o.s : '' };
     });
   };
   const itemW = it => {
@@ -1012,12 +1078,26 @@ function drawRoster(w) {
     }
     return lines;
   };
-  const sectionH = def => {
-    const nG = Math.ceil(S.settings.types[def.type].size / 5);
-    const bench = benchItems(def).length;
-    return 44 + Math.ceil(nG / COLS) * (GROUP_H + GAP) + (bench ? 36 + benchLines(def) * 24 : 0) + 30;
+  const groupsOf = def => Math.ceil(S.settings.types[def.type].size / 5);
+  // Rows of the image: a raid of up to two groups shares its row with the other raid of its lockout,
+  // so the two 10-mans sit side by side.
+  const rows = [];
+  const placed = new Set();
+  for (const def of defs) {
+    if (placed.has(def.id)) continue;
+    placed.add(def.id);
+    const mate = groupsOf(def) <= 2 ? defs.find(d => !placed.has(d.id) && d.type === def.type && groupsOf(d) <= 2) : null;
+    if (mate) placed.add(mate.id);
+    rows.push(mate ? [def, mate] : [def]);
+  }
+  const rowBench = row => row.map(benchItems).find(items => items.length) || [];
+  const rowBenchDef = row => row.find(d => benchItems(d).length);
+  const sectionH = row => {
+    const bench = rowBench(row).length;
+    const lines = bench ? benchLines(rowBenchDef(row)) : 0;
+    return 44 + (row.length > 1 ? 1 : Math.ceil(groupsOf(row[0]) / COLS)) * (GROUP_H + GAP) + (bench ? 24 + lines * 24 : 0) + 30;
   };
-  const H = 104 + defs.reduce((h, d) => h + sectionH(d), 0) + 26;
+  const H = 104 + rows.reduce((h, r) => h + sectionH(r), 0) + 26;
   canvas.width = W * SCALE;
   canvas.height = H * SCALE;
   c.scale(SCALE, SCALE);
@@ -1050,49 +1130,59 @@ function drawRoster(w) {
 
   c.fillStyle = PAL.bg;
   c.fillRect(0, 0, W, H);
-  text('HOLDET', PAD, 40, font(600, 12), PAL.accent);
-  text('Raid roster', PAD, 70, font(700, 28), PAL.fg);
+  // The guild emblem, with the team name beside it.
+  const emblem = ICON_IMAGES.get(EMBLEM_URL);
+  const tx = emblem ? PAD + 92 : PAD;
+  if (emblem) c.drawImage(emblem, PAD, 14, 80, 80 * emblem.height / emblem.width);
+  text('HOLDET', tx, 40, font(600, 12), PAL.accent);
+  text('Raid roster', tx, 70, font(700, 28), PAL.fg);
   text(`${weekName(w.id)} · ${weekSpan(w.id)}`, W - PAD, 70, font(400, 15), PAL.muted, 'right');
   let y = 104;
-  for (const def of defs) {
-    const raid = w.raids[def.id];
-    const typeCfg = S.settings.types[def.type];
-    const byP = Object.fromEntries((raid.roster || []).map(e => [e.p, e]));
-    const cov = coverage(raid.roster || [], S.settings);
-    const ok = cov.filter(x => x.ok).length;
+  for (const row of rows) {
     c.fillStyle = PAL.line;
     c.fillRect(PAD, y, W - PAD * 2, 1);
     y += 24;
-    text(def.name, PAD, y, font(600, 20), PAL.fg);
-    c.font = font(600, 20);
-    const tw = c.measureText(def.name).width;
-    text(parseIso(w.days[raid.dayId].date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' }), PAD + tw + 12, y + 1, font(400, 15), PAL.muted);
-    text(`${(raid.roster || []).length}/${typeCfg.size} players · ${ok}/${cov.length} buffs`, W - PAD, y, font(500, 13), ok === cov.length ? PAL.ok : PAL.warn, 'right');
-    y += 20;
-    const nG = Math.ceil(typeCfg.size / 5);
-    for (let g = 0; g < nG; g++) {
-      const gx = PAD + (g % COLS) * (colW + GAP), gy = y + Math.floor(g / COLS) * (GROUP_H + GAP);
-      rr(gx, gy, colW, GROUP_H, 10, PAL.card, PAL.line);
-      text(`GROUP ${g + 1}`, gx + 14, gy + 18, font(600, 11), PAL.muted);
-      const members = (raid.groups || [])[g] || [];
-      members.forEach((pid, i) => {
-        const e = byP[pid] || {};
-        const ry = gy + 42 + i * ROW;
-        const color = CLASS_COLOR[e.c] || PAL.fg;
-        const spec = shortSpec(e.s || '');
-        c.font = font(400, 12);
-        const sw = c.measureText(spec).width;
-        iconAt(gx + 18, ry, e.c, e.s);
-        text(fit(charOf(pid), font(600, 14), colW - 62 - sw), gx + 38, ry, font(600, 14), color);
-        text(spec, gx + colW - 14, ry, font(400, 12), e.off ? PAL.warn : PAL.muted, 'right');
-      });
-      for (let i = members.length; i < 5; i++) text('–', gx + 38, gy + 42 + i * ROW, font(400, 13), PAL.faint);
-    }
-    y += Math.ceil(nG / COLS) * (GROUP_H + GAP);
-    const items = benchItems(def);
+    const half = 2 * colW + GAP;
+    row.forEach((def, ri) => {
+      const raid = w.raids[def.id];
+      const typeCfg = S.settings.types[def.type];
+      const byP = Object.fromEntries((raid.roster || []).map(e => [e.p, e]));
+      const cov = coverage(raid.roster || [], S.settings);
+      const ok = cov.filter(x => x.ok).length;
+      const x0 = PAD + ri * (half + GAP);
+      const right = row.length > 1 ? x0 + half : W - PAD;
+      text(def.name, x0, y, font(600, 20), PAL.fg);
+      c.font = font(600, 20);
+      const tw = c.measureText(def.name).width;
+      const date = parseIso(w.days[raid.dayId].date).toLocaleDateString('en-GB', row.length > 1 ? { weekday: 'short', day: 'numeric', month: 'short' } : { weekday: 'long', day: 'numeric', month: 'short' });
+      text(date, x0 + tw + 12, y + 1, font(400, 15), PAL.muted);
+      text(`${(raid.roster || []).length}/${typeCfg.size} · ${ok}/${cov.length} buffs`, right, y, font(500, 13), ok === cov.length ? PAL.ok : PAL.warn, 'right');
+      const nG = groupsOf(def);
+      for (let g = 0; g < nG; g++) {
+        const col = row.length > 1 ? ri * 2 + g : g % COLS;
+        const gx = PAD + col * (colW + GAP), gy = y + 20 + (row.length > 1 ? 0 : Math.floor(g / COLS)) * (GROUP_H + GAP);
+        rr(gx, gy, colW, GROUP_H, 10, PAL.card, PAL.line);
+        text(`GROUP ${g + 1}`, gx + 14, gy + 18, font(600, 11), PAL.muted);
+        const members = (raid.groups || [])[g] || [];
+        members.forEach((pid, i) => {
+          const e = byP[pid] || {};
+          const ry = gy + 42 + i * ROW;
+          const color = CLASS_COLOR[e.c] || PAL.fg;
+          const spec = shortSpec(e.s || '');
+          c.font = font(400, 12);
+          const sw = c.measureText(spec).width;
+          iconAt(gx + 18, ry, e.c, e.s);
+          text(fit(charOf(pid, e.c), font(600, 14), colW - 62 - sw), gx + 38, ry, font(600, 14), color);
+          text(spec, gx + colW - 14, ry, font(400, 12), e.off ? PAL.warn : PAL.muted, 'right');
+        });
+        for (let i = members.length; i < 5; i++) text('–', gx + 38, gy + 42 + i * ROW, font(400, 13), PAL.faint);
+      }
+    });
+    y += 20 + (row.length > 1 ? 1 : Math.ceil(groupsOf(row[0]) / COLS)) * (GROUP_H + GAP);
+    const items = rowBench(row);
     if (items.length) {
       y += 12;
-      text(`${benchLabel(S.settings, sharedBench(w, S.settings, def.id)).toUpperCase()} · BE AVAILABLE ON DISCORD, YOU GET DKP`, PAD, y, font(600, 11), PAL.muted);
+      text(`${benchLabel(S.settings, sharedBench(w, S.settings, rowBenchDef(row).id)).toUpperCase()} · BE AVAILABLE ON DISCORD, YOU GET DKP`, PAD, y, font(600, 11), PAL.muted);
       y += 24;
       let x = PAD;
       for (const it of items) {
@@ -1114,6 +1204,7 @@ function drawRoster(w) {
 }
 
 const ICON_IMAGES = new Map();
+const EMBLEM_URL = 'icons/emblem.png';
 function loadIcon(url) {
   if (!url || ICON_IMAGES.has(url)) return Promise.resolve();
   return new Promise(res => {
@@ -1132,7 +1223,7 @@ async function buildImage(w) {
     try {
       await Promise.all([document.fonts.load('600 14px Geist'), document.fonts.load('400 12px Geist'), document.fonts.load('700 28px Geist')]);
     } catch (e) { /* falls back to the system font */ }
-    const urls = new Set();
+    const urls = new Set([EMBLEM_URL]);
     for (const def of plannedRaids(w)) {
       for (const e of w.raids[def.id].roster || []) urls.add(iconUrl(e.c, e.s));
       const av = availability(w, w.raids[def.id].dayId, S.players);
@@ -1239,7 +1330,7 @@ function renderDecide(w, def) {
     const lose = rules.filter(ru => plays(r, ru) && cover[rid].buff[ru.id].length <= (ru.min || 1)).map(ru => short(ru.label))
       .concat(roleDefs.filter(d => d.is(r) && cover[rid].role[d.id].length <= d.min).map(d => d.label.toLowerCase().replace(/s$/, '')));
     const where = multi ? ` in ${raidShort(rid)}` : '';
-    return lose.length ? `<span class="pill bad" title="Benching them loses: ${esc(lose.join(', '))}${esc(where)}">Last ${esc(lose.join(', '))}${esc(where)}</span>` : '<span class="pill">Safe to bench</span>';
+    return lose.length ? `<span class="pill lose" title="Benching them loses: ${esc(lose.join(', '))}${esc(where)}">Last ${esc(lose.join(', '))}${esc(where)}</span>` : '<span class="pill">Safe to bench</span>';
   };
   const brings = r => rules.filter(ru => plays(r, ru)).map(ru => ru.label);
   const hist = r => `<span class="hist" title="Last 8 weeks, newest first. Filled = benched.">${r.history.map(b => `<i class="${b ? 'on' : ''}"></i>`).join('')}${Array.from({ length: 8 - r.history.length }, () => '<i class="na"></i>').join('')}</span>`;
@@ -1251,14 +1342,14 @@ function renderDecide(w, def) {
     const ago = weeksAgo(r.history);
     const isB = benched.has(r.p);
     const status = r.noBench ? '<span class="pill acc">Never bench</span>'
-      : r.needed.length ? `<span class="pill bad" title="${esc(r.needed.join(', '))}">Needed</span><span class="small muted">${esc(r.needed.join(', '))}</span>`
+      : r.needed.length ? `<span class="pill warn" title="${esc(r.needed.join(', '))}">Needed</span><span class="small muted">${esc(r.needed.join(', '))}</span>`
       : r.slot ? `<span class="pill" title="Benching them means someone else takes the spot, maybe in an off-spec.">${r.slot === 'Tank' ? 'Tank spot' : 'Healer spot'}</span>`
       : `<span class="rank mono" title="Order the optimizer would bench DPS in">#${rank}</span>`;
     const warn = isB && (r.noBench || r.needed.length);
     return `<tr class="${isB ? 'is-bench' : ''} ${warn ? 'is-warn' : ''}">
       <td><input type="checkbox" id="bb-${def.id}-${r.p}" data-act="bench-toggle" data-rid="${def.id}" data-pid="${r.p}" ${isB ? 'checked' : ''} aria-label="Bench ${esc(charOf(r.p))}"></td>
       <td>${cardLink(r.p, r.opt ? who(r.p, r.opt.c, r.opt.s) : who(r.p))}${relWarn(r.p)}<span class="small muted" style="margin-left:6px">${esc(r.opt ? shortSpec(r.opt.s) : '')}${multi && r.rid ? ` · ${esc(raidShort(r.rid))}` : ''}</span></td>
-      <td><span class="row" style="gap:6px;flex-wrap:nowrap">${status}</span></td>
+      <td class="status"><span class="row" style="gap:4px 6px">${status}</span></td>
       <td class="impact" title="${esc(brings(r).length ? 'Brings: ' + brings(r).join(', ') : 'Brings no raid buff')}">${impact(r)}</td>
       <td>${hist(r)} <span class="small muted">${n ? `${n}× · ${ago === 1 ? 'last week' : ago + ' wk ago'}` : 'never'}</span></td>
       <td class="num">${pct}</td>
@@ -1343,7 +1434,7 @@ function importSignups(did) {
   let res;
   try { res = parseRaidHelper(text); } catch (e) { toast(e.message); return; }
   const day = w.days[did];
-  const list = res.signups.map(s => ({ p: s.p, n: s.n, st: s.st, opts: s.opts, t: s.t }));
+  const { list, kept } = keepManual(w, did, res.signups.map(s => ({ p: s.p, n: s.n, st: s.st, opts: s.opts, t: s.t })));
   const drops = dropPatch(w, did, list);
   logged(`Imported signups for ${fmtDay(day.date)}`, () => {
     upsertPlayers(res);
@@ -1357,7 +1448,7 @@ function importSignups(did) {
   delete S.drafts['imp-' + did];
   S.importOpen = null;
   const n = res.signups.filter(s => AVAILABLE.has(s.st)).length;
-  toast(`Imported ${res.signups.length} signups (${n} available)${res.event.date && res.event.date !== day.date ? `. Note: the event is on ${fmtDay(res.event.date)}, this day is ${fmtDay(day.date)}.` : '.'}`);
+  toast(`Imported ${res.signups.length} signups (${n} available)${kept ? `, kept ${kept} status${kept > 1 ? 'es' : ''} set by an officer` : ''}${res.event.date && res.event.date !== day.date ? `. Note: the event is on ${fmtDay(res.event.date)}, this day is ${fmtDay(day.date)}.` : '.'}`);
 }
 
 // Several events in one paste: each goes to the raid day with its date (a missing day in this week is added).
@@ -1372,7 +1463,7 @@ function importWeek() {
     const did = Object.keys(w.days || {}).find(k => w.days[k] && w.days[k].date === date) || 'd' + date;
     used.push(res);
     days[did] = { ...((w.days || {})[did] || {}), date, eventId: res.event.id, eventTitle: res.event.title, importedAt: Date.now() };
-    signups[did] = res.signups.map(s => ({ p: s.p, n: s.n, st: s.st, opts: s.opts, t: s.t }));
+    signups[did] = keepManual(w, did, res.signups.map(s => ({ p: s.p, n: s.n, st: s.st, opts: s.opts, t: s.t }))).list;
     const d = dropPatch(w, did, signups[did]);
     if (d) drops[did] = d;
     done.push(fmtDay(date));
@@ -1403,6 +1494,15 @@ function upsertPlayers(res) {
   }
 }
 
+// A re-import replaces the day's signups, but statuses an officer set by hand stay. Returns the list
+// and how many were kept.
+function keepManual(w, did, list) {
+  const manual = (((w.signups || {})[did]) || []).filter(s => s.manual);
+  const out = list.map(s => { const m = manual.find(x => x.p === s.p); return m ? { ...s, st: m.st, manual: true } : s; });
+  for (const m of manual) if (!out.some(s => s.p === m.p)) out.push(m);
+  return { list: out, kept: manual.length };
+}
+
 // A player on a planned roster for this day who is no longer available has dropped; signing up
 // again clears it. Returns the patch for week.drops[did], or null when nothing changes.
 function dropPatch(w, did, list) {
@@ -1427,8 +1527,8 @@ function setStatus(did, pid, st) {
   const i = list.findIndex(s => s.p === pid);
   const cur = i >= 0 ? list[i].st : 'none';
   if (st === cur) return;
-  if (st === 'none') list.splice(i, 1);
-  else if (i >= 0) list[i].st = st;
+  // Marked as manual, so a later re-import keeps the officer's choice ('none' stays as a marker too).
+  if (i >= 0) list[i] = { ...list[i], st, manual: true };
   else list.push({ p: pid, n: (S.players[pid] || {}).name || '', st, opts: [], t: Date.now() / 1000, manual: true });
   const drops = dropPatch(w, did, list);
   saveWeek(w.id, { signups: { [did]: list }, ...(drops ? { drops: { [did]: drops } } : {}) }, `Set ${charOf(pid)} to ${ST_TEXT[st].toLowerCase()} on ${fmtDay(w.days[did].date)}`);
@@ -1661,6 +1761,179 @@ function cycleAttendance(wid, rid, pid) {
   saveWeek(wid, { attendance: { [rid]: att } }, `Marked ${charOf(pid)} as ${next} in ${(raidDef(rid) || {}).name || rid}`);
 }
 
+// ---------- Away (planned absences) ----------
+const fmtRange = a => (a.from === a.to ? fmtDay(a.from) : `${fmtDay(a.from)} – ${fmtDay(a.to)}`);
+function renderAway() {
+  const today = isoDate(new Date());
+  const rows = [];
+  for (const [pid, p] of Object.entries(S.players)) ((p && p.away) || []).forEach((a, i) => { if (a && a.to >= today) rows.push({ pid, a, i }); });
+  rows.sort((x, y) => x.a.from.localeCompare(y.a.from));
+  const opts = Object.entries(S.players).filter(([, p]) => p && p.active !== false).sort((a, b) => charOf(a[0]).localeCompare(charOf(b[0])));
+  const from = S.drafts['aw-from'] || today, to = S.drafts['aw-to'] || from;
+  return `<section class="panel">
+    ${panelHead('Away', 'Planned absences, like a holiday. On those days the player counts as absent in every raid, also before they sign up in Raid-Helper. A status an officer sets by hand on the Week tab still wins.')}
+    ${S.canWrite ? `<div class="row">
+      <select id="aw-p" data-draft="aw-p" aria-label="Player"><option value="">Player…</option>${opts.map(([pid]) => `<option value="${pid}" ${S.drafts['aw-p'] === pid ? 'selected' : ''}>${esc(charOf(pid))}</option>`).join('')}</select>
+      <label class="row small" style="gap:6px">From<input type="date" id="aw-from" data-draft="aw-from" value="${from}"></label>
+      <label class="row small" style="gap:6px">To<input type="date" id="aw-to" data-draft="aw-to" value="${to}"></label>
+      <input id="aw-note" data-draft="aw-note" placeholder="Note, e.g. holiday" maxlength="60" value="${esc(S.drafts['aw-note'] || '')}" style="flex:1;min-width:160px" aria-label="Note">
+      <button data-act="aw-add">Add</button>
+    </div>` : ''}
+    ${rows.length ? `<div class="scroll-x"><table><thead><tr><th>Player</th><th>Away</th><th>Note</th><th></th></tr></thead><tbody>${rows.map(r => `<tr><td>${cardLink(r.pid, who(r.pid))}</td><td>${esc(fmtRange(r.a))}${r.a.from <= today ? ' <span class="pill warn">now</span>' : ''}</td><td class="small" style="white-space:normal">${esc(r.a.note || '')}</td><td>${S.canWrite ? `<button class="ghost danger sm icon" data-act="aw-del" data-pid="${r.pid}" data-i="${r.i}" aria-label="Remove">${ICON.x}</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="small muted">Nobody is away.</div>'}
+  </section>`;
+}
+
+// ---------- Explain the roster ----------
+// The reasons behind one raid's roster, in sections an officer can read or paste on Discord.
+function explainRoster(w, rid) {
+  const def = raidDef(rid), raid = w.raids[rid];
+  const typeCfg = S.settings.types[def.type];
+  const roster = raid.roster || [];
+  const date = w.days[raid.dayId].date;
+  const dayName = parseIso(date).toLocaleDateString('en-GB', { weekday: 'long' });
+  const av = availability(w, raid.dayId, S.players);
+  const locks = raid.locks || {};
+  const nm = e => charOf(e.p, e.c);
+  const short = l => l.replace(/\s*\(.*\)\s*/, '');
+  const cov = coverage(roster, S.settings);
+  const rc = roleCounts(roster);
+  const sections = [];
+  const add = (h, items) => { if (items.length) sections.push({ h, items }); };
+  const notes = e => [isDesignatedTank(S.players[e.p], def.type) && e.r === 'Tank' ? 'set tank' : '', e.off ? 'off-spec' : '', locks[e.p] === 'in' ? 'kept in by an officer' : ''].filter(Boolean);
+  const line = e => `${nm(e)}, ${e.s} ${e.c}${notes(e).length ? ` (${notes(e).join(', ')})` : ''}`;
+  add(`Tanks: ${rc.Tank} of ${typeCfg.tanks}`, roster.filter(e => e.r === 'Tank').map(line));
+  add(`Healers: ${rc.Healer} (aim ${typeCfg.healTarget}, ${typeCfg.healMin}–${typeCfg.healMax})`, roster.filter(e => e.r === 'Healer').map(line));
+  // Missing buffs, and why nobody who could bring one is in.
+  const others = sameTypeRaids(S.settings, rid).filter(r => w.raids[r] && w.raids[r].dayId);
+  add('Missing buffs', cov.filter(c => !c.ok).map(c => {
+    const ru = c.rule;
+    const need = (ru.min || 1) > 1 ? ` (${c.prov.length} of ${ru.min})` : '';
+    const cand = [...av.values()].filter(i => AVAILABLE.has(i.st) && !roster.some(e => e.p === i.pid) && i.opts.some(o => ruleMatches(ru, o.c, o.s)));
+    if (!cand.length) return `${short(ru.label)}${need}: nobody else available on ${dayName} brings it`;
+    return `${short(ru.label)}${need}: ${cand.map(i => {
+      const n = charOf(i.pid);
+      const inOther = others.find(r => (w.raids[r].roster || []).some(e => e.p === i.pid));
+      if (inOther) return `${n} plays in ${raidDef(inOther).name}`;
+      if (locks[i.pid] === 'out') return `${n} is kept out by an officer`;
+      return `${n} is on the bench, as a higher buff or role would be lost`;
+    }).join('; ')}`;
+  }));
+  add('Off-specs', roster.filter(e => e.off && e.r !== 'Tank' && e.r !== 'Healer').map(e => `${nm(e)} plays ${e.s} ${e.c}, their second spec`));
+  const keptIn = roster.filter(e => locks[e.p] === 'in').map(nm);
+  const keptOut = Object.entries(locks).filter(([, v]) => v === 'out').map(([p]) => charOf(p));
+  add('Officer picks', [keptIn.length ? `Kept in: ${keptIn.join(', ')}` : '', keptOut.length ? `Kept out: ${keptOut.join(', ')}` : ''].filter(Boolean));
+  if (others.length) {
+    const teams = lastTeams(def.type, w.id, S.weeks, S.settings);
+    if (Object.keys(teams).length) add('Team', [`${teamCore(roster, teams)[0]} of ${roster.length} played together in one ${typeCfg.size}-man last time`]);
+  }
+  const bench = explainBench(w, rid, S.settings, S.players, S.weeks);
+  add(`Bench on ${dayName}`, bench.map(x => `${charOf(x.p)}: ${x.why}`));
+  const away = [...av.values()].filter(i => i.away).map(i => `${charOf(i.pid)}, ${fmtRange(i.away)}${i.away.note ? ` (${i.away.note})` : ''}`);
+  const off = [...av.values()].filter(i => !i.away && i.st === 'absence').map(i => charOf(i.pid));
+  add('Not available', [...away.map(a => `Away: ${a}`), off.length ? `Signed off: ${off.join(', ')}` : ''].filter(Boolean));
+  const okN = cov.filter(c => c.ok).length;
+  const title = `${def.name}, ${parseIso(date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' })}`;
+  const summary = `${roster.length}/${typeCfg.size} players, ${okN}/${cov.length} buffs`;
+  const text = [`**${title}** (${summary})`, ...sections.map(s => `__${s.h}__\n${s.items.map(i => `- ${i}`).join('\n')}`)].join('\n');
+  return { title, summary, sections, text };
+}
+function renderExplain(el) {
+  const w = week();
+  const raid = w && w.raids && w.raids[S.explain];
+  if (!raid || !raid.dayId || !w.days[raid.dayId] || !raidDef(S.explain)) { S.explain = null; el.hidden = true; el.innerHTML = ''; return; }
+  const x = explainRoster(w, S.explain);
+  el.hidden = false;
+  el.innerHTML = `<div class="in" role="dialog" aria-modal="true" aria-label="Why this roster">
+    <div class="row spread" style="align-items:flex-start">
+      <div class="stack" style="gap:4px"><h2>Why this roster</h2><div class="small muted">${esc(x.title)} · ${esc(x.summary)}</div></div>
+      <div class="row"><button class="sm" data-act="explain-copy">Copy for Discord</button><button class="ghost sm" data-act="card-close">Close</button></div>
+    </div>
+    ${x.sections.map(s => `<div class="stack" style="gap:4px"><b>${esc(s.h)}</b><ul class="xl">${s.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul></div>`).join('')}
+    <div class="small muted">Worked out from the roster as it is now, the signups and the settings. Roles and buffs come first, then bench fairness, priority, parse and signup.</div>
+  </div>`;
+}
+
+// ---------- Officer checklist ----------
+const ago = ts => { const m = Math.round((Date.now() - ts) / 60000); return m < 60 ? `${Math.max(1, m)} min ago` : m < 2880 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`; };
+// Signups for a raid day still to come that were imported more than a day ago may be out of date.
+const staleImport = d => !!(d && d.importedAt && d.date >= isoDate(new Date()) && Date.now() - d.importedAt > 24 * 3600e3);
+function renderChecklist(w) {
+  const today = isoDate(new Date());
+  const items = [];
+  const it = (state, label, title, act) => items.push({ state, label, title, act });
+  const days = dayList(w);
+  const wd = d => parseIso(d.date).toLocaleDateString('en-GB', { weekday: 'short' });
+  if (!days.length) it('todo', 'Add raid days', 'This week has no raid days yet');
+  for (const [did, d] of days) {
+    const has = ((w.signups || {})[did] || []).length > 0;
+    if (!d.importedAt && has) it('ok', `${wd(d)}: signups`, 'Signups are in');
+    else if (!d.importedAt) it(d.date >= today ? 'warn' : 'todo', `${wd(d)}: import signups`, `No Raid-Helper signups for ${fmtDay(d.date)} yet`, `data-act="toggle-import" data-day="${did}"`);
+    else if (staleImport(d)) it('warn', `${wd(d)}: re-import`, `Signups imported ${ago(d.importedAt)}. Raid-Helper may have changed since.`, `data-act="toggle-import" data-day="${did}"`);
+    else it('ok', `${wd(d)}: signups`, `Imported ${ago(d.importedAt)}`);
+  }
+  const planned = [];
+  for (const def of S.settings.raids) {
+    const raid = (w.raids || {})[def.id];
+    const go = `data-act="goto" data-rid="${def.id}"`;
+    if (!raid || !raid.dayId || !w.days[raid.dayId]) { it('todo', `${def.name}: plan`, 'Not planned yet: use Suggest plan', go); continue; }
+    planned.push({ def, raid, date: w.days[raid.dayId].date });
+    const tc = S.settings.types[def.type] || { size: 0 };
+    const rc = roleCounts(raid.roster || []);
+    const rolesOk = rc.Tank === tc.tanks && rc.Healer >= tc.healMin && rc.Healer <= tc.healMax;
+    if (signupChanges(w, def.id)) it('warn', `${def.name}: signups changed`, 'Signups changed since the roster was made', go);
+    else if ((raid.roster || []).length !== tc.size || !rolesOk) it('warn', `${def.name}: ${(raid.roster || []).length}/${tc.size}`, rolesOk ? 'The roster is not full' : 'Tanks or healers are off', go);
+    else it('ok', def.name, 'Planned and full', go);
+  }
+  if (planned.length) {
+    const same = w.posted && w.posted.sig === postSig(w);
+    it(same ? 'ok' : w.posted ? 'warn' : 'todo', same ? 'Posted' : w.posted ? 'Post again' : 'Post on Discord', same ? 'The roster on Discord is up to date' : 'Copy the image or text in Share the roster', 'data-act="goto-share"');
+  }
+  for (const p of planned) {
+    if (p.date >= today) continue;
+    const has = w.attendance && w.attendance[p.def.id];
+    it(has ? 'ok' : 'warn', `${p.def.name}: attendance`, has ? 'Attendance recorded' : 'Import it from the addon, or record it from the plan', 'data-act="goto-share"');
+  }
+  const allPast = planned.length && planned.every(p => p.date < today);
+  it(w.status === 'final' ? 'ok' : allPast ? 'warn' : 'todo', w.status === 'final' ? 'Final' : 'Mark final', 'Final weeks count towards bench fairness', 'data-act="goto-share"');
+  const done = items.filter(i => i.state === 'ok').length;
+  const mark = { ok: ICON.check, warn: '!', todo: '○' };
+  return `<div class="checks">
+    <div class="row spread"><span class="eyebrow">This week</span><span class="small muted">${done} of ${items.length} done</span></div>
+    <div class="checklist">${items.map(i => `<${i.act ? 'button' : 'span'} class="ck ${i.state}" ${i.act || ''} title="${esc(i.title)}"><span class="m">${mark[i.state]}</span>${esc(i.label)}</${i.act ? 'button' : 'span'}>`).join('')}</div>
+  </div>`;
+}
+
+// ---------- Bench statistics ----------
+function benchRows() {
+  const st = benchStats(S.weeks, S.settings);
+  const types = [...new Set(S.settings.raids.map(r => r.type))].sort((a, b) => Number(b) - Number(a));
+  const rows = Object.entries(S.players).filter(([pid, p]) => p && p.active !== false && st[pid]).map(([pid]) => {
+    const s = st[pid];
+    const bench = types.reduce((n, t) => n + ((s[t] || {}).bench || 0), 0);
+    const played = types.reduce((n, t) => n + ((s[t] || {}).played || 0), 0);
+    const last = types.map(t => (s[t] || {}).last).filter(Boolean).sort().pop() || null;
+    return { pid, s, bench, played, share: bench / Math.max(1, bench + played), last };
+  }).sort((a, b) => b.bench - a.bench || b.share - a.share || charOf(a.pid).localeCompare(charOf(b.pid)));
+  return { rows, types };
+}
+function renderBenchStats() {
+  const { rows, types } = benchRows();
+  if (!rows.length) return '';
+  const max = Math.max(1, ...rows.map(r => r.bench));
+  return `<section class="panel">
+    ${panelHead('Bench rotation', 'How often each player has sat on the bench, per raid size, over every final week and every raid with recorded attendance. Each lockout counts once a week.', '<button class="sm" data-act="bench-copy">Copy for Discord</button>')}
+    <div class="scroll-x"><table class="fit"><thead><tr><th>Player</th>${types.map(t => `<th class="num">${esc(t)}-man</th>`).join('')}<th>Benched</th><th class="num">Share</th><th>Last benched</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td>${cardLink(r.pid, who(r.pid))}</td>${types.map(t => { const x = r.s[t]; return `<td class="num" title="Benched ${x ? x.bench : 0} of ${x ? x.bench + x.played : 0} lockouts">${x ? `${x.bench} / ${x.bench + x.played}` : '–'}</td>`; }).join('')}
+      <td><span class="row" style="gap:8px;flex-wrap:nowrap"><span class="bar" style="width:120px"><i style="width:${Math.round(100 * r.bench / max)}%"></i></span><span class="mono small">${r.bench}</span></span></td>
+      <td class="num">${Math.round(100 * r.share)}%</td><td class="small">${r.last ? esc(weekName(r.last)) : '–'}</td></tr>`).join('')}
+    </tbody></table></div>
+  </section>`;
+}
+function benchText() {
+  const { rows } = benchRows();
+  return ['**Bench rotation so far**', ...rows.map(r => `${charOf(r.pid)}: benched ${r.bench}× of ${r.bench + r.played} (${Math.round(100 * r.share)}%)`)].join('\n');
+}
+
 // ---------- Player card ----------
 // Reliability for warnings, worked out once per render.
 let relCache = {};
@@ -1679,6 +1952,7 @@ const cardLink = (pid, inner) => `<button class="link" data-act="card" data-pid=
 // One player's whole story: settings, numbers, bench fairness and every week they were part of.
 function renderCard() {
   const el = document.getElementById('pcard');
+  if (S.explain) { renderExplain(el); return; }
   const pid = S.card, p = pid && S.players[pid];
   if (!p) { el.hidden = true; el.innerHTML = ''; return; }
   const stats = attendanceStats()[pid] || { raids: 0, present: 0, bench: 0, late: 0, missed: 0 };
@@ -1693,7 +1967,8 @@ function renderCard() {
   for (const wk of weeks) {
     const days = dayList(wk);
     const sus = days.map(([did, d]) => {
-      const su = ((wk.signups || {})[did] || []).find(s => s.p === pid);
+      const su0 = ((wk.signups || {})[did] || []).find(s => s.p === pid);
+      const su = su0 && su0.st !== 'none' ? su0 : null;
       if (su && (su.st === 'tentative' || su.st === 'late')) unsure++;
       const drop = ((wk.drops || {})[did] || {})[pid];
       return su || drop ? `<span class="pill ${!su || su.st === 'absence' ? 'bad' : su.st === 'yes' ? '' : 'warn'}" title="${esc(fmtDay(d.date))}">${esc(parseIso(d.date).toLocaleDateString('en-GB', { weekday: 'short' }))} ${esc(su ? STATUS_LABEL[su.st] || su.st : 'Not signed up')}${drop ? ' · dropped' : ''}</span>` : '';
@@ -1751,6 +2026,28 @@ function renderCard() {
     </div>
     <div class="stack"><b>Bench fairness</b>${fairness}</div>
     ${Object.keys(specs).length ? `<div class="stack"><b>Played as</b><div class="row" style="gap:6px">${Object.entries(specs).sort((a, b) => b[1] - a[1]).map(([s, n]) => `<span class="pill">${esc(s)} × ${n}</span>`).join('')}</div></div>` : ''}
+    ${(() => {
+      const today = isoDate(new Date());
+      const aw = (p.away || []).filter(a => a && a.to >= today);
+      return aw.length ? `<div class="stack"><b>Away</b>${aw.map(a => `<div class="small">${esc(fmtRange(a))}${a.note ? ` · ${esc(a.note)}` : ''}</div>`).join('')}</div>` : '';
+    })()}
+    ${(() => {
+      // Characters: the main and any alts, which take over the name when the player brings that class.
+      const alts = Array.isArray(p.alts) ? p.alts : [];
+      const ac = S.drafts['alt-cls'] || '';
+      const form = S.canWrite ? `<div class="row">
+        <input id="alt-char" data-draft="alt-char" value="${esc(S.drafts['alt-char'] || '')}" placeholder="Alt: Firstname-Lastname" maxlength="30" aria-label="Alt character name">
+        <select id="alt-cls" data-draft="alt-cls" aria-label="Alt class">${classOptions(ac)}</select>
+        <select id="alt-main" data-draft="alt-main" aria-label="Alt main spec">${specOptions(ac, S.drafts['alt-main'] || '', 'Main spec…')}</select>
+        <select id="alt-off" data-draft="alt-off" aria-label="Alt off-spec">${specOptions(ac, S.drafts['alt-off'] || '', 'Off-spec…')}</select>
+        <button class="sm" data-act="alt-add" data-pid="${pid}">Add alt</button></div>` : '';
+      return `<div class="stack"><b>Characters</b>
+        <div class="row small">${classIcon(p.cls, p.main)}<b>${esc(charOf(pid))}</b><span class="muted">${esc(p.main || '')} ${esc(p.cls || '')}${p.off ? ` / ${esc(p.off)}` : ''} · main</span></div>
+        ${alts.map((a, i) => `<div class="row small">${classIcon(a.cls, a.main)}<b>${esc(a.char)}</b><span class="muted">${esc(a.main || '')} ${esc(a.cls)}${a.off ? ` / ${esc(a.off)}` : ''} · alt</span>${S.canWrite ? `<button class="ghost danger sm icon" data-act="alt-del" data-pid="${pid}" data-i="${i}" aria-label="Remove alt">${ICON.x}</button>` : ''}</div>`).join('')}
+        ${form}
+        <div class="small muted">An alt is another character of the same player. When they sign up as that class, the roster, the Discord post and the addon use the alt's name. A player still plays only one raid per lockout.</div>
+      </div>`;
+    })()}
     ${p.notes ? `<div class="stack"><b>Notes</b><div class="small">${esc(p.notes)}</div></div>` : ''}
     <div class="stack"><b>Week by week</b>${rows.length ? `<div class="scroll-x"><table><thead><tr><th>Week</th><th>Signups</th><th>Raids</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>` : '<div class="small muted">Not in any week yet.</div>'}</div>
     <div class="small muted">Change their settings on the Players tab.</div>
@@ -1763,25 +2060,24 @@ function renderPlayers() {
   const list = Object.entries(S.players).sort((a, b) => (b[1].active !== false) - (a[1].active !== false) || String(a[1].cls).localeCompare(String(b[1].cls)) || charOf(a[0]).localeCompare(charOf(b[0])));
   const rows = list.map(([pid, p]) => `
     <tr${p.active === false ? ' style="opacity:.55"' : ''}>
-      <td><span class="who">${classIcon(p.cls, p.main)}<input id="p-char-${pid}" data-act="p-field" data-pid="${pid}" data-f="char" value="${esc(p.char || '')}" maxlength="30" placeholder="Firstname-Lastname" class="w-char" aria-label="Character name">${p.charSource === 'manual' ? '' : '<span class="tag" title="Guessed from the Discord name. Type the real name to confirm it.">guess</span>'}</span></td>
+      <td><span class="who">${classIcon(p.cls, p.main)}<input id="p-char-${pid}" data-act="p-field" data-pid="${pid}" data-f="char" value="${esc(p.char || '')}" maxlength="30" placeholder="Firstname-Lastname" class="w-char${p.charSource === 'manual' ? '' : ' guessed'}" title="${p.charSource === 'manual' ? 'Character name' : 'Guessed from the Discord name. Type the real name to confirm it.'}" aria-label="Character name"></span></td>
       <td class="muted small discord" title="${esc(p.name || '')}">${esc(p.name || '')}</td>
       <td><select id="p-cls-${pid}" data-act="p-field" data-pid="${pid}" data-f="cls" aria-label="Class"${CLASSES[p.cls] ? '' : ' style="border-color:var(--warn)"'}>${classOptions(p.cls)}</select></td>
       <td><select id="p-main-${pid}" data-act="p-field" data-pid="${pid}" data-f="main" aria-label="Main spec"${CLASSES[p.cls] && CLASSES[p.cls][p.main] ? '' : ' style="border-color:var(--warn)"'}>${specOptions(p.cls, p.main, 'Main…')}</select></td>
       <td><select id="p-off-${pid}" data-act="p-field" data-pid="${pid}" data-f="off" aria-label="Off-spec">${specOptions(p.cls, p.off, 'None')}</select></td>
-      <td><select id="p-prio-${pid}" data-act="p-field" data-pid="${pid}" data-f="prio" aria-label="Priority">${[2, 1, 0, -1, -2].map(v => `<option value="${v}" ${Number(p.prio || 0) === v ? 'selected' : ''}>${v > 0 ? '+' + v : v}${v === 0 ? ' normal' : v === -2 ? ' trial' : v === 2 ? ' core' : ''}</option>`).join('')}</select></td>
+      <td><select id="p-prio-${pid}" data-act="p-field" data-pid="${pid}" data-f="prio" aria-label="Priority">${[2, 1, 0, -1, -2].map(v => `<option value="${v}" ${Number(p.prio || 0) === v ? 'selected' : ''}>${v > 0 ? '+' + v : v}${v === -2 ? ' trial' : v === 2 ? ' core' : ''}</option>`).join('')}</select></td>
       <td><input id="p-parse-${pid}" data-act="p-field" data-pid="${pid}" data-f="parse" type="number" min="0" max="100" step="1" value="${p.parse ?? ''}" class="w-parse" aria-label="Average parse"></td>
       <td>${Object.values(CLASSES[p.cls] || {}).includes('Tank') ? `<span class="tankbox">${Object.keys(S.settings.types).sort((x, y) => Number(y) - Number(x)).map(t => `<label><input type="checkbox" id="p-tank-${t}-${pid}" data-act="p-tank" data-pid="${pid}" data-t="${t}" ${isDesignatedTank(p, t) ? 'checked' : ''}>${esc(t)}</label>`).join('')}</span>` : '<span class="muted small">–</span>'}</td>
       <td><input type="checkbox" id="p-nobench-${pid}" data-act="p-field" data-pid="${pid}" data-f="noBench" ${p.noBench ? 'checked' : ''} aria-label="Never bench"></td>
       <td><input type="checkbox" id="p-active-${pid}" data-act="p-field" data-pid="${pid}" data-f="active" ${p.active !== false ? 'checked' : ''} aria-label="Active"></td>
       <td><input id="p-notes-${pid}" data-act="p-field" data-pid="${pid}" data-f="notes" value="${esc(p.notes || '')}" class="w-notes" title="${esc(p.notes || '')}" aria-label="Notes"></td>
-      <td><span class="row" style="flex-wrap:nowrap;gap:4px"><button class="sm" data-act="card" data-pid="${pid}" title="Open player card">Card</button>${relWarn(pid)}</span></td>
-      <td><button class="ghost danger sm ${S.confirm === 'p-' + pid ? '' : 'icon'}" data-act="p-del" data-pid="${pid}" title="Delete player" aria-label="Delete ${esc(charOf(pid))}">${S.confirm === 'p-' + pid ? 'Confirm' : ICON.x}</button></td>
+      <td><span class="row" style="flex-wrap:nowrap;gap:4px"><button class="sm" data-act="card" data-pid="${pid}" title="History, attendance and reliability">Card</button>${relWarn(pid)}<button class="ghost danger sm ${S.confirm === 'p-' + pid ? '' : 'icon'}" data-act="p-del" data-pid="${pid}" title="Delete player" aria-label="Delete ${esc(charOf(pid))}">${S.confirm === 'p-' + pid ? 'Confirm' : ICON.x}</button></span></td>
     </tr>`).join('');
   const noSpec = list.filter(([, p]) => p.active !== false && !(CLASSES[p.cls] && CLASSES[p.cls][p.main])).length;
   return `
     <section class="panel">
       ${panelHead('Players', `Signups add new players automatically. The addon invites by character name (Firstname-Lastname), so check the names.${noSpec ? ` <b>${noSpec} player${noSpec > 1 ? 's have' : ' has'} no class or main spec</b> and can only be planned when they sign up with one.` : ''}`)}
-      ${list.length ? `<div class="scroll-x"><table class="ptable"><thead><tr><th>Character</th><th>Discord</th><th>Class</th><th>Main spec</th><th>Off-spec</th><th title="Extra weight when picking DPS spots">Priority</th><th title="Average parse from Warcraft Logs, 0-100">Avg parse</th><th title="Designated tank for these raid sizes: they get the tank spots first">Tanks in</th><th title="Always plays when signed up. Only tank and healer rules can overrule it.">Never bench</th><th>Active</th><th>Notes</th><th title="History, attendance and reliability">Card</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+      ${list.length ? `<div class="scroll-x"><table class="ptable"><thead><tr><th>Character</th><th>Discord</th><th>Class</th><th>Main spec</th><th>Off-spec</th><th title="Extra weight when picking DPS spots">Priority</th><th title="Average parse from Warcraft Logs, 0-100">Avg parse</th><th title="Designated tank for these raid sizes: they get the tank spots first">Tanks in</th><th title="Always plays when signed up. Only tank and healer rules can overrule it.">Never bench</th><th>Active</th><th>Notes</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
       : '<div class="empty">No players yet. Import a Raid-Helper event on the Week tab, or add players below.</div>'}
       <div class="row">
         <input id="np-char" placeholder="Firstname-Lastname" data-draft="np-char" value="${esc(S.drafts['np-char'] || '')}" maxlength="30" aria-label="New character name">
@@ -1791,6 +2087,7 @@ function renderPlayers() {
       </div>
       <div class="small muted">Tanks in: tick the raid sizes a player is a set tank for (for example 20 and 10 for main tanks, only 10 for 10-man tanks); they get the tank spots first. Priority +2 is core, -2 is trial. Never bench players always play when they sign up. Inactive players are ignored when planning.</div>
     </section>
+    ${renderAway()}
     <section class="panel">
       ${panelHead('Warcraft Logs parses', 'Import each character’s average parse from a Warcraft Logs report. This arrives after launch, once there are WoW Forever logs to build it against. Until then, type parses in the Avg parse column above.')}
       <div class="row">
@@ -1903,8 +2200,9 @@ function renderAttendance() {
     <section class="panel">
       ${panelHead('Attendance', `Each week the 20-man and the 10-man lockout count once: played or bench while available counts as attended. P played, B bench, ✕ planned but did not show. Week columns list ${raidDefs.map(d => esc(d.name)).join(', ')} in order.`)}
       ${ws.length ? '' : '<div class="empty">No attendance recorded yet. Import a string from the addon, or record it from the plan on the Week tab.</div>'}
-      ${rows ? `<div class="scroll-x"><table><thead><tr><th>Player</th><th class="num">Attend.</th><th></th><th class="num">Played</th><th class="num">Bench</th><th class="num">No-show</th><th class="num">Late</th><th class="num">Parse</th>${ws.map(w => `<th title="${esc(weekSpan(w.id))}">${esc(weekName(w.id).replace('Week ', 'W'))}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">No players yet.</div>'}
-    </section>`;
+      ${!ws.length ? '' : rows ? `<div class="scroll-x"><table class="fit"><thead><tr><th>Player</th><th class="num">Attend.</th><th></th><th class="num">Played</th><th class="num">Bench</th><th class="num">No-show</th><th class="num">Late</th><th class="num">Parse</th>${ws.map(w => `<th title="${esc(weekSpan(w.id))}">${esc(weekName(w.id).replace('Week ', 'W'))}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">No players yet.</div>'}
+    </section>
+    ${renderBenchStats()}`;
 }
 
 // ---------- Settings view ----------
@@ -1934,6 +2232,7 @@ function renderSettings() {
     ['benchSignup', 'Signed up as bench', 'Cost of picking someone who signed up as bench.'],
     ['raidBalance', 'Raid balance', 'Cost per buff of difference between raids of the same size, so both 10-mans get about as many buffs. At 1500 it may trade the lowest-priority buff for balance, never a higher one. 0 turns it off.'],
     ['reliability', 'Reliability', 'Per no-show in the last 8 weeks; a drop after the roster was made counts half. Players with 2 or more points get a warning either way. 0 only warns.'],
+    ['teams', 'Fixed teams', 'Per player kept with their teammates from last time when raids of the same size split the players, so the 10-mans stay roughly the same teams week to week. At 400 moving one player costs about 800, less than the lowest buff. 0 turns it off.'],
     ['specSpread', 'Spec spread', 'Cost per extra player of the same spec (the 4th Fury warrior costs 3×). All Mage, Warlock, Hunter and Rogue specs count as one. Makes rosters lean towards a mix when all else is equal. 0 turns it off.'],
   ];
   return `
@@ -1958,7 +2257,9 @@ function renderSettings() {
     </div>
     <section class="panel">
       ${panelHead('Optimizer weights', 'Roles and buffs always come first. These decide who gets the DPS spots.')}
-      <div class="two">${weightInfo.map(([k, l, d]) => `<label class="f">${esc(l)}<input id="w-${k}" data-act="w-field" data-f="${k}" type="number" value="${W[k]}" style="width:110px"><span class="small">${esc(d)}</span></label>`).join('')}</div>
+      ${[['Who gets the DPS spots', ['fair', 'prio', 'parse', 'offspec', 'tentative', 'late', 'benchSignup', 'reliability']], ['How raids of one size are shaped', ['raidBalance', 'teams', 'specSpread']]].map(([h, keys]) => `
+        <div class="stack"><span class="eyebrow">${h}</span>
+        <div class="weights">${weightInfo.filter(([k]) => keys.includes(k)).map(([k, l, d]) => `<label class="f">${esc(l)}<input id="w-${k}" data-act="w-field" data-f="${k}" type="number" value="${W[k]}" style="width:110px"><span class="small">${esc(d)}</span></label>`).join('')}</div></div>`).join('')}
       <div class="row"><button class="danger" data-act="s-reset">${S.confirm === 's-reset' ? 'Confirm reset' : 'Reset all settings to defaults'}</button></div>
     </section>
     <section class="panel">
@@ -2005,7 +2306,7 @@ function applyRestore() {
       if (stable(w) === stable(S.weeks[wid])) continue;
       record([{ p: 'w/' + wid, b: S.weeks[wid] || null, a: w }]);
       S.weeks[wid] = w;
-      if (S.db) enqueue(() => S.db.doc('weeks/' + wid).set(clone(w)));
+      if (S.db) enqueueTracked({ kind: 'week', id: wid, op: 'set', data: clone(w) }, () => S.db.doc('weeks/' + wid).set(clone(w)));
     }
     saveSettings(data.settings || clone(DEFAULT_SETTINGS));
   });
@@ -2024,7 +2325,7 @@ function confirmTwice(key) {
 
 document.addEventListener('click', e => {
   // A click beside the player card closes it.
-  if (e.target.id === 'pcard') { S.card = null; schedule(); return; }
+  if (e.target.id === 'pcard') { S.card = null; S.explain = null; schedule(); return; }
   const el = e.target.closest('[data-act]');
   const chip = e.target.closest('.chip');
   if (chip && (!el || !chip.contains(el))) {
@@ -2115,7 +2416,56 @@ document.addEventListener('click', e => {
     case 'sel-close': S.sel = null; schedule(); break;
     case 'p-del': if (guard() && confirmTwice('p-' + el.dataset.pid)) deletePlayer(el.dataset.pid); break;
     case 'card': S.card = el.dataset.pid; schedule(); break;
-    case 'card-close': S.card = null; schedule(); break;
+    case 'card-close': S.card = null; S.explain = null; schedule(); break;
+    case 'explain': S.explain = el.dataset.rid; S.card = null; schedule(); break;
+    case 'explain-copy': {
+      const t = explainRoster(week(), S.explain).text;
+      try { navigator.clipboard.writeText(t).then(() => toast('Copied. Paste it on Discord.'), () => toast('Copying is blocked here.')); } catch (err) { toast('Copying is blocked here.'); }
+      break;
+    }
+    case 'bench-copy': {
+      try { navigator.clipboard.writeText(benchText()).then(() => toast('Copied.'), () => toast('Copying is blocked here.')); } catch (err) { toast('Copying is blocked here.'); }
+      break;
+    }
+    case 'goto-share': { const t = document.getElementById('share'); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); break; }
+    case 'aw-add': {
+      if (!guard()) return;
+      const pid = S.drafts['aw-p'] || (document.getElementById('aw-p') || {}).value;
+      const from = S.drafts['aw-from'] || (document.getElementById('aw-from') || {}).value;
+      const to = S.drafts['aw-to'] || (document.getElementById('aw-to') || {}).value || from;
+      if (!pid || !from) { toast('Pick a player and a date.'); return; }
+      const [a1, a2] = from <= to ? [from, to] : [to, from];
+      const p = clone(S.players[pid]);
+      p.away = [...(Array.isArray(p.away) ? p.away : []), { from: a1, to: a2, note: (S.drafts['aw-note'] || '').trim(), at: Date.now() }];
+      savePlayer(pid, p, `Marked ${charOf(pid)} away ${fmtRange({ from: a1, to: a2 })}`);
+      ['aw-p', 'aw-from', 'aw-to', 'aw-note'].forEach(k => delete S.drafts[k]);
+      break;
+    }
+    case 'aw-del': {
+      if (!guard()) return;
+      const pid = el.dataset.pid, p = clone(S.players[pid]);
+      const [gone] = p.away.splice(Number(el.dataset.i), 1);
+      savePlayer(pid, p, `Removed ${charOf(pid)}'s absence ${fmtRange(gone)}`);
+      break;
+    }
+    case 'alt-add': {
+      if (!guard()) return;
+      const pid = el.dataset.pid, char = (S.drafts['alt-char'] || '').trim(), cls = S.drafts['alt-cls'] || '';
+      if (!char || !CLASSES[cls]) { toast('Enter the alt\'s name and class.'); return; }
+      if (cls === S.players[pid].cls) { toast('An alt needs another class than the main, so the tool can tell them apart.'); return; }
+      const p = clone(S.players[pid]);
+      p.alts = [...(Array.isArray(p.alts) ? p.alts : []).filter(a => a.cls !== cls), { char, cls, main: S.drafts['alt-main'] || '', off: S.drafts['alt-off'] || '' }];
+      savePlayer(pid, p, `Added ${char} as an alt of ${charOf(pid)}`);
+      ['alt-char', 'alt-cls', 'alt-main', 'alt-off'].forEach(k => delete S.drafts[k]);
+      break;
+    }
+    case 'alt-del': {
+      if (!guard()) return;
+      const pid = el.dataset.pid, p = clone(S.players[pid]);
+      const [gone] = p.alts.splice(Number(el.dataset.i), 1);
+      savePlayer(pid, p, `Removed ${gone.char} as an alt of ${charOf(pid)}`);
+      break;
+    }
     case 'h-undo': if (guard()) undoEntry(el.dataset.id); break;
     case 'h-restore': if (guard() && confirmTwice('rs-' + el.dataset.id)) restoreBefore(el.dataset.id); break;
     case 'log-more': S.logLimit += 200; schedule(); break;
@@ -2173,6 +2523,8 @@ document.addEventListener('input', e => {
   const k = e.target.dataset && e.target.dataset.draft;
   if (!k) return;
   S.drafts[k] = e.target.value;
+  // A new alt class changes which specs can be picked.
+  if (k === 'alt-cls') { delete S.drafts['alt-main']; delete S.drafts['alt-off']; schedule(); }
   if (k.startsWith('ev-')) {
     // Refresh the "Open event data" link without losing focus.
     const id = eventIdFrom(e.target.value);
@@ -2218,7 +2570,7 @@ document.addEventListener('change', e => {
       saveWeek(w.id, { notes: { [k]: v } }, k === 'week' ? 'Changed the week note' : `Changed the note for ${raidDef(k).name}`);
       break;
     }
-    case 'set-st': el.className = `stsel sd-${el.value}`; setStatus(el.dataset.day, el.dataset.pid, el.value); break;
+    case 'set-st': el.className = `stsel sd-${el.value} man`; setStatus(el.dataset.day, el.dataset.pid, el.value); break;
     case 'bench-toggle': {
       const rid = el.dataset.rid;
       const bc = benchCandidates(w, rid, S.settings, S.players, S.weeks);
@@ -2283,7 +2635,7 @@ document.addEventListener('toggle', e => {
 
 document.addEventListener('keydown', e => {
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
-  if (e.key === 'Escape' && S.card) { S.card = null; schedule(); return; }
+  if (e.key === 'Escape' && (S.card || S.explain)) { S.card = null; S.explain = null; schedule(); return; }
   if (e.key === 'Escape' && S.sel) { S.sel = null; schedule(); }
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && !typing && S.view === 'week') { e.preventDefault(); if (guard()) undo(); }
   if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.chip')) { e.preventDefault(); e.target.click(); }

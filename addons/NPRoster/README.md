@@ -1,6 +1,6 @@
 # NPRoster (addon)
 
-**Version 1.0**
+**Version 1.1**
 
 Raidlederens addon til [NP Roster-værktøjet](../../tools/raid-roster). Importér ugens roster, invitér, sortér grupper, giv bænken besked og registrer fremmøde.
 
@@ -14,7 +14,7 @@ Hent zip-filen fra den nyeste [NPRoster-release](https://github.com/nordens-pari
 
 ## Brug
 
-Skriv `/nproster` (eller `/npr`).
+Skriv `/nproster` (eller `/npr`). Vinduet har guildens emblem øverst, og emblemet står også ud for addon'et i AddOns-listen.
 
 1. **Import:** kopiér addon-strengen fra værktøjet (Share the roster), klik i feltet, Ctrl+V, **Import**.
    En ny import erstatter den forrige uge i addon'et.
