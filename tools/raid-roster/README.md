@@ -6,6 +6,10 @@ Planlægger Holdets raids ud fra Raid-Helper-tilmeldinger: et optimeret 20-mands
 
 Hører sammen med addon'et [NPRoster](../../addons/NPRoster), som raidlederen bruger i spillet.
 
+![Roster-billedet til Discord med 20-manden, de to 10-mænd og bænken](images/roster-image.png)
+
+*Alle billeder viser et opdigtet hold med testdata.*
+
 ## Kom i gang
 
 Værktøjet kører som en Claude-artifact med en fælles database. Darkfade deler linket med officererne, som skal have en claude.ai-konto og Contributor- eller Editor-adgang for at kunne rette. Med Viewer-adgang kan man kigge, men ikke ændre noget.
@@ -27,6 +31,8 @@ En typisk uge:
 
 **Forældede tilmeldinger:** er en kommende raiddag importeret for mere end et døgn siden, bliver mærket gult ("re-import"), og dagens kort viser "Imported 2 days ago" i gult.
 
+![Toppen af Week: tjekliste, ugenote, raid-kort og raiddage](images/week-overview.png)
+
 ### Noter
 
 Under tjeklisten øverst er et felt til **officer-noter for ugen** (fx "vores off-tank kommer sent søndag"), og hvert raid har sit eget notefelt øverst (fx "Fire resist på Rag"). Noterne gemmes, når du forlader feltet, ses kun i værktøjet (ikke på Discord eller i addon'et) og logges, så de kan fortrydes.
@@ -42,6 +48,8 @@ Under tjeklisten øverst er et felt til **officer-noter for ugen** (fx "vores of
 ### Availability
 
 En tabel over alle spillere og deres status på hver raiddag. Status kan rettes med rullemenuen, fx hvis nogen har meldt fra i Discord uden at rette i Raid-Helper: Signed up, Tentative, Late, Bench, Absent eller Not signed up. Hold musen over menuen for at se, hvilken spec de har tilmeldt sig som. En status, en officer har sat, får en blå streg i venstre side og bliver stående, når dagen importeres igen, indtil nogen ændrer den. Tabellen kan klappes sammen.
+
+![Availability med status pr. spiller og raiddag](images/availability.png)
 
 ### Plan the week
 
@@ -78,6 +86,10 @@ Raids af samme størrelse er samme lockout: ingen kommer med i begge 10-mænd. O
 - **Clear picks (… kept in, … kept out)** fjerner alle officerernes valg i raidet, så optimeringen bestemmer frit igen (to klik).
 - **Off-spec:** en spec i gul/amber betyder, at spilleren er med på sin anden spec.
 
+![20-manden med buffs, grupper og bænk](images/raid-20-man.png)
+
+![De to 10-mænd side om side med buffs, grupper og fælles bænk](images/raid-10-man-lockout.png)
+
 **Grupper:** fulde melee-grupper (tanks i gruppe 1), fulde ranged-grupper og en healergruppe med Mana Tide; Shadow Priest og andre casters fylder op hos healerne. Enhancement-shamaner spredes over melee-grupperne.
 
 ### Flyt spillere
@@ -113,6 +125,8 @@ Under hvert raid (for 10-mændene: én for hele lockouten) kan officeren selv v�
 - Derudover ses bænk de sidste 8 uger (udfyldt = bænket), fremmøde i procent, parse og tilmeldingsstatus.
 - **Apply bench** holder de afkrydsede ude af alle lockoutens raids og bygger rosterne om. **Reset** glemmer krydserne. Bjælken advarer, hvis bænken koster en buff eller rolle, går imod Never bench, eller hvis der er sat for mange eller for få.
 
+![Decide the bench med buff-tavlen og bænk-rækkefølgen](images/decide-the-bench.png)
+
 ### Share the roster
 
 - **Roster image:** et billede af alle raids med grupper, spec-ikoner, klassefarver og bænken, lavet til Discords mørke tema. **Copy image** eller **Save image**.
@@ -122,6 +136,8 @@ Under hvert raid (for 10-mændene: én for hele lockouten) kan officeren selv v�
 - **Mark week as final** gemmer bænkene, så ugen tæller i bænk-rotationen. **Back to draft** åbner den igen.
 - **Record attendance from the plan:** hvis addon'et ikke blev brugt, registreres fremmødet ud fra rosteret og bænken.
 - **Delete week** sletter ugen (to klik). Den kan hentes tilbage under Log.
+
+![Share the roster: billede, Discord-tekst og addon-streng](images/share-the-roster.png)
 
 ### Gemning
 
@@ -143,6 +159,8 @@ Hele historien om én spiller i et vindue: klik på navnet i Availability, Decid
 - uge for uge: tilmelding pr. dag (med "dropped" ved afbud efter roster) og hvad der skete i hvert raid: spillede (med spec), bænk med begrundelsen, no-show eller planlagt
 
 Kortet er godt til at svare på "hvorfor sad jeg over igen?". Indstillingerne rettes stadig under Players.
+
+![Spillerkort med fremmøde, no-shows, bænk og uge for uge](images/player-card.png)
 
 ## Pålidelighed
 
@@ -182,6 +200,8 @@ Spillere oprettes, når de tilmelder sig, og kan også tilføjes i hånden neder
 
 Krydset sletter spilleren (to klik). Import fra Warcraft Logs kommer efter launch, når der findes rigtige WoW Forever-logs (der er en pladsholder).
 
+![Spillerlisten under Players](images/players.png)
+
 ### Discord-navn og karakternavn
 
 Spillere genkendes på deres Discord-ID, så navneskift ødelægger ikke historikken. Karakternavnet findes sådan:
@@ -199,6 +219,12 @@ Store/små bogstaver og mellemrum i stedet for bindestreg betyder ikke noget, n�
 - **Bench rotation:** hvor mange gange hver spiller har siddet over pr. raidstørrelse (fx "2 / 9" = bænket 2 af 9 lockouts), i alt, andel og hvornår sidst. Tæller alle uger markeret final og alle raids med fremmøde. **Copy for Discord** giver en kort liste til at vise guilden, at rotationen er fair.
 - **Tabellen:** hver uge tæller 20-manden og 10-mands-lockouten én gang hver. Spillet eller bænk (tilgængelig) tæller som fremmøde. **P** = spillede, **B** = bænk, **✕** = planlagt, men kom ikke, **·** = ikke med. Desuden antal sene og parse.
 
+![Check recent raids med spillede, bænk og no-shows](images/check-recent-raids.png)
+
+![Bench rotation pr. spiller](images/bench-rotation.png)
+
+![Fremmødetabellen uge for uge](images/attendance.png)
+
 ## Log
 
 Alle ændringer på tværs af uger (rosters, flyt, bænk, tilmeldinger, import, fremmøde, noter, spillere og indstillinger), nyeste først, med filter pr. uge (eller "Players and settings") og pr. officer. Hver linje viser, hvilke dele den ændrede (fx "20-man", "Signups Wed 21 Oct"). Hver ændring gemmes med, hvordan det så ud før, så den kan rulles tilbage:
@@ -208,6 +234,8 @@ Alle ændringer på tværs af uger (rosters, flyt, bænk, tilmeldinger, import, 
 - Begge dele logges selv og kan fortrydes igen (en fortrydelse af en fortrydelse er en "Redid"). Fortrudte og tilbagerullede linjer står nedtonet med, hvem der gjorde det.
 - En slettet uge kan hentes tilbage på samme måde. Spillere, som en import har oprettet, bliver liggende på spillerlisten, når importen fortrydes.
 - Historikken gemmes i 120 dage (højst de nyeste 1.000 ændringer); ældre ændringer slettes automatisk. Ændringer fra før historikken fandtes, står som "Log only" og kan ikke fortrydes.
+
+![Log med Undo og Restore to before](images/change-log.png)
 
 ## Settings
 
@@ -231,6 +259,8 @@ Alle ændringer på tværs af uger (rosters, flyt, bænk, tilmeldinger, import, 
 
 Standardværdierne (Bench fairness 600, Player priority 300, Fixed teams 400, Raid balance 1500) er valgt ud fra en simulering af 12 uger med 90 % fremmøde på det nuværende roster. Med dem kom ingen på bænken mere end 4–5 uger i træk, mens buffs og faste hold holdt sig som før. Hvert trin i Priority flytter en DPS' chance for at spille med ca. 7–10 procentpoint (−2: ca. 60 %, 0: ca. 80 %, +2: ca. 93 %). Player priority over ca. 400 kan holde en spiller med −2 på bænken i mange uger i træk.
 
+![Optimizer weights under Settings](images/optimizer-weights.png)
+
 - **Reset all settings to defaults** (to klik).
 
 ### Backup
@@ -243,6 +273,7 @@ Standardværdierne (Bench fairness 600, Player priority 300, Fixed teams 400, Ra
 - `core.js`: Raid-Helper-import, optimering, grupper og streng-formater (ingen DOM, kan testes uden browser)
 - `app.js`: brugerflade, fælles database og historik
 - `icons/`: Blizzards klasse- og spec-ikoner (fra Wowheads ikonserver) og guildens emblem (`emblem.png`)
+- `images/`: skærmbillederne i denne README (et opdigtet hold med testdata)
 
 ## Netværk og data
 
