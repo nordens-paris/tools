@@ -72,7 +72,7 @@ end
 function UI:Build()
   if self.frame then return end
   local f = CreateFrame("Frame", "NPRosterFrame", UIParent, "BackdropTemplate")
-  f:SetSize(620, 500)
+  f:SetSize(620, 514)
   f:SetPoint("CENTER")
   f:SetFrameStrata("DIALOG")
   f:SetBackdrop({
@@ -93,8 +93,13 @@ function UI:Build()
   local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
   close:SetPoint("TOPRIGHT", -6, -6)
 
+  -- The guild emblem beside the title.
+  local emblem = f:CreateTexture(nil, "ARTWORK")
+  emblem:SetSize(46, 46)
+  emblem:SetPoint("TOPLEFT", 14, -8)
+  emblem:SetTexture("Interface\\AddOns\\" .. ADDON .. "\\emblem")
   local title = Text(f, "GameFontNormalLarge")
-  title:SetPoint("TOPLEFT", 20, -18)
+  title:SetPoint("LEFT", emblem, "RIGHT", 6, 0)
   title:SetText("NP Roster")
   self.sub = Text(f, "GameFontDisableSmall")
   self.sub:SetPoint("LEFT", title, "RIGHT", 10, -1)
@@ -104,10 +109,10 @@ function UI:Build()
   local prev
   for _, t in ipairs(tabs) do
     local b = Button(f, t[2], 110, function() UI:Show(t[1]) end)
-    if prev then b:SetPoint("LEFT", prev, "RIGHT", 6, 0) else b:SetPoint("TOPLEFT", 18, -42) end
+    if prev then b:SetPoint("LEFT", prev, "RIGHT", 6, 0) else b:SetPoint("TOPLEFT", 18, -56) end
     prev = b
     local p = CreateFrame("Frame", nil, f)
-    p:SetPoint("TOPLEFT", 20, -74)
+    p:SetPoint("TOPLEFT", 20, -88)
     p:SetPoint("BOTTOMRIGHT", -20, 18)
     p:Hide()
     self.panes[t[1]] = p
