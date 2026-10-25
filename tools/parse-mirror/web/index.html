@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Parse Mirror</title>
+    <link rel="icon" type="image/png" href="/emblem.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" />
+    <script>
+      // Apply a saved theme before first paint.
+      try {
+        const t = localStorage.getItem('np-theme');
+        if (t) document.documentElement.dataset.theme = t;
+      } catch {}
+      // Wowhead item tooltips on hover.
+      const whTooltips = { colorLinks: false, iconizeLinks: false, renameLinks: false };
+    </script>
+    <script src="https://wow.zamimg.com/js/tooltips.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

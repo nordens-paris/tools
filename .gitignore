@@ -5,6 +5,7 @@ config-*.toml
 *.local.*
 .env
 .env.*
+!.env.example
 
 # Logs, skærmbilleder og data fra kørsler
 logs/

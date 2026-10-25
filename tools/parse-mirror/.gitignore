@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.cache/
+.env
+*.log
+bin/
+# Lokale værktøjsindstillinger (Claude Code preview)
+.claude/

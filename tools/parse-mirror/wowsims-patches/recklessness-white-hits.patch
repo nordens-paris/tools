@@ -1,0 +1,14 @@
+diff --git a/sim/warrior/recklessness.go b/sim/warrior/recklessness.go
+index c7bd6eb..1b95970 100644
+--- a/sim/warrior/recklessness.go
++++ b/sim/warrior/recklessness.go
+@@ -14,7 +14,8 @@ func (war *Warrior) registerRecklessness() {
+ 		ActionID: actionID,
+ 		Duration: time.Second * 15,
+ 	}).AttachSpellMod(core.SpellModConfig{
+-		ProcMask:   core.ProcMaskMeleeSpecial,
++		// In TBC Recklessness also makes white swings crit.
++		ProcMask:   core.ProcMaskMelee,
+ 		Kind:       core.SpellMod_BonusCrit_Percent,
+ 		FloatValue: 100,
+ 	}).AttachMultiplicativePseudoStatBuff(

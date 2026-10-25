@@ -1,0 +1,14 @@
+diff --git a/sim/core/spell_resistances.go b/sim/core/spell_resistances.go
+index f81e010..6fdf4af 100644
+--- a/sim/core/spell_resistances.go
++++ b/sim/core/spell_resistances.go
+@@ -76,7 +76,8 @@ func (unit *Unit) resistCoeff(spell *Spell, attacker *Unit, binary bool) float64
+ 		if binary {
+ 			return 0
+ 		}
+-		return unit.levelBasedResist(attacker)
++		// Same scaling as below: the coefficient runs 0 to 1, mitigation 0 to 0.75.
++		return unit.levelBasedResist(attacker) / 0.75
+ 	}
+ 
+ 	resistanceCap := float64(attacker.Level * 5)
