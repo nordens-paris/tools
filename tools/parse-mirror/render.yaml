@@ -1,0 +1,20 @@
+# Render blueprint (https://render.com/docs/blueprint-spec): one free web service.
+# Sims run in the visitors' browsers, so the server only fetches and analyses logs.
+services:
+  - type: web
+    name: parse-mirror
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/config
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: GAME
+        value: tbc-anniversary
+      - key: SIM_MODE
+        value: browser
+      # Set in the Render dashboard (never in git).
+      - key: WCL_API_KEY
+        sync: false
