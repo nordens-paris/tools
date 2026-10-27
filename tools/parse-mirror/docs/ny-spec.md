@@ -69,3 +69,11 @@ Typiske årsager til store udsving:
 - Skade simmen ikke laver (`unmodeledDamage`).
 
 Kør til sidst `npm run typecheck`, åbn kampen i browseren og tjek alle faner.
+
+## Healer-specs
+
+Healere simmes ikke, så en healer-spec er kun en post i `server/specs/healers.ts`: ikonet
+(`Priest-Holy`), Warcraft Logs' klasse- og spec-id til rankings, de heals kun den spec caster
+(`signature`, som afgør spec'en for et rent klasse-ikon som "Priest"), og de buffs/HoTs den holder
+på andre (`upkeep`). Tjek med `scripts/healer-check.ts` på et kill, og med `scripts/healer-peers.ts`,
+at der findes peers.

@@ -4,15 +4,21 @@
 // one event query (the same calls as the whole-raid page, so they're shared through the cache),
 // plus cached rankings. The full analysis runs when a boss is opened.
 import type { RaidBoss, RaidSummary } from '../../shared/types.ts';
+import { mayHeal } from '../specs/healers.ts';
 import { specForIcon } from '../specs/index.ts';
 import type { WclClient } from '../wcl/client.ts';
 import { parseOf, parsesFor } from './characters.ts';
+import { fetchHealerFight } from './healer/data.ts';
+import { healerMetrics } from './healer/metrics.ts';
+import { FightModel } from './healer/model.ts';
+import { raidRow } from './healer/raid.ts';
 import { NOT_DPS, consumesAt, debuffsFor, fetchRaidEvents, gearIssues, hasTotemOfWrath, partiesOf, potionsUsed, raidDebuffs } from './raidAudit.ts';
 import { median } from './stats.ts';
 
 const MELEE_OR_HUNTER = /^(Warrior-(Fury|Arms)|Rogue|Shaman-Enhancement|Druid-Feral|Paladin-Retribution|Hunter)/;
 
-export async function raidSummary(client: WclClient, report: string, source: number): Promise<RaidSummary> {
+/** `healers`: whether a healer's healing may be fetched (off on the server's key when the site requires an own key). */
+export async function raidSummary(client: WclClient, report: string, source: number, healers = true): Promise<RaidSummary> {
   const fights = await client.fights(report);
   const actor = fights.friendlies.find((a) => a.id === source);
   if (!actor) throw new Error(`Player ${source} not found in report ${report}`);
@@ -20,19 +26,25 @@ export async function raidSummary(client: WclClient, report: string, source: num
   const kills = fights.fights.filter((f) => f.boss && f.kill && actor.fights.some((af) => af.id === f.id));
   const players = fights.friendlies.filter((a) => a.type !== 'Pet' && a.type !== 'NPC' && kills.some((k) => a.fights.some((f) => f.id === k.id)));
   const isDps = (icon: string) => !NOT_DPS.has(icon);
+  // Players who may be healing get their healing per kill (about 10 more requests per kill, shared
+  // with the healer page and the raid's healer panel).
+  const couldHeal = healers && !spec && mayHeal(actor.icon);
 
   const [parses, perBoss] = await Promise.all([
     parsesFor(client, actor.name, actor.server, fights.zone).then((r) => r.parses),
     Promise.all(
       kills.map(async (f) => {
-        const [damage, infos, extra, rankings] = await Promise.all([
+        const [damage, infos, extra, rankings, healerData] = await Promise.all([
           client.table('damage-done', report, { start: f.start_time, end: f.end_time }),
           client.combatantInfos(report, f.start_time, f.end_time),
           fetchRaidEvents(client, report, f),
           spec ? client.rankings(f.boss, spec.wcl.classId, spec.wcl.specId).catch(() => undefined) : undefined,
+          couldHeal ? fetchHealerFight(client, report, f.id, fights) : undefined,
         ]);
         const inFight = players.filter((p) => p.fights.some((x) => x.id === f.id));
-        return { fight: f, damage, infos, ...extra, rankings, inFight, parties: partiesOf(inFight, infos, extra.events) };
+        const model = healerData && new FightModel(healerData);
+        const healing = model?.healers.has(source) ? raidRow(healerMetrics(model, source)) : undefined;
+        return { fight: f, damage, infos, ...extra, rankings, inFight, parties: partiesOf(inFight, infos, extra.events), healing };
       }),
     ),
   ]);
@@ -80,16 +92,19 @@ export async function raidSummary(client: WclClient, report: string, source: num
       potions: potionsUsed(b.events, source),
       party: b.parties.groups.find((g) => g.members.includes(source)),
       debuffs: allDebuffs.map((d) => ({ name: d.name, icon: d.icon, uptime: d.uptime[f.id] ?? 0, target: d.target })),
+      healing: b.healing,
     };
   });
 
+  const healer = bosses.filter((b) => b.healing).length * 2 >= Math.max(1, bosses.length);
+  const healerLocked = !healers && !spec && mayHeal(actor.icon);
   const latest = [...perBoss].reverse().find((b) => b.infos.some((i) => i.sourceID === source));
   const latestInfo = latest?.infos.find((i) => i.sourceID === source);
   const inParties = new Set(bosses.flatMap((b) => b.party?.members ?? []));
   return {
     report,
     title: fights.title,
-    player: { name: actor.name, server: actor.server, icon: actor.icon, source, supported: !!spec, dps: isDps(actor.icon) },
+    player: { name: actor.name, server: actor.server, icon: actor.icon, source, supported: !!spec || healer || healerLocked, dps: isDps(actor.icon) && !healer, healer, healerLocked },
     bosses,
     peers: { basis: sameClass.length ? 'class' : 'role', players: peers.map((p) => ({ source: p.id, name: p.name, icon: p.icon })) },
     people: Object.fromEntries(players.filter((p) => inParties.has(p.id)).map((p) => [p.id, { name: p.name, icon: p.icon }])),

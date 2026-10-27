@@ -180,6 +180,8 @@ export interface ComparisonGroup {
 }
 
 export interface AnalysisResult {
+  /** Healer analyses say kind: 'healer'; DPS ones leave it out. */
+  kind?: 'dps';
   id: string;
   comparison: ComparisonGroup;
   generatedAt: string;
@@ -292,6 +294,8 @@ export interface RaidBoss {
   party?: RaidParty;
   /** The raid debuffs that raise this player's damage, with their uptime on this kill. */
   debuffs: { name: string; icon: string; uptime: number; target: number }[];
+  /** The player's healing on this kill, when they healed. */
+  healing?: HealerRaidRow;
 }
 
 export interface GuildSummary {
@@ -366,7 +370,9 @@ export interface ProgressSummary {
 export interface RaidSummary {
   report: string;
   title: string;
-  player: { name: string; server?: string; icon: string; source: number; supported: boolean; dps: boolean };
+  /** healer: they healed on most kills; the boss table then shows healing instead of DPS. */
+  /** healerLocked: may be a healer, but healer views need the visitor's own key on this site. */
+  player: { name: string; server?: string; icon: string; source: number; supported: boolean; dps: boolean; healer?: boolean; healerLocked?: boolean };
   bosses: RaidBoss[];
   /** Who the player is compared with in their own raid: the same class, or else the top DPS of the same role. */
   peers: { basis: 'class' | 'role'; players: { source: number; name: string; icon: string }[] };
@@ -374,4 +380,251 @@ export interface RaidSummary {
   people: Record<number, { name: string; icon: string }>;
   /** Gear problems on the latest kill. */
   gearIssues: GearIssue[];
+}
+
+// ---- Healers ---------------------------------------------------------------------------------
+
+/** Where a healer's effective healing went: mostly tanks, mostly the raid, or both. */
+export type HealerRole = 'tank' | 'mixed' | 'raid';
+
+export interface HealerSpellRow {
+  name: string;
+  icon?: string;
+  casts: number;
+  /** Mana spent on the casts. */
+  mana: number;
+  effective: number;
+  overheal: number;
+  hits: number;
+  /** Spell IDs cast, when more than one rank was used. */
+  ranks?: number[];
+}
+
+export interface HealerCooldownUse {
+  name: string;
+  icon?: string;
+  atSec: number;
+  /** Healer's mana (0-1) just before. */
+  manaPct?: number;
+  /** Cast by someone else on the healer (Innervate, Power Infusion). */
+  from?: string;
+}
+
+export interface HealerUpkeep {
+  name: string;
+  icon?: string;
+  /** The target it was kept on the most. */
+  target: string;
+  /** Uptime on that target, 0-1. */
+  uptime: number;
+  targets: number;
+  /** Lifebloom: share of the fight at 3 stacks on that target. */
+  stack3?: number;
+}
+
+/** Overheal by cause, as shares (0-1) of the healer's overheal. */
+export interface OverhealSplit {
+  /** Heal bigger than the gap when the healer committed (cast start, or landing for instants). */
+  ownChoice: number;
+  /** The gap was there at cast start, but other heals filled it before this one landed. */
+  othersFilled: number;
+  chainHealBounces: number;
+  hotTicks: number;
+  /** Prayer of Mending, Earth Shield: fire on their own when damage lands. */
+  procHeals: number;
+}
+
+export interface HealerMetrics {
+  source: number;
+  name: string;
+  /** Class-spec icon, e.g. "Priest-Holy". */
+  icon: string;
+  specLabel: string;
+  hps: number;
+  effective: number;
+  /** Shield absorbs, included in effective. */
+  absorbed: number;
+  /** Share of the healer's direct heals that was overheal (0-1). */
+  overhealPct: number;
+  /** Share of the raid's effective healing. */
+  shareOfRaid: number;
+  role: HealerRole;
+  /** Share of effective healing on tanks (players tanking the boss). */
+  tankShare: number;
+  /** The same, counting only tank-spec players: matches how peers are picked. */
+  tankShareIcon: number;
+  topTargets: { name: string; icon: string; share: number }[];
+  mana?: {
+    max: number;
+    spent: number;
+    /** Mana 0-1 over the fight, one point per few seconds. */
+    curve: { t: number; pct: number }[];
+    lowest: number;
+    end: number;
+    secBelow10: number;
+    /** Effective healing per point of mana spent. */
+    healPerMana: number;
+  };
+  manaGained: { name: string; amount: number }[];
+  /** Mana gains lost to a full mana bar. */
+  manaWasted: number;
+  cooldowns: HealerCooldownUse[];
+  spells: HealerSpellRow[];
+  overheal: OverhealSplit;
+  castsClean: number;
+  castsWithOverheal: number;
+  cancels: { count: number; started: number; secLost: number; likelyTopped: number };
+  /** Heals on tanks started at 90%+ HP, vs heals started after the damage. */
+  tankPreheal?: { preheals: number; reactive: number; prehealEffective?: number; reactiveEffective?: number };
+  reaction: { drops: number; answered: number; medianSec?: number; firstResponder?: number };
+  saves: number;
+  /** Share of the time alive spent casting (0-1). */
+  activity: number;
+  /** Seconds not casting while someone they heal was below 70%. */
+  idleWhileNeeded: { sec: number; ofSec: number };
+  upkeep: HealerUpkeep[];
+  dispels: number;
+  context: { raidHealers: number; raidDtps: number; healPerRaidDamage: number };
+}
+
+export interface HealerDeath {
+  player: string;
+  icon: string;
+  atSec: number;
+  killedBy: string;
+  /** burst: from 60%+ in one hit; fast: under 2 s below 50%; window: time to save them. */
+  kind: 'burst' | 'fast' | 'window';
+  secBelow50?: number;
+  /** The killing ability hits on a timer (seconds between). */
+  periodicSec?: number;
+  damage5s: { name: string; amount: number }[];
+  /** HP % in the last seconds, [seconds before death, pct]. */
+  hp: [number, number][];
+  /** What each healer cast in the window. */
+  healers: { name: string; casts: string[] }[];
+}
+
+export interface HealerFightSummary {
+  fight: number;
+  encounter: { id: number; name: string };
+  durationSec: number;
+  tanks: { name: string; icon: string }[];
+  raid: { effective: number; hps: number; dtps: number; healers: number };
+  healers: HealerMetrics[];
+  deaths: HealerDeath[];
+}
+
+export interface HealerPeer {
+  name: string;
+  server?: string;
+  region?: string;
+  report: string;
+  fight: number;
+  /** Which whole-raid ranking the raid came from, and its place there. */
+  raidRanking: { metric: 'execution' | 'speed'; rank: number; guild?: string };
+  raid: { healers: number; dtpsPerHealer: number; deaths: number; durationSec: number };
+  tankShareIcon: number;
+  /** Median percentile of their healing parses this tier, and how many kills. */
+  consistency?: { median: number; kills: number };
+}
+
+export interface HealerPeerGroup {
+  /** How strictly the peers match: same healers and damage, looser, or only the closest assignment. */
+  match: 'close' | 'loose' | 'assignment' | 'none';
+  description: string;
+  you: { healers: number; dtpsPerHealer: number; role: HealerRole; tankShareIcon: number };
+  peers: HealerPeer[];
+  raidsChecked: number;
+}
+
+export type HealerTab = 'Overview' | 'Mana' | 'Spells' | 'Overheal' | 'Response' | 'Deaths' | 'Peers';
+
+export interface HealerFinding {
+  severity: Severity;
+  tab: HealerTab;
+  title: string;
+  detail: string;
+}
+
+/** One compared number. null = no data for that player. */
+export interface HealerRow {
+  key: string;
+  label: string;
+  you: number | null;
+  median: number | null;
+  peers: (number | null)[];
+  format: 'pct' | 'num' | 'sec' | 'int' | 'dec';
+  /** Unset for context rows: shown, never judged. */
+  higherIsBetter?: boolean;
+  hint?: string;
+}
+
+export interface HealerSpellCompare {
+  name: string;
+  icon?: string;
+  you: { share: number; healPerMana: number | null; casts: number; overheal: number };
+  /** Peer medians; healPerMana only over peers who cast it. */
+  peers: { share: number; healPerMana: number | null; overheal: number; users: number };
+}
+
+export interface HealerAnalysis {
+  kind: 'healer';
+  id: string;
+  generatedAt: string;
+  report: string;
+  fight: number;
+  encounter: { id: number; name: string };
+  durationSec: number;
+  kill: boolean;
+  you: HealerMetrics;
+  peers: (HealerMetrics & { peer: HealerPeer; durationSec: number })[];
+  group: HealerPeerGroup;
+  /** Compared and judged: fair whatever the raid around you. */
+  judged: HealerRow[];
+  /** Depends on the raid around you: shown for context only. */
+  context: HealerRow[];
+  spells: HealerSpellCompare[];
+  findings: HealerFinding[];
+  deaths: HealerDeath[];
+  tanks: { name: string; icon: string }[];
+  raid: { hps: number; dtps: number; healers: number };
+  warnings: string[];
+}
+
+/** One healer on one kill, for the raid pages (no peers). */
+export interface HealerRaidRow {
+  source: number;
+  name: string;
+  icon: string;
+  specLabel: string;
+  role: HealerRole;
+  tankShare: number;
+  hps: number;
+  healPerMana?: number;
+  overhealPct: number;
+  /** Overheal by the healer's own choice, as a share of all their healing. */
+  ownOverheal: number;
+  manaEnd?: number;
+  /** Mana potions and runes. */
+  potions: number;
+  /** Other cooldowns used (Divine Favor, Nature's Swiftness...). */
+  cooldowns: number;
+  idleSec: number;
+  saves: number;
+}
+
+export interface HealerRaidBoss {
+  fight: number;
+  name: string;
+  durationSec: number;
+  healers: number;
+  dtpsPerHealer: number;
+  deaths: Record<HealerDeath['kind'], number>;
+  rows: HealerRaidRow[];
+}
+
+/** Every healer on every boss kill of a report. */
+export interface HealerRaidSummary {
+  report: string;
+  bosses: HealerRaidBoss[];
 }

@@ -10,6 +10,8 @@ Lavet af Nordens Paris som proof of concept til **WoW Forever**. I dag kører de
 Anniversary (fresh.warcraftlogs.com), fordi det er der, logs og sim findes.
 
 **Understøttede specs:** Fury Warrior, Destruction Warlock, Arcane Mage, Shadow Priest.
+**Healere:** Holy og Discipline Priest, Holy Paladin, Restoration Shaman og Restoration Druid,
+sammenlignet med healere fra velspillede raids ([afsnit 9](#9-healere)).
 
 ![Forsiden](docs/billeder/01-forside.png)
 
@@ -24,7 +26,7 @@ tryk **Analyze**. Hvad du får, afhænger af linket:
 
 | Link indeholder | Du får |
 |---|---|
-| `fight=` og `source=` | Ét kill sammenlignet med top 10 (det meste af denne vejledning) |
+| `fight=` og `source=` | Ét kill sammenlignet med top 10 (det meste af denne vejledning), eller for en healer med healere fra velspillede raids ([afsnit 9](#9-healere)) |
 | kun `source=` | Din raid: DPS og parse på hver boss ([afsnit 8](#8-hele-raidet)) |
 | kun rapporten | Alle spillere på alle bosses ([afsnit 8](#8-hele-raidet)) |
 
@@ -195,7 +197,67 @@ Det hele kan eksporteres som CSV.
 
 ![Parties](docs/billeder/20-parties.png)
 
-### 9. Del og gem
+### 9. Healere
+
+![Healer-overblik](docs/billeder/21-healer.png)
+
+Warcraft Logs' healing-parse måler kun, hvor meget du healede. Det afhænger mest af raidet omkring
+dig: med færre healere eller svage med-healere er der mere at hele. Indsætter du et kill, hvor du
+healede, får du i stedet en sammenligning, der kun bedømmer det, du selv bestemmer.
+
+**Hvem du sammenlignes med.** Fem healere med samme spec og samme opgave (mest tanks, mest raid
+eller begge dele), fundet i *velspillede* raids: Warcraft Logs' execution-rangering (renest kill:
+lidt skade, få dødsfald) og speed-rangering (hurtigst) for bossen. Raidet skal have samme antal
+healere som dit og cirka samme skade pr. healer, og healeren skal parse mindst middel over sine
+kills i tieret (rigtig mange healere parser lavt, så middel er allerede stabilt). Mærket øverst
+siger, hvor tæt det passer: **Close match**, **Looser match** (±1 healer eller ±40 % skade) eller
+**Closest assignment** (ingen med din opgave fandtes, så de nærmeste).
+
+**Hvad der bedømmes, og hvad der kun er kontekst.** Healing per mana (også pr. spell), overheal du
+selv valgte, potions, runes og cooldowns, tid under 10 % mana, tid tabt på afbrudte casts, tid uden
+at caste mens nogen, du healer, var under 70 %, reaktionstid, saves og præ-heals på tanks bliver
+sammenlignet. HPS, andel af raidets healing, samlet overheal og mana tilbage er kun kontekst, fordi
+de afhænger af raidet. Øverst står også raidets antal healere og skade pr. healer ved siden af
+dit.
+
+**Fanerne:**
+
+- **Overview:** Fix first, fund, hvem du sammenlignes med, og alle tal mod peers.
+- **Mana:** mana-kurven mod peers (strakt til samme længde), hvornår du brugte cooldowns og potions
+  og med hvor meget mana, og hvor manaen kom fra.
+- **Spells:** andel af din healing, healing per mana og overheal pr. spell, mod peers.
+- **Overheal:** overheal delt i fem årsager. Kun **your choice** er din: healet var allerede større
+  end det manglende liv, da du begyndte at caste (eller da en instant landede). Andre healere, der
+  nåede først, Chain Heal-hop, HoT-ticks på fuldt liv og procs (Prayer of Mending, Earth Shield)
+  tælles for sig.
+- **Response:** reaktion, saves, tomgang og afbrudte casts. Et afbrudt cast, hvor spilleren allerede
+  var fyldt op, er markeret som sandsynligt bevidst (det sparer mana).
+- **Deaths:** hvert dødsfald med HP de sidste sekunder, skaden og hvad hver healer castede. **Burst**
+  (fra 60 %+ i ét hit) og **fast** (under 2 sekunder under 50 %) kunne ingen nå; kun **time to
+  save** siger noget om healingen. Evner på en timer markeres.
+- **Peers:** de fem healere, deres raid (placering, healere, skade pr. healer, dødsfald) og links
+  til deres logs.
+
+![Mana](docs/billeder/22-healer-mana.png)
+
+![Overheal](docs/billeder/23-healer-overheal.png)
+
+![Dødsfald](docs/billeder/24-healer-deaths.png)
+
+**Raid-siderne:** en healers egen raid viser healing per mana, overheal, mana tilbage, potions og
+tomgang pr. boss. På **Everyone in this raid** henter **Show healers** alle healere på alle bosses
+(det tager lidt tid første gang).
+
+![Healere i raidet](docs/billeder/25-healers.png)
+
+**Godt at vide om healere:** HP står i procent i loggene, så maksimalt liv regnes ud fra store hits
+(eller stamina, ±7 %). Et påbegyndt cast har intet mål i loggen, så et afbrudt cast kan ikke
+bedømmes sikkert. WoWSims kan ikke simme healere, så der er ingen what-ifs. Første healer-analyse
+af et kill henter omkring 50–60 kald fra Warcraft Logs; derefter deles det meste gennem cachen. Derfor
+kræver healer-siderne på den hostede side din egen Warcraft Logs-nøgle (**API key** øverst til
+højre); den bliver i din browser.
+
+### 10. Del og gem
 
 - Hver visning har sin egen adresse, så du kan dele et link på Discord, og tilbage-knappen virker.
   `&vs=peers` vælger "Same gear, a step ahead", `&tab=Sim` åbner en bestemt fane.

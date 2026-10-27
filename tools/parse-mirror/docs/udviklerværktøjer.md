@@ -28,6 +28,9 @@ Scripts, der arbejder på tværs af mange spillere (`sim-vs-log`, `crit-unbiased
 | `party-check.ts <rapport> <fight> <source>` | Shamans, totems, Moonkin Aura og shadow priest-mana for hver sammenlignet spiller |
 | `show-env.ts` / `show-detected.ts <rapport> <fight> <source>` | Buffs og debuffs, og hvad sim-miljøet får ud af dem |
 | `dump-request.ts <spec> <rapport> <fight> <source> <fil.json>` | En spillers sim-forespørgsel som JSON |
+| `healer-check.ts <rapport>:<fight> [...] [--json fil]` | Healer-tallene for alle healere i et eller flere kills, én linje pr. healer, plus dødsfald |
+| `healer-peers.ts <rapport>:<fight> [navn ...]` | Hvilke peers hver healer får, fra hvilke raids, og hvad det kostede i kald |
+| `healer-analyze.ts <rapport>:<fight> <navn>` | Hele healer-analysen som tekst: bedømte tal, kontekst, spells og fund |
 
 ## Sim-nøjagtighed
 

@@ -22,8 +22,15 @@ export function isApiKeyRemembered(): boolean {
   return !!read(() => localStorage);
 }
 
+/** Fired on window when the key is saved or cleared, so pages that needed one can retry. */
+export const KEY_CHANGED = 'np-wcl-key-changed';
+/** Fired on window to open the key form (from a "needs your own key" message). */
+export const OPEN_KEY_FORM = 'np-wcl-key-open';
+export const openKeyForm = () => window.dispatchEvent(new Event(OPEN_KEY_FORM));
+
 export function setApiKey(key: string | undefined, remember: boolean) {
   memoryKey = key;
+  window.dispatchEvent(new Event(KEY_CHANGED));
   for (const store of [() => sessionStorage, () => localStorage]) {
     try {
       store().removeItem(STORAGE_KEY);

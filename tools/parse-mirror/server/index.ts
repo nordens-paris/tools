@@ -6,12 +6,15 @@ import express from 'express';
 import type { SimResult } from '../shared/types.ts';
 import { analyze, type StoredAnalysis } from './analysis/analyze.ts';
 import { guildSummary } from './analysis/guild.ts';
+import { analyzeHealer } from './analysis/healer/compare.ts';
+import { healerRaidSummary } from './analysis/healer/raid.ts';
 import { progressSummary } from './analysis/progress.ts';
 import { raidSummary } from './analysis/raid.ts';
 import { game, publicGameConfig } from './game.ts';
 import { BrowserSims, type JobOutcome } from './sim/browser.ts';
 import { runSim } from './sim/runner.ts';
 import { runScenarios } from './sim/scenarios.ts';
+import { mayHeal } from './specs/healers.ts';
 import { specForIcon } from './specs/index.ts';
 import { WclClient } from './wcl/client.ts';
 
@@ -64,8 +67,12 @@ app.use(express.json({ limit: '5mb' }));
 // Each visitor can fetch this many logs an hour on the server's Warcraft Logs key, so one person
 // can't use up the key's hourly budget for everyone. With their own key there's no limit here.
 const VISITOR_LOOKUPS_PER_HOUR = Number(process.env.VISITOR_LOOKUPS_PER_HOUR ?? 60);
+// Healer analyses fetch several raids' logs. With HEALERS_NEED_OWN_KEY=true (the hosted site),
+// they only run on a visitor's own key, so they never use up the server key's hourly budget.
+const HEALERS_NEED_OWN_KEY = process.env.HEALERS_NEED_OWN_KEY === 'true';
 const lookups = new Map<string, number[]>();
-function limitVisitor(req: express.Request) {
+/** `weight`: how many lookups a request counts as (a healer analysis fetches several raids' logs). */
+function limitVisitor(req: express.Request, weight = 1) {
   if (req.get('x-wcl-key') || !VISITOR_LOOKUPS_PER_HOUR) return;
   const ip = req.ip ?? 'unknown';
   const hourAgo = Date.now() - 60 * 60 * 1000;
@@ -73,7 +80,7 @@ function limitVisitor(req: express.Request) {
   if (recent.length >= VISITOR_LOOKUPS_PER_HOUR) {
     throw new BadRequest(`You've looked up a lot of logs this hour. Wait a bit, or add your own Warcraft Logs key under “API key”.`);
   }
-  recent.push(Date.now());
+  for (let i = 0; i < weight; i++) recent.push(Date.now());
   lookups.set(ip, recent);
 }
 
@@ -83,6 +90,19 @@ const REPORT_CODE = /^[A-Za-z0-9]{16}$/;
 const API_KEY = /^[A-Za-z0-9]{32}$/;
 
 class BadRequest extends Error {}
+
+/** A healer view on the server's key while HEALERS_NEED_OWN_KEY is on; the page offers the key form. */
+class KeyRequired extends BadRequest {}
+
+/** Whether this request may run healer views. */
+const healersAllowed = (req: express.Request) => !HEALERS_NEED_OWN_KEY || !!req.get('x-wcl-key');
+function requireHealerKey(req: express.Request) {
+  if (!healersAllowed(req)) {
+    throw new KeyRequired(
+      'Healer analyses fetch several other raids’ logs, so on this site they need your own Warcraft Logs key. Add it under “API key”: it stays in your browser.',
+    );
+  }
+}
 
 /**
  * A visitor's own Warcraft Logs key (X-WCL-Key header) is used for that request only: it isn't
@@ -106,11 +126,11 @@ function reportCode(value: unknown): string {
 function fail(res: express.Response, what: string, err: unknown) {
   const message = (err as Error).message;
   if (!(err instanceof BadRequest)) log(`${what} failed: ${message}`);
-  res.status(err instanceof BadRequest ? 400 : 502).json({ error: message });
+  res.status(err instanceof KeyRequired ? 403 : err instanceof BadRequest ? 400 : 502).json({ error: message, needsKey: err instanceof KeyRequired || undefined });
 }
 
 app.get('/api/config', (_req, res) => {
-  res.json({ ...publicGameConfig(), simMode: SIM_MODE });
+  res.json({ ...publicGameConfig(), simMode: SIM_MODE, healersNeedOwnKey: HEALERS_NEED_OWN_KEY });
 });
 
 app.get('/api/quota', (req, res) => {
@@ -132,7 +152,7 @@ app.get('/api/report/:code', async (req, res) => {
       fights: bosses.map((f) => ({ id: f.id, name: f.name, kill: !!f.kill, durationSec: (f.end_time - f.start_time) / 1000 })),
       players: fights.friendlies
         .filter((a) => a.type !== 'Pet' && a.type !== 'NPC')
-        .map((a) => ({ id: a.id, name: a.name, icon: a.icon, supported: !!specForIcon(a.icon), fights: a.fights.map((f) => f.id) })),
+        .map((a) => ({ id: a.id, name: a.name, icon: a.icon, supported: !!specForIcon(a.icon) || mayHeal(a.icon), fights: a.fights.map((f) => f.id) })),
     });
   } catch (err) {
     fail(res, 'Report', err);
@@ -144,7 +164,7 @@ app.get('/api/raid/:code/:source', async (req, res) => {
     const source = Number(req.params.source);
     if (!Number.isInteger(source)) throw new BadRequest('Expected a player id.');
     limitVisitor(req);
-    res.json(await raidSummary(clientFor(req), reportCode(req.params.code), source));
+    res.json(await raidSummary(clientFor(req), reportCode(req.params.code), source, healersAllowed(req)));
   } catch (err) {
     fail(res, 'Raid overview', err);
   }
@@ -156,6 +176,16 @@ app.get('/api/guild/:code', async (req, res) => {
     res.json(await guildSummary(clientFor(req), reportCode(req.params.code)));
   } catch (err) {
     fail(res, 'Guild overview', err);
+  }
+});
+
+app.get('/api/guild/:code/healers', async (req, res) => {
+  try {
+    requireHealerKey(req);
+    limitVisitor(req, 2);
+    res.json(await healerRaidSummary(clientFor(req), reportCode(req.params.code)));
+  } catch (err) {
+    fail(res, 'Raid healers', err);
   }
 });
 
@@ -176,7 +206,17 @@ app.post('/api/analyze', async (req, res) => {
     if (!Number.isInteger(fight) || !Number.isInteger(source)) throw new BadRequest('Expected { report, fight, source }');
     if (mode !== 'top' && mode !== 'peers') throw new BadRequest('mode must be "top" or "peers"');
     limitVisitor(req);
-    const stored = await analyze(clientFor(req), reportCode(report), fight, source, log, mode);
+    const client = clientFor(req);
+    const code = reportCode(report);
+    // Players whose spec isn't a simmed DPS spec get the healer analysis (it says so if they aren't healing).
+    const actor = (await client.fights(code)).friendlies.find((a) => a.id === source);
+    if (actor && !specForIcon(actor.icon)) {
+      requireHealerKey(req);
+      limitVisitor(req, 2);
+      res.json(await analyzeHealer(client, code, fight, source, log));
+      return;
+    }
+    const stored = await analyze(client, code, fight, source, log, mode);
     remember(stored);
     res.json(stored.result);
   } catch (err) {

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import { parseLogUrl } from '../api.ts';
-import { APP_NAME, EXAMPLES, GUILD_NAME, SUPPORTED, specIcon } from '../brand.ts';
+import { APP_NAME, EXAMPLES, GUILD_NAME, HEALERS, SUPPORTED, specIcon } from '../brand.ts';
 import { game } from '../game.ts';
 import { lastOpened, parseRoute } from '../route.ts';
 import { LogSearch } from './LogSearch.tsx';
@@ -10,8 +10,8 @@ const FEATURES = [
   { title: 'Top 10 comparison', text: 'Your kill next to the best parses of your spec, or players with your gear who did a bit better.' },
   { title: 'Rotation & cooldowns', text: 'Casts per minute, uptimes, gaps between casts and when you pressed your cooldowns.' },
   { title: 'Sim what-ifs', text: 'WoWSims, in your browser, shows what their gear, consumes and buffs are worth to you.' },
-  { title: 'Your whole raid', text: 'Every boss: parse and trend, place in the raid, consumes, gear check and your party.' },
-  { title: 'Everyone in the raid', text: 'For officers: parses and consumes for all, raid debuff uptimes, parties and gear.' },
+  { title: 'Healers, judged fairly', text: 'Mana, overheal you chose, reactions and deaths, next to healers from clean raids with as many healers as yours.' },
+  { title: 'Your raid, or everyone’s', text: 'Every boss: parses, consumes, gear and party; for officers also debuffs, parties and healers.' },
   { title: 'Luck, measured', text: 'Crits, misses and procs against the sim, so you can tell bad luck from bad play.' },
 ];
 
@@ -49,7 +49,7 @@ export function Landing({ onAnalyze, onRaid, onGuild, loading }: Props) {
         <h1>{APP_NAME}</h1>
       </div>
       <p className="lede">
-        Paste a raid log to see how you did on every boss, or a single kill to see what the top 10 players of your spec do differently and what it's worth in DPS.
+        Paste a raid log to see how you did on every boss, or a single kill to see what the top 10 players of your spec do differently and what it's worth in DPS. Healers are compared with healers from clean raids like theirs.
       </p>
       <div className="preview-note" role="note">
         <span className="preview-tag">Preview</span>
@@ -84,7 +84,7 @@ export function Landing({ onAnalyze, onRaid, onGuild, loading }: Props) {
           <div className="spinner" />
           <div style={{ textAlign: 'left' }}>
             <strong>Fetching logs…</strong>
-            <div className="muted small">Pulling the fight and the top 10 parses. The first run takes 10–20 s, then it's cached.</div>
+            <div className="muted small">Pulling the fight and the players to compare with. The first run takes 10–30 s, then it's cached.</div>
           </div>
         </div>
       )}
@@ -100,6 +100,15 @@ export function Landing({ onAnalyze, onRaid, onGuild, loading }: Props) {
         Supported:
         {SUPPORTED.map((s) => (
           <span key={s.specName} className="spec-chip">
+            <img src={specIcon(s.className, s.specName)} alt="" />
+            {s.specName} {s.className}
+          </span>
+        ))}
+      </div>
+      <div className="supported">
+        {game.healersNeedOwnKey ? 'Healers (with your own API key):' : 'Healers:'}
+        {HEALERS.map((s) => (
+          <span key={`${s.specName} ${s.className}`} className="spec-chip">
             <img src={specIcon(s.className, s.specName)} alt="" />
             {s.specName} {s.className}
           </span>

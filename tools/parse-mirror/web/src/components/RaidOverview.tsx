@@ -4,6 +4,7 @@ import { downloadCsv } from '../csv.ts';
 import { fmt, fmtSigned, fmtTime, itemIcon, wclReportUrl, wclUrl } from '../format.ts';
 import { Hint } from './Hint.tsx';
 import { GearChips, PlayerName, classIcon, upClass } from './RaidChecks.tsx';
+import { HealerBossTable, HealerKeyNote, HealerRaidKpis } from './healer/HealerRaid.tsx';
 
 const median = (xs: number[]) => {
   const s = [...xs].sort((a, b) => a - b);
@@ -45,7 +46,8 @@ interface Props {
 
 export function RaidOverview({ raid, onOpen, onProgress, onGuild, loading }: Props) {
   const { player, bosses, peers } = raid;
-  const [className, specName = ''] = player.icon.split('-');
+  // A bare class icon ("Priest") gets the spec they healed as, when they healed.
+  const [className, specName = ''] = (player.icon.includes('-') ? player.icon : (bosses.find((b) => b.healing)?.healing?.icon ?? player.icon)).split('-');
   const ranked = bosses.filter((b) => b.percentile !== undefined).map((b) => b.percentile!);
   const vsTop = bosses.filter((b) => b.topMedianDps).map((b) => (b.dps / b.topMedianDps!) * 100);
   const deltas = bosses.filter((b) => b.percentile !== undefined && b.previous).map((b) => b.percentile! - b.previous!.percentile);
@@ -103,45 +105,49 @@ export function RaidOverview({ raid, onOpen, onProgress, onGuild, loading }: Pro
         </div>
       </section>
 
-      <section className="kpis four">
-        <div className="kpi">
-          <span className="eyebrow">Median parse</span>
-          <span className={`kpi-value ${ranked.length ? pctClass(median(ranked)) : ''}`}>
-            {ranked.length ? fmt(median(ranked)) : '–'}
-            {deltas.length > 0 && <span className={`delta ${median(deltas) >= 0 ? 'good' : 'bad'}`}>{fmtSigned(median(deltas))}</span>}
-          </span>
-          <span className="kpi-sub">{ranked.length ? `${ranked.length} ranked kills${deltas.length ? ' · change vs your previous kill of each boss' : ''}` : 'No ranked kills found'}</span>
-        </div>
-        <div className="kpi">
-          <span className="eyebrow">DPS vs top 10</span>
-          <span className="kpi-value">
-            {vsTop.length ? fmt(median(vsTop)) : '–'}
-            {vsTop.length > 0 && <span className="unit">%</span>}
-          </span>
-          <span className="kpi-sub">{weakest ? `Furthest behind on ${weakest.name}` : 'Median over bosses, of the top 10 median DPS'}</span>
-        </div>
-        <div className="kpi">
-          <span className="eyebrow">Place in the raid</span>
-          <span className="kpi-value">
-            {ranks.length ? `#${fmt(median(ranks.map((r) => r.rank)))}` : '–'}
-            {ranks.length > 0 && <span className="unit">of {ranks[0].of}</span>}
-          </span>
-          <span className="kpi-sub">{bestRank ? `Median DPS place · best #${bestRank.raidRank!.rank} on ${bestRank.name}` : 'Healers and tanks aren’t ranked'}</span>
-        </div>
-        <div className="kpi">
-          <span className="eyebrow">
-            Prepared
-            <Hint text="Kills with a flask (or a battle and a guardian elixir), food and, for casters and healers, a weapon oil at the pull. Potions count from just before the pull to the kill." />
-          </span>
-          <span className="kpi-value">
-            {prepared}
-            <span className="unit">/ {withInfo} kills</span>
-          </span>
-          <span className="kpi-sub">
-            Fully consumed · potion on {potions} of {bosses.length}
-          </span>
-        </div>
-      </section>
+      {player.healer ? (
+        <HealerRaidKpis raid={raid} />
+      ) : (
+        <section className="kpis four">
+          <div className="kpi">
+            <span className="eyebrow">Median parse</span>
+            <span className={`kpi-value ${ranked.length ? pctClass(median(ranked)) : ''}`}>
+              {ranked.length ? fmt(median(ranked)) : '–'}
+              {deltas.length > 0 && <span className={`delta ${median(deltas) >= 0 ? 'good' : 'bad'}`}>{fmtSigned(median(deltas))}</span>}
+            </span>
+            <span className="kpi-sub">{ranked.length ? `${ranked.length} ranked kills${deltas.length ? ' · change vs your previous kill of each boss' : ''}` : 'No ranked kills found'}</span>
+          </div>
+          <div className="kpi">
+            <span className="eyebrow">DPS vs top 10</span>
+            <span className="kpi-value">
+              {vsTop.length ? fmt(median(vsTop)) : '–'}
+              {vsTop.length > 0 && <span className="unit">%</span>}
+            </span>
+            <span className="kpi-sub">{weakest ? `Furthest behind on ${weakest.name}` : 'Median over bosses, of the top 10 median DPS'}</span>
+          </div>
+          <div className="kpi">
+            <span className="eyebrow">Place in the raid</span>
+            <span className="kpi-value">
+              {ranks.length ? `#${fmt(median(ranks.map((r) => r.rank)))}` : '–'}
+              {ranks.length > 0 && <span className="unit">of {ranks[0].of}</span>}
+            </span>
+            <span className="kpi-sub">{bestRank ? `Median DPS place · best #${bestRank.raidRank!.rank} on ${bestRank.name}` : 'Healers and tanks aren’t ranked'}</span>
+          </div>
+          <div className="kpi">
+            <span className="eyebrow">
+              Prepared
+              <Hint text="Kills with a flask (or a battle and a guardian elixir), food and, for casters and healers, a weapon oil at the pull. Potions count from just before the pull to the kill." />
+            </span>
+            <span className="kpi-value">
+              {prepared}
+              <span className="unit">/ {withInfo} kills</span>
+            </span>
+            <span className="kpi-sub">
+              Fully consumed · potion on {potions} of {bosses.length}
+            </span>
+          </div>
+        </section>
+      )}
 
       <section className={`gear-strip ${raid.gearIssues.length ? 'has-issues' : ''}`}>
         <span className="gear-strip-title">
@@ -151,104 +157,110 @@ export function RaidOverview({ raid, onOpen, onProgress, onGuild, loading }: Pro
         {raid.gearIssues.length > 0 ? <GearChips issues={raid.gearIssues} /> : <span className="all-good">✓ Everything enchanted and gemmed</span>}
       </section>
 
-      <section className="panel">
-        <div className="panel-head">
-          <div>
-            <h2>Boss kills</h2>
-            <p className="sub">Your DPS next to the top 10 of your spec and your raid, with what you had at the pull. Open a boss for the full comparison and sims.</p>
+      {player.healerLocked && <HealerKeyNote />}
+
+      {player.healer ? (
+        <HealerBossTable raid={raid} onOpen={onOpen} loading={loading} />
+      ) : (
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>Boss kills</h2>
+              <p className="sub">Your DPS next to the top 10 of your spec and your raid, with what you had at the pull. Open a boss for the full comparison and sims.</p>
+            </div>
+            <button className="ghost" onClick={exportCsv}>
+              Export CSV
+            </button>
           </div>
-          <button className="ghost" onClick={exportCsv}>
-            Export CSV
-          </button>
-        </div>
-        {bosses.length === 0 ? (
-          <p className="muted">No boss kills for this player in the report.</p>
-        ) : (
-          <div className="table-scroll">
-            <table className="t raid">
-              <thead>
-                <tr>
-                  <th>Boss</th>
-                  <th className="num">DPS</th>
-                  <th>vs top 10 median</th>
-                  <th className="num">Raid</th>
-                  <th className="num">
-                    Parse
-                    <Hint text="Warcraft Logs parse percentile, with the change from your previous kill of the boss. Hover for the previous kill and your best this tier." />
-                  </th>
-                  <th>Consumes</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {bosses.map((b) => {
-                  const pct = b.topMedianDps ? (b.dps / b.topMedianDps) * 100 : undefined;
-                  const delta = b.percentile !== undefined && b.previous ? b.percentile - b.previous.percentile : undefined;
-                  const state = consumeState(b, player.dps);
-                  const icons = [...(b.consumes?.used ?? []), ...b.potions];
-                  return (
-                    <tr key={b.fight}>
-                      <td>
-                        <a className="strong" href={wclUrl(raid.report, b.fight, player.source)} target="_blank" rel="noreferrer">
-                          {b.name}
-                        </a>
-                        <div className="muted small mono">
-                          {fmtTime(b.durationSec)}
-                          {b.topMedianDurationSec !== undefined && ` · ${fmtSigned(b.durationSec - b.topMedianDurationSec)}s vs top 10`}
-                        </div>
-                      </td>
-                      <td className="num mono strong">{fmt(b.dps)}</td>
-                      <td>
-                        {pct !== undefined ? (
-                          <div className="adoption wide">
-                            <div className="bar-track">
-                              <div className={`bar ${pct >= 95 ? 'good' : pct >= 80 ? 'neutral' : 'bad'}`} style={{ width: `${Math.min(100, pct)}%` }} />
-                            </div>
-                            <span className="mono small">{fmt(pct)}%</span>
+          {bosses.length === 0 ? (
+            <p className="muted">No boss kills for this player in the report.</p>
+          ) : (
+            <div className="table-scroll">
+              <table className="t raid">
+                <thead>
+                  <tr>
+                    <th>Boss</th>
+                    <th className="num">DPS</th>
+                    <th>vs top 10 median</th>
+                    <th className="num">Raid</th>
+                    <th className="num">
+                      Parse
+                      <Hint text="Warcraft Logs parse percentile, with the change from your previous kill of the boss. Hover for the previous kill and your best this tier." />
+                    </th>
+                    <th>Consumes</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {bosses.map((b) => {
+                    const pct = b.topMedianDps ? (b.dps / b.topMedianDps) * 100 : undefined;
+                    const delta = b.percentile !== undefined && b.previous ? b.percentile - b.previous.percentile : undefined;
+                    const state = consumeState(b, player.dps);
+                    const icons = [...(b.consumes?.used ?? []), ...b.potions];
+                    return (
+                      <tr key={b.fight}>
+                        <td>
+                          <a className="strong" href={wclUrl(raid.report, b.fight, player.source)} target="_blank" rel="noreferrer">
+                            {b.name}
+                          </a>
+                          <div className="muted small mono">
+                            {fmtTime(b.durationSec)}
+                            {b.topMedianDurationSec !== undefined && ` · ${fmtSigned(b.durationSec - b.topMedianDurationSec)}s vs top 10`}
                           </div>
-                        ) : (
-                          <span className="muted small">–</span>
-                        )}
-                      </td>
-                      <td className="num mono">{b.raidRank ? <span title={`${b.raidRank.rank} of ${b.raidRank.of} DPS players`}>#{b.raidRank.rank}</span> : <span className="muted">–</span>}</td>
-                      <td
-                        className="num"
-                        title={[b.previous && `Previous kill: ${fmt(b.previous.percentile)} (${date(b.previous.startTime)})`, b.bestPercentile !== undefined && `Best this tier: ${fmt(b.bestPercentile)}`].filter(Boolean).join('\n')}
-                      >
-                        <span className={`mono strong ${b.percentile !== undefined ? pctClass(b.percentile) : 'muted'}`}>{b.percentile !== undefined ? fmt(b.percentile) : '–'}</span>
-                        {delta !== undefined && Math.round(delta) !== 0 && <span className={`trend ${delta > 0 ? 'up' : 'down'}`}>{delta > 0 ? '▲' : '▼'}{fmt(Math.abs(delta))}</span>}
-                      </td>
-                      <td
-                        className={`cons-cell ${state.missing.length ? 'cell-bad' : state.half ? 'cell-half' : ''}`}
-                        title={[
-                          b.consumes ? `At the pull: ${b.consumes.used.map((u) => u.name).join(', ') || 'nothing'}` : 'Out of range at the pull',
-                          `Potions: ${b.potions.map((p) => p.name).join(', ') || 'none'}`,
-                          state.missing.length ? `Missing: ${state.missing.join(', ')}` : '',
-                          state.half ? 'Only one elixir' : '',
-                        ]
-                          .filter(Boolean)
-                          .join('\n')}
-                      >
-                        <span className="icon-row start">
-                          {icons.map((x, i) => (
-                            <img key={i} className="ic" src={itemIcon(x.icon ?? 'inv_misc_questionmark')} alt={x.name} />
-                          ))}
-                          {state.missing.length > 0 && <span className="miss-label">no {state.missing.join(', ')}</span>}
-                        </span>
-                      </td>
-                      <td className="num">
-                        <button disabled={!player.supported || loading} onClick={() => onOpen(b.fight)} title={player.supported ? '' : "This spec isn't supported yet"}>
-                          Analyze
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+                        </td>
+                        <td className="num mono strong">{fmt(b.dps)}</td>
+                        <td>
+                          {pct !== undefined ? (
+                            <div className="adoption wide">
+                              <div className="bar-track">
+                                <div className={`bar ${pct >= 95 ? 'good' : pct >= 80 ? 'neutral' : 'bad'}`} style={{ width: `${Math.min(100, pct)}%` }} />
+                              </div>
+                              <span className="mono small">{fmt(pct)}%</span>
+                            </div>
+                          ) : (
+                            <span className="muted small">–</span>
+                          )}
+                        </td>
+                        <td className="num mono">{b.raidRank ? <span title={`${b.raidRank.rank} of ${b.raidRank.of} DPS players`}>#{b.raidRank.rank}</span> : <span className="muted">–</span>}</td>
+                        <td
+                          className="num"
+                          title={[b.previous && `Previous kill: ${fmt(b.previous.percentile)} (${date(b.previous.startTime)})`, b.bestPercentile !== undefined && `Best this tier: ${fmt(b.bestPercentile)}`].filter(Boolean).join('\n')}
+                        >
+                          <span className={`mono strong ${b.percentile !== undefined ? pctClass(b.percentile) : 'muted'}`}>{b.percentile !== undefined ? fmt(b.percentile) : '–'}</span>
+                          {delta !== undefined && Math.round(delta) !== 0 && <span className={`trend ${delta > 0 ? 'up' : 'down'}`}>{delta > 0 ? '▲' : '▼'}{fmt(Math.abs(delta))}</span>}
+                        </td>
+                        <td
+                          className={`cons-cell ${state.missing.length ? 'cell-bad' : state.half ? 'cell-half' : ''}`}
+                          title={[
+                            b.consumes ? `At the pull: ${b.consumes.used.map((u) => u.name).join(', ') || 'nothing'}` : 'Out of range at the pull',
+                            `Potions: ${b.potions.map((p) => p.name).join(', ') || 'none'}`,
+                            state.missing.length ? `Missing: ${state.missing.join(', ')}` : '',
+                            state.half ? 'Only one elixir' : '',
+                          ]
+                            .filter(Boolean)
+                            .join('\n')}
+                        >
+                          <span className="icon-row start">
+                            {icons.map((x, i) => (
+                              <img key={i} className="ic" src={itemIcon(x.icon ?? 'inv_misc_questionmark')} alt={x.name} />
+                            ))}
+                            {state.missing.length > 0 && <span className="miss-label">no {state.missing.join(', ')}</span>}
+                          </span>
+                        </td>
+                        <td className="num">
+                          <button disabled={!player.supported || loading} onClick={() => onOpen(b.fight)} title={player.supported ? '' : "This spec isn't supported yet"}>
+                            Analyze
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="grid-2 even">
         {peers.players.length > 0 && player.dps && (

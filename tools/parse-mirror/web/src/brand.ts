@@ -11,6 +11,15 @@ export const SUPPORTED = [
   { className: 'Priest', specName: 'Shadow' },
 ];
 
+/** Healer specs: compared with healers from well-run raids, no sims. */
+export const HEALERS = [
+  { className: 'Priest', specName: 'Holy' },
+  { className: 'Priest', specName: 'Discipline' },
+  { className: 'Paladin', specName: 'Holy' },
+  { className: 'Shaman', specName: 'Restoration' },
+  { className: 'Druid', specName: 'Restoration' },
+];
+
 export const EXAMPLES = [
   {
     label: 'Nuttý · Fury · Rage Winterchill',
@@ -31,6 +40,11 @@ export const EXAMPLES = [
     label: 'Moonianlie · Shadow · Rage Winterchill',
     url: 'https://fresh.warcraftlogs.com/reports/nbfHKZ2Ax6JghkjD?fight=79&type=damage-done&source=5',
     icon: specIcon('Priest', 'Shadow'),
+  },
+  {
+    label: 'Sanctalux · Holy Paladin · Bloodboil',
+    url: 'https://fresh.warcraftlogs.com/reports/nbfHKZ2Ax6JghkjD?fight=64&type=healing&source=13',
+    icon: specIcon('Paladin', 'Holy'),
   },
   {
     label: 'Darkfadè · whole raid',

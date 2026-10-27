@@ -116,6 +116,33 @@ export interface WclRankingsResponse {
   rankings: WclRanking[];
 }
 
+/** A whole raid's kill in the speed/execution rankings. */
+export interface WclRaidRanking {
+  reportID: string;
+  fightID: number;
+  /** Pull and report start, epoch ms: startTime - reportStart is the fight's start in the report. */
+  startTime: number;
+  reportStart: number;
+  duration: number;
+  /** Raid-wide damage taken over the kill. */
+  damageTaken: number;
+  deaths: number;
+  tanks: number;
+  healers: number;
+  melee: number;
+  ranged: number;
+  size: number;
+  guildName?: string;
+  serverName: string;
+  regionName: string;
+}
+
+export interface WclRaidRankingsResponse {
+  count: number;
+  hasMorePages: boolean;
+  rankings: WclRaidRanking[];
+}
+
 export interface WclParse {
   encounterID: number;
   encounterName: string;
