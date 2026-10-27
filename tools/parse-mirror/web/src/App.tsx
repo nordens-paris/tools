@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import type { AnalysisResult, GuildSummary, HealerAnalysis, HealerTab, ProgressSummary, RaidSummary, SimResult } from '../../shared/types.ts';
+import type { AnalysisResult, GuildSummary, HealerAnalysis, HealerTab, ProgressSummary, RaidSummary, SimResult, TankAnalysis, TankTab } from '../../shared/types.ts';
 import { ApiError, analyze, getGuild, getProgress, getRaid, runSim } from './api.ts';
 import { KEY_CHANGED, openKeyForm } from './apiKey.ts';
 import { runBrowserSims } from './browserSims.ts';
@@ -17,6 +17,7 @@ import { FixFirst } from './components/FixFirst.tsx';
 import { Gear } from './components/Gear.tsx';
 import { GuildOverview } from './components/GuildOverview.tsx';
 import { HEALER_TABS, HealerPage } from './components/healer/HealerPage.tsx';
+import { TANK_TABS, TankPage } from './components/tank/TankPage.tsx';
 import { Landing } from './components/Landing.tsx';
 import { LogSearch } from './components/LogSearch.tsx';
 import { MetricTable } from './components/MetricTable.tsx';
@@ -34,12 +35,14 @@ import { parseRoute, rememberLast, routeUrl, type Route } from './route.ts';
 const TABS = ['Overview', 'Rotation', 'Cooldowns', 'Consumes', 'Gear', 'Sim', 'Players'] as const;
 type Tab = (typeof TABS)[number];
 const asTab = (t?: string): Tab => (TABS as readonly string[]).includes(t ?? '') ? (t as Tab) : 'Overview';
-const asHealerTab = (t?: string): HealerTab => (HEALER_TABS as string[]).includes(t ?? '') ? (t as HealerTab) : 'Overview';
+/** Healer and tank analyses: no sims, their own tabs. */
+type RoleAnalysis = HealerAnalysis | TankAnalysis;
+const roleTabs = (x: RoleAnalysis): string[] => (x.kind === 'healer' ? HEALER_TABS : TANK_TABS);
 
 export function App() {
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.search));
   const [analysis, setAnalysis] = useState<AnalysisResult>();
-  const [healer, setHealer] = useState<HealerAnalysis>();
+  const [role, setRole] = useState<RoleAnalysis>();
   const [raid, setRaid] = useState<RaidSummary>();
   const [guild, setGuild] = useState<GuildSummary>();
   const [progress, setProgress] = useState<ProgressSummary>();
@@ -59,23 +62,23 @@ export function App() {
   // Fights opened this session, so back/forward doesn't re-run the analysis and sims.
   const fightCache = useRef(new Map<string, { analysis: AnalysisResult; sim?: SimResult }>());
   const fightKey = (r: Extract<Route, { view: 'analysis' }>) => `${r.report}:${r.fight}:${r.source}:${r.peers ? 'peers' : 'top'}`;
-  // Healer analyses have no sims and no "top/peers" toggle: one per fight and player.
-  const healerCache = useRef(new Map<string, HealerAnalysis>());
-  const healerKey = (r: Extract<Route, { view: 'analysis' }>) => `${r.report}:${r.fight}:${r.source}`;
-  const matchesHealer = (x: HealerAnalysis | undefined, r: Route): x is HealerAnalysis =>
+  // Healer and tank analyses have no sims and no "top/peers" toggle: one per fight and player.
+  const roleCache = useRef(new Map<string, RoleAnalysis>());
+  const roleKey = (r: Extract<Route, { view: 'analysis' }>) => `${r.report}:${r.fight}:${r.source}`;
+  const matchesRole = (x: RoleAnalysis | undefined, r: Route): x is RoleAnalysis =>
     !!x && r.view === 'analysis' && x.report === r.report && x.fight === r.fight && x.you.source === r.source;
   /** Whether an analysis is the one a route asks for (same fight, player and comparison group). */
   const matches = (x: AnalysisResult | undefined, r: Route): x is AnalysisResult =>
     !!x && r.view === 'analysis' && x.you.report === r.report && x.you.fight === r.fight && x.you.source === r.source && x.comparison.mode === (r.peers ? 'peers' : 'top');
   const tab = route.view === 'analysis' ? asTab(route.tab) : 'Overview';
-  const healerTab = route.view === 'analysis' ? asHealerTab(route.tab) : 'Overview';
+  const roleTab = (x: RoleAnalysis) => (route.view === 'analysis' && roleTabs(x).includes(route.tab ?? '') ? route.tab! : 'Overview');
 
   useEffect(() => {
     const title =
       route.view === 'analysis' && analysis
         ? `${analysis.you.name} · ${analysis.encounter.name}`
-        : route.view === 'analysis' && healer
-          ? `${healer.you.name} · ${healer.encounter.name}`
+        : route.view === 'analysis' && role
+          ? `${role.you.name} · ${role.encounter.name}`
           : route.view === 'raid' && raid
           ? `${raid.player.name} · ${raid.title}`
           : route.view === 'progress' && progress
@@ -85,7 +88,7 @@ export function App() {
               : '';
     document.title = title ? `${title} · ${APP_NAME}` : APP_NAME;
     if (title) rememberLast(route, title);
-  }, [route, analysis, healer, raid, guild, progress]);
+  }, [route, analysis, role, raid, guild, progress]);
 
   const startSim = async (id: string, token = latest.current) => {
     setSimLoading(true);
@@ -124,12 +127,12 @@ export function App() {
       (r.view === 'raid' && raid?.report === r.report && raid.player.source === r.source) ||
       (r.view === 'progress' && progress?.report === r.report && progress.player.source === r.source) ||
       matches(analysis, r) ||
-      matchesHealer(healer, r);
+      matchesRole(role, r);
     if (loaded && !force) return;
-    const cachedHealer = r.view === 'analysis' ? healerCache.current.get(healerKey(r)) : undefined;
-    if (cachedHealer && !force) {
+    const cachedRole = r.view === 'analysis' ? roleCache.current.get(roleKey(r)) : undefined;
+    if (cachedRole && !force) {
       ++latest.current;
-      setHealer(cachedHealer);
+      setRole(cachedRole);
       setLoading(false);
       return;
     }
@@ -165,9 +168,9 @@ export function App() {
         setSimLoading(false);
         const result = await analyze(r.report, r.fight, r.source, r.peers ? 'peers' : 'top');
         if (token !== latest.current) return;
-        if (result.kind === 'healer') {
-          healerCache.current.set(healerKey(r), result);
-          setHealer(result);
+        if (result.kind === 'healer' || result.kind === 'tank') {
+          roleCache.current.set(roleKey(r), result);
+          setRole(result);
           return;
         }
         fightCache.current.set(fightKey(r), { analysis: result });
@@ -192,7 +195,7 @@ export function App() {
     window.scrollTo({ top: 0 });
     void load(r);
   };
-  const setTab = (t: Tab | HealerTab) => {
+  const setTab = (t: Tab | HealerTab | TankTab) => {
     if (route.view !== 'analysis') return;
     const r = { ...route, tab: t };
     window.history.replaceState(null, '', routeUrl(r));
@@ -227,7 +230,9 @@ export function App() {
 
   // Show data only when it belongs to the current route (a new route may still be loading).
   const a = matches(analysis, route) ? analysis : undefined;
-  const h = matchesHealer(healer, route) ? healer : undefined;
+  const rv = matchesRole(role, route) ? role : undefined;
+  const h = rv?.kind === 'healer' ? rv : undefined;
+  const tk = rv?.kind === 'tank' ? rv : undefined;
   const raidShown = route.view === 'raid' && raid?.report === route.report && raid.player.source === route.source ? raid : undefined;
   const guildShown = route.view === 'guild' && guild?.report === route.report ? guild : undefined;
   const progressShown = route.view === 'progress' && progress?.report === route.report && progress.player.source === route.source ? progress : undefined;
@@ -244,13 +249,13 @@ export function App() {
               <small>{GUILD_NAME}</small>
             </span>
           </button>
-          {h && (
+          {rv && (
             <nav className="tabs" aria-label="Report sections">
-              {HEALER_TABS.map((t) => (
-                <button key={t} aria-current={t === healerTab ? 'page' : undefined} onClick={() => setTab(t)}>
+              {roleTabs(rv).map((t) => (
+                <button key={t} aria-current={t === roleTab(rv) ? 'page' : undefined} onClick={() => setTab(t as HealerTab | TankTab)}>
                   {t}
-                  {t === 'Overview' && h.findings.length > 0 && <span className="count">{h.findings.length}</span>}
-                  {t === 'Deaths' && h.deaths.length > 0 && <span className="count">{h.deaths.length}</span>}
+                  {t === 'Overview' && rv.findings.length > 0 && <span className="count">{rv.findings.length}</span>}
+                  {t === 'Deaths' && h && h.deaths.length > 0 && <span className="count">{h.deaths.length}</span>}
                 </button>
               ))}
             </nav>
@@ -337,10 +342,22 @@ export function App() {
           <GroupContext.Provider value={{ short: 'Peer', players: 'peers' }}>
             <HealerPage
               analysis={h}
-              tab={healerTab}
+              tab={roleTab(h) as HealerTab}
               onTab={setTab}
               onRaid={() => openRaid(h.report, h.you.source)}
               picker={<BossPicker report={h.report} fight={h.fight} source={h.you.source} loading={loading} onChange={(fight) => go({ ...route, fight })} />}
+            />
+          </GroupContext.Provider>
+        )}
+
+        {tk && route.view === 'analysis' && (
+          <GroupContext.Provider value={{ short: 'Peer', players: 'peers' }}>
+            <TankPage
+              analysis={tk}
+              tab={roleTab(tk) as TankTab}
+              onTab={setTab}
+              onRaid={() => openRaid(tk.report, tk.you.source)}
+              picker={<BossPicker report={tk.report} fight={tk.fight} source={tk.you.source} loading={loading} onChange={(fight) => go({ ...route, fight })} />}
             />
           </GroupContext.Provider>
         )}

@@ -15,7 +15,8 @@ Scripts, der arbejder på tværs af mange spillere (`sim-vs-log`, `crit-unbiased
 |---|---|
 | `build-wowsims.mjs <klon> [--wasm-only]` | Lægger `wowsims-patches/` ind i en tbc-new-klon og bygger WebAssembly-simmen til `web/public/sim/` og `bin/wowsimcli` |
 | `screenshots.ts [url]` | Tager skærmbillederne til README'en med eksempel-loggene (kræver `npm run dev` og Chrome/Edge) |
-| `extract-wowsims-data.mjs <klon>` | Henter navne, ikoner, talenttræer, procs og APL'er til `data/wowsims/` (`npm run extract-wowsims`) |
+| `extract-wowsims-data.mjs <klon> [--only=fil,fil]` | Henter navne, ikoner, talenttræer, procs, APL'er og tank-stats til `data/wowsims/` (`npm run extract-wowsims`); `--only` skriver kun de nævnte filer |
+| `check-threat.ts <klon>` | Tjekker tank-threat-værdierne i `server/specs/tanks.ts` mod WoWSims-kilden |
 
 ## Hverdagsværktøjer
 
@@ -31,6 +32,8 @@ Scripts, der arbejder på tværs af mange spillere (`sim-vs-log`, `crit-unbiased
 | `healer-check.ts <rapport>:<fight> [...] [--json fil]` | Healer-tallene for alle healere i et eller flere kills, én linje pr. healer, plus dødsfald |
 | `healer-peers.ts <rapport>:<fight> [navn ...]` | Hvilke peers hver healer får, fra hvilke raids, og hvad det kostede i kald |
 | `healer-analyze.ts <rapport>:<fight> <navn>` | Hele healer-analysen som tekst: bedømte tal, kontekst, spells og fund |
+| `tank-check.ts <rapport>:<fight>[:<navn>] [...]` | Tank-tallene for alle tanks (eller én) i et eller flere kills |
+| `tank-analyze.ts <rapport>:<fight> <navn>` | Hele tank-analysen som tekst: peers, bedømte tal, kontekst og fund |
 
 ## Sim-nøjagtighed
 

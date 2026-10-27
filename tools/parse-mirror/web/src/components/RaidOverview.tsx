@@ -5,6 +5,7 @@ import { fmt, fmtSigned, fmtTime, itemIcon, wclReportUrl, wclUrl } from '../form
 import { Hint } from './Hint.tsx';
 import { GearChips, PlayerName, classIcon, upClass } from './RaidChecks.tsx';
 import { HealerBossTable, HealerKeyNote, HealerRaidKpis } from './healer/HealerRaid.tsx';
+import { TankBossTable, TankRaidKpis } from './tank/TankRaid.tsx';
 
 const median = (xs: number[]) => {
   const s = [...xs].sort((a, b) => a - b);
@@ -47,7 +48,9 @@ interface Props {
 export function RaidOverview({ raid, onOpen, onProgress, onGuild, loading }: Props) {
   const { player, bosses, peers } = raid;
   // A bare class icon ("Priest") gets the spec they healed as, when they healed.
-  const [className, specName = ''] = (player.icon.includes('-') ? player.icon : (bosses.find((b) => b.healing)?.healing?.icon ?? player.icon)).split('-');
+  const [className, specName = ''] = (
+    player.icon.includes('-') ? player.icon : (bosses.find((b) => b.tanking)?.tanking?.icon ?? bosses.find((b) => b.healing)?.healing?.icon ?? player.icon)
+  ).split('-');
   const ranked = bosses.filter((b) => b.percentile !== undefined).map((b) => b.percentile!);
   const vsTop = bosses.filter((b) => b.topMedianDps).map((b) => (b.dps / b.topMedianDps!) * 100);
   const deltas = bosses.filter((b) => b.percentile !== undefined && b.previous).map((b) => b.percentile! - b.previous!.percentile);
@@ -105,7 +108,9 @@ export function RaidOverview({ raid, onOpen, onProgress, onGuild, loading }: Pro
         </div>
       </section>
 
-      {player.healer ? (
+      {player.tank ? (
+        <TankRaidKpis raid={raid} />
+      ) : player.healer ? (
         <HealerRaidKpis raid={raid} />
       ) : (
         <section className="kpis four">
@@ -159,7 +164,9 @@ export function RaidOverview({ raid, onOpen, onProgress, onGuild, loading }: Pro
 
       {player.healerLocked && <HealerKeyNote />}
 
-      {player.healer ? (
+      {player.tank ? (
+        <TankBossTable raid={raid} onOpen={onOpen} loading={loading} />
+      ) : player.healer ? (
         <HealerBossTable raid={raid} onOpen={onOpen} loading={loading} />
       ) : (
         <section className="panel">

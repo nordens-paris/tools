@@ -32,7 +32,7 @@ export function rowTone(r: HealerRow) {
 }
 
 /** You vs the peers: grey bar = peer range, line = median, dot = you. */
-export function RowTable({ title, subtitle, rows, peers }: { title: string; subtitle?: string; rows: HealerRow[]; peers: HealerAnalysis['peers'] }) {
+export function RowTable({ title, subtitle, rows, peers }: { title: string; subtitle?: string; rows: HealerRow[]; peers: { name: string }[] }) {
   if (!rows.length) return null;
   return (
     <section className="panel">

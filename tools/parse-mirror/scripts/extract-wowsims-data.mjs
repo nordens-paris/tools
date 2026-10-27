@@ -2,7 +2,8 @@
 // items, enchants, gems, consumables) plus spec presets, from a checkout of
 // https://github.com/wowsims/tbc-new (MIT licensed).
 //
-// Usage: node scripts/extract-wowsims-data.mjs <path-to-tbc-new-checkout>
+// Usage: node scripts/extract-wowsims-data.mjs <path-to-tbc-new-checkout> [--only=file,file]
+// --only writes just those outputs (e.g. --only=tank-stats.json), leaving the rest as they are.
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -12,6 +13,8 @@ if (!src) {
   process.exit(1);
 }
 const out = path.resolve('data/wowsims');
+const only = process.argv.find((a) => a.startsWith('--only='))?.slice(7).split(',');
+const wanted = (name) => !only || only.includes(name);
 fs.mkdirSync(out, { recursive: true });
 
 const db = JSON.parse(fs.readFileSync(path.join(src, 'assets/database/db.json'), 'utf8'));
@@ -47,15 +50,41 @@ for (const it of db.items) {
   }
 }
 
-const write = (name, data) => fs.writeFileSync(path.join(out, name), JSON.stringify(data));
+// Stats tanks are judged on (WoWSims' Stat enum): what each item, gem and enchant adds, for the
+// tank gear check (defense for crit immunity, block and avoidance, threat stats).
+const TANK_STATS = { 0: 'str', 1: 'agi', 2: 'sta', 17: 'ap', 19: 'feralAp', 20: 'hit', 21: 'crit', 24: 'exp', 25: 'def', 26: 'block', 27: 'blockValue', 28: 'dodge', 29: 'parry', 31: 'armor', 32: 'bonusArmor', 5: 'spell', 9: 'holy' };
+const pickStats = (stats) => {
+  const out = {};
+  for (const [i, key] of Object.entries(TANK_STATS)) {
+    const v = Array.isArray(stats) ? stats[i] : stats?.[i];
+    if (v) out[key] = v;
+  }
+  return Object.keys(out).length ? out : undefined;
+};
+const tankStats = { items: {}, gems: {}, enchants: {} };
+for (const it of db.items) {
+  const st = pickStats(it.scalingOptions?.['0']?.stats);
+  if (st) tankStats.items[it.id] = st;
+}
+for (const g of db.gems) {
+  const st = pickStats(g.stats);
+  if (st) tankStats.gems[g.id] = st;
+}
+for (const e of db.enchants) {
+  const st = pickStats(e.stats);
+  if (st) tankStats.enchants[e.effectId] = st;
+}
+
+const write = (name, data) => wanted(name) && fs.writeFileSync(path.join(out, name), JSON.stringify(data));
 write('procs.json', procs);
 write('items.json', items);
 write('enchants.json', enchants);
 write('gems.json', gems);
 write('consumables.json', consumables);
 write('spell-names.json', spellNames);
+write('tank-stats.json', tankStats);
 
-const copy = (from, to) => fs.copyFileSync(path.join(src, from), path.join(out, to));
+const copy = (from, to) => wanted(to) && fs.copyFileSync(path.join(src, from), path.join(out, to));
 copy('ui/specs/warrior/dps/apls/fury.apl.json', 'warrior-fury.apl.json');
 copy('ui/specs/warrior/dps/apls/arms.apl.json', 'warrior-arms.apl.json');
 copy('ui/specs/warlock/dps/apls/destruction.apl.json', 'warlock-destruction.apl.json');
@@ -68,6 +97,7 @@ copy('ui/specs/warlock/dps/apls/demonology.apl.json', 'warlock-demonology.apl.js
 // Talent trees (talent order and rank spell IDs), to turn armory talents into talent strings.
 fs.mkdirSync(path.join(out, 'talents'), { recursive: true });
 for (const cls of ['warrior', 'warlock', 'mage', 'priest', 'rogue', 'hunter', 'shaman', 'druid', 'paladin']) {
+  if (!wanted(`talents/${cls}.json`)) continue;
   const file = path.join(src, `ui/sim/talents/trees/${cls}.json`);
   if (!fs.existsSync(file)) continue;
   const trees = JSON.parse(fs.readFileSync(file, 'utf8')).map((tree) => ({

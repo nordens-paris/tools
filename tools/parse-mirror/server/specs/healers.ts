@@ -1,5 +1,6 @@
 // Healer specs. Healers aren't simmed, so this is only what the healer analysis needs: how to
 // recognise the spec, its Warcraft Logs ranking ids, and the spells it keeps up on others.
+import { TANK_ICONS } from './tanks.ts';
 
 export interface HealerSpec {
   /** Warcraft Logs actor icon, e.g. "Priest-Holy". */
@@ -117,4 +118,5 @@ export const DISPELS = new Set([
 /** HoTs whose direct part (if any) isn't the point; used to find the target of the last direct heal. */
 export const HOTS = new Set(['Renew', 'Rejuvenation', 'Lifebloom', 'Regrowth']);
 
-export const TANK_ICON = /^(Warrior-Protection|Paladin-Protection|Druid-Guardian)$/;
+/** Tank-spec icons (see tanks.ts), for working out how much of a healer's healing went to tanks. */
+export const TANK_ICON = { test: (icon: string) => TANK_ICONS.has(icon) };

@@ -25,6 +25,10 @@ export interface LogEvent extends WclEvent {
   resourceChange?: number;
   resourceChangeType?: number;
   waste?: number;
+  hitType?: number;
+  unmitigatedAmount?: number;
+  blocked?: number;
+  armor?: number;
 }
 
 export interface Mana {

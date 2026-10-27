@@ -296,6 +296,8 @@ export interface RaidBoss {
   debuffs: { name: string; icon: string; uptime: number; target: number }[];
   /** The player's healing on this kill, when they healed. */
   healing?: HealerRaidRow;
+  /** The player's tanking on this kill, when they tanked. */
+  tanking?: TankRaidRow;
 }
 
 export interface GuildSummary {
@@ -371,8 +373,9 @@ export interface RaidSummary {
   report: string;
   title: string;
   /** healer: they healed on most kills; the boss table then shows healing instead of DPS. */
-  /** healerLocked: may be a healer, but healer views need the visitor's own key on this site. */
-  player: { name: string; server?: string; icon: string; source: number; supported: boolean; dps: boolean; healer?: boolean; healerLocked?: boolean };
+  /** healer / tank: they healed or tanked on most kills. healerLocked: may be a healer or tank, but
+   * those views need the visitor's own key on this site. */
+  player: { name: string; server?: string; icon: string; source: number; supported: boolean; dps: boolean; healer?: boolean; tank?: boolean; healerLocked?: boolean };
   bosses: RaidBoss[];
   /** Who the player is compared with in their own raid: the same class, or else the top DPS of the same role. */
   peers: { basis: 'class' | 'role'; players: { source: number; name: string; icon: string }[] };
@@ -627,4 +630,177 @@ export interface HealerRaidBoss {
 export interface HealerRaidSummary {
   report: string;
   bosses: HealerRaidBoss[];
+}
+
+// ---- Tanks -----------------------------------------------------------------------------------
+
+/** Main tank: most of the boss's swings; off-tank: some; adds: mostly other enemies. */
+export type TankRole = 'main' | 'off' | 'adds';
+
+/** Outcomes of the swings a tank took from the enemy they tanked most. */
+export interface TankSwings {
+  total: number;
+  hit: number;
+  crit: number;
+  crush: number;
+  block: number;
+  dodge: number;
+  parry: number;
+  miss: number;
+  /** Miss + dodge + parry, as a share of swings. */
+  avoided: number;
+  /** Damage per swing that landed, and what it would have been before armor and block. */
+  damagePerHit: number;
+  unmitigatedPerHit: number;
+}
+
+export interface TankMitigationBuff {
+  name: string;
+  icon?: string;
+  uptime: number;
+  /** Share of the swings taken while it was up. */
+  swingsCovered: number;
+  /** Crushing blows taken while it was up / down. */
+  crushesCovered: number;
+  crushesUncovered: number;
+}
+
+export interface TankGear {
+  /** Defense skill (350 base + rating + talents) and the crit reduction it gives. */
+  defense: number;
+  critReduction: number;
+  /** Crit immune by gear (crits taken in the log say the same, or not). */
+  critImmune: boolean;
+  /** Share of the gear's stat budget on mitigation stats (stamina, armor, defense, avoidance, block). */
+  mitigationLean: number;
+  stats: Record<string, number>;
+}
+
+export interface TankMetrics {
+  source: number;
+  name: string;
+  icon: string;
+  specLabel: string;
+  className: string;
+  role: TankRole;
+  /** Who they tanked most (boss or add), and their share of that enemy's swings on players. */
+  tanked: string;
+  swingShare: number;
+  survivability: {
+    armor: number;
+    /** Physical damage reduction from armor against a level 73 boss. */
+    armorReduction: number;
+    maxHp: number;
+    maxHpFrom: 'damage' | 'stamina';
+    /** Health / (1 - armor reduction). */
+    effectiveHealth: number;
+    stamina: number;
+  };
+  gear?: TankGear;
+  swings: TankSwings;
+  mitigation: TankMitigationBuff[];
+  bossDebuffs: { name: string; icon?: string; uptime: number }[];
+  /** Share of the fight in the tanking stance/form/aura, and in Cat Form (druids). */
+  tankAuraUptime: number;
+  catFormUptime?: number;
+  cooldowns: { name: string; icon?: string; atSec: number; hpPct?: number }[];
+  threatDrops: { name: string; atSec: number }[];
+  taunts: { name: string; atSec: number; target?: string }[];
+  threat: {
+    tps: number;
+    /** Threat per second over the first 5, 10 and 20 seconds. */
+    opener: [number, number, number];
+    byAbility: { name: string; icon?: string; share: number }[];
+  };
+  /** The enemy they tanked: when it first swung, and how much it swung at players who aren't tanks.
+   * Missing for peers: only your own raid's data shows who else the enemy hit. */
+  holding?: { firstSwingSec?: number; firstSwingOnYou: boolean; swingsOnNonTanks: number; nonTankShare: number };
+  dtps: number;
+  nearDeaths: number;
+  died: boolean;
+}
+
+export interface TankFightSummary {
+  fight: number;
+  encounter: { id: number; name: string };
+  durationSec: number;
+  tanks: TankMetrics[];
+}
+
+export type TankTab = 'Overview' | 'Survivability' | 'Swings' | 'Mitigation' | 'Threat' | 'Cooldowns' | 'Peers';
+
+export interface TankFinding {
+  severity: Severity;
+  tab: TankTab;
+  title: string;
+  detail: string;
+}
+
+export interface TankPeer {
+  name: string;
+  server?: string;
+  region?: string;
+  report: string;
+  fight: number;
+  raidRanking: { metric: 'execution' | 'speed'; rank: number; guild?: string };
+  raid: { tanks: number; healers: number; deaths: number; durationSec: number };
+  /** Share of the boss's melee damage on players that this tank took. */
+  swingShare: number;
+}
+
+export interface TankPeerGroup {
+  match: 'close' | 'loose' | 'role' | 'none';
+  description: string;
+  you: { role: TankRole; tanks: number; durationSec: number };
+  peers: TankPeer[];
+  raidsChecked: number;
+}
+
+export interface TankAnalysis {
+  kind: 'tank';
+  id: string;
+  generatedAt: string;
+  report: string;
+  fight: number;
+  encounter: { id: number; name: string };
+  durationSec: number;
+  kill: boolean;
+  you: TankMetrics;
+  peers: (TankMetrics & { peer: TankPeer; durationSec: number })[];
+  group: TankPeerGroup;
+  /** Compared and judged. */
+  judged: HealerRow[];
+  /** Depends on the raid and the fight: shown, not judged. */
+  context: HealerRow[];
+  findings: TankFinding[];
+  /** Other tanks in your raid on this kill (name, role, share). */
+  raidTanks: { name: string; icon: string; role: TankRole; swingShare: number }[];
+  warnings: string[];
+}
+
+/** One tank on one kill, for the raid pages (no peers). */
+export interface TankRaidRow {
+  source: number;
+  name: string;
+  icon: string;
+  specLabel: string;
+  role: TankRole;
+  tanked: string;
+  swingShare: number;
+  effectiveHealth: number;
+  avoided: number;
+  crushes: number;
+  swings: number;
+  /** Share of swings taken under Holy Shield / Shield Block (warriors, paladins). */
+  coverage?: number;
+  tps: number;
+  opener: number;
+  cooldowns: number;
+  threatDrops: number;
+  died: boolean;
+}
+
+export interface TankRaidSummary {
+  report: string;
+  bosses: { fight: number; name: string; durationSec: number; rows: TankRaidRow[] }[];
 }

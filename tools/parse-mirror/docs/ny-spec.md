@@ -77,3 +77,11 @@ Healere simmes ikke, så en healer-spec er kun en post i `server/specs/healers.t
 (`signature`, som afgør spec'en for et rent klasse-ikon som "Priest"), og de buffs/HoTs den holder
 på andre (`upkeep`). Tjek med `scripts/healer-check.ts` på et kill, og med `scripts/healer-peers.ts`,
 at der findes peers.
+
+## Tank-specs
+
+Tanks simmes ikke endnu. En tank-spec er en post i `server/specs/tanks.ts`: ikonerne, Warcraft Logs
+klasse- og spec-id, tank-auraen (stance/form/Righteous Fury) med threat-multiplier, talent-multiplier,
+spellenes threat (`mult`, `flat`) med WoWSims-kildefil og den tekst, `scripts/check-threat.ts` leder
+efter, samt mitigation-buffs, debuffs på bossen, cooldowns, threat-drops og taunts. Tjek med
+`scripts/tank-check.ts` og `scripts/tank-analyze.ts`.

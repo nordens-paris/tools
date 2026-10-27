@@ -11,6 +11,13 @@ export const SUPPORTED = [
   { className: 'Priest', specName: 'Shadow' },
 ];
 
+/** Tank specs: compared with tanks from well-run raids, no sims yet. */
+export const TANKS = [
+  { className: 'Warrior', specName: 'Protection' },
+  { className: 'Paladin', specName: 'Protection' },
+  { className: 'Druid', specName: 'Guardian' },
+];
+
 /** Healer specs: compared with healers from well-run raids, no sims. */
 export const HEALERS = [
   { className: 'Priest', specName: 'Holy' },
@@ -45,6 +52,11 @@ export const EXAMPLES = [
     label: 'Sanctalux · Holy Paladin · Bloodboil',
     url: 'https://fresh.warcraftlogs.com/reports/nbfHKZ2Ax6JghkjD?fight=64&type=healing&source=13',
     icon: specIcon('Paladin', 'Holy'),
+  },
+  {
+    label: 'Storbøf · Bear tank · Naj’entus',
+    url: 'https://fresh.warcraftlogs.com/reports/nbfHKZ2Ax6JghkjD?fight=14&type=damage-taken&source=4',
+    icon: specIcon('Druid', 'Guardian'),
   },
   {
     label: 'Darkfadè · whole raid',

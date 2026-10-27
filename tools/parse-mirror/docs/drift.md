@@ -71,7 +71,7 @@ Kommandolinje-simmen (`bin/wowsimcli`) bruges af dev-scripts og hvis serveren sk
 |---|---|
 | `WCL_API_KEY` | Serverens Warcraft Logs v1-nøgle (fra profilen på fresh.warcraftlogs.com, "V1 Client Key"). Valgfri: uden den skal besøgende indtaste deres egen |
 | `WCL_CONCURRENCY` | Kald til Warcraft Logs på én gang (standard 8). Hvert tager omkring 0,4 s, så det bestemmer hastigheden; minut-grænsen gælder stadig |
-| `HEALERS_NEED_OWN_KEY` | `true`: healer-analyser og healer-panelet kører kun med den besøgendes egen nøgle, så de ikke bruger af serverens timebudget. Sat i `render.yaml`; lokalt er den fra |
+| `ROLES_NEED_OWN_KEY` | `true`: healer- og tank-analyser og deres paneler kører kun med den besøgendes egen nøgle, så de ikke bruger af serverens timebudget. Sat i `render.yaml`; lokalt er den fra. Det gamle navn `HEALERS_NEED_OWN_KEY` virker også |
 | `SIM_MODE` | `browser` (standard) eller `cli` (WoWSims på serveren; kræver `WOWSIMS_CLI`) |
 | `GAME` | Spilprofil i `server/game.ts`: `tbc-anniversary` eller `forever` (pladsholder) |
 | `WCL_HOST` | Overstyrer profilens Warcraft Logs-side |
@@ -168,7 +168,7 @@ Sæt [Caddy](https://caddyserver.com) foran til HTTPS (`reverse_proxy localhost:
 ## Drift
 
 - **Kvote:** serverens Warcraft Logs-nøgle har et timebudget (3.600 point). En analyse koster
-  omkring 30 kald første gang, en healer-analyse 50–100 (peers deles af alle healere med samme spec
+  omkring 30 kald første gang, en healer- eller tank-analyse 30–110 (peers deles af alle med samme spec
   på samme boss); gentagne visninger kommer fra cachen. Grænsen pr. besøgende
   (`VISITOR_LOOKUPS_PER_HOUR`) beskytter budgettet. Klik ikke "Use New Limits" på Warcraft Logs;
   det sænker budgettet til 1.000.
