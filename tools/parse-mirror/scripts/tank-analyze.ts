@@ -11,7 +11,7 @@ const actor = (await client.fights(report)).friendlies.find((a) => a.name === na
 if (!actor) throw new Error(`${name} not in report`);
 const before = client.quota().requestsLastHour;
 const t0 = Date.now();
-const a = await analyzeTank(client, report, Number(fight), actor.id, (m) => console.log('  ...', m));
+const { analysis: a } = await analyzeTank(client, report, Number(fight), actor.id, (m) => console.log('  ...', m));
 console.log(`\n${a.you.name} (${a.you.specLabel}, ${a.you.role}) on ${a.encounter.name}: ${client.quota().requestsLastHour - before} requests, ${((Date.now() - t0) / 1000).toFixed(1)} s`);
 console.log(`Peers (${a.group.match}): ${a.peers.map((p) => `${p.name} (${p.peer.raidRanking.metric} #${p.peer.raidRanking.rank}, ${Math.round(p.peer.swingShare * 100)}%)`).join(', ')}\n  ${a.group.description}`);
 console.log(`Other tanks in your raid: ${a.raidTanks.map((t) => `${t.name} ${t.role} ${Math.round(t.swingShare * 100)}%`).join(', ') || '-'}`);

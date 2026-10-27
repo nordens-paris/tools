@@ -34,6 +34,8 @@ Scripts, der arbejder på tværs af mange spillere (`sim-vs-log`, `crit-unbiased
 | `healer-analyze.ts <rapport>:<fight> <navn>` | Hele healer-analysen som tekst: bedømte tal, kontekst, spells og fund |
 | `tank-check.ts <rapport>:<fight>[:<navn>] [...]` | Tank-tallene for alle tanks (eller én) i et eller flere kills |
 | `tank-analyze.ts <rapport>:<fight> <navn>` | Hele tank-analysen som tekst: peers, bedømte tal, kontekst og fund |
+| `role-sweep.ts <rapport> [...]` | Healer- og tank-tallene for alle healere og tanks på alle boss-kills i rapporterne, med tjek for NaN, nedbrud og tal uden for deres grænser (fx armor over 75 %) |
+| `tank-sim.ts <rapport>:<fight> <navn> [iterationer]` | Tank-simmen med kommandolinje-simmen (`WOWSIMS_CLI`): bossen, opener-dommen, threat og skade taget mod simmen for dig og peers, og gear-byt |
 
 ## Sim-nøjagtighed
 

@@ -2,7 +2,7 @@
 import type { ConsumeUse } from '../../shared/types.ts';
 import { SIM_SLOT_ORDER, type PlayerFightRaw } from '../analysis/collect.ts';
 import type { DetectedConsumes } from '../data/consumes.ts';
-import { loadJson } from '../data/db.ts';
+import { itemInfo, loadJson } from '../data/db.ts';
 import { baseEncounterId, game } from '../game.ts';
 import { talentSplit, type SpecConfig } from '../specs/types.ts';
 import type { WclGear } from '../wcl/types.ts';
@@ -64,6 +64,9 @@ export function setupFromRaw(raw: PlayerFightRaw, spec: SpecConfig): SimPlayerSe
     },
   };
 }
+
+/** Gear item IDs the sim leaves out because WoWSims doesn't have them. */
+export const unknownItems = (gear: (WclGear | undefined)[]) => SIM_SLOT_ORDER.map((i) => gear[i]?.id).filter((id): id is number => !!id && !itemInfo(id));
 
 /** Logs only have points per tree, so pick the preset with the closest split. */
 export function closestTalentPreset(spec: SpecConfig, split: [number, number, number]): string {
@@ -153,6 +156,13 @@ function loadRotation(spec: SpecConfig, aplFile: string, timing: SimPlayerSetup[
   return apl;
 }
 
+/** The boss's melee: seconds between swings per weapon (before slows) and WoWSims' minimum base damage. */
+export interface BossMelee {
+  swingSpeed: number;
+  dualWield: boolean;
+  minBaseDamage: number;
+}
+
 export function buildRequest(opts: {
   spec: SpecConfig;
   player: SimPlayerSetup;
@@ -160,13 +170,16 @@ export function buildRequest(opts: {
   durationSec: number;
   encounter: { id: number; name: string; executeProportion?: number };
   iterations: number;
+  /** Tank sims: the player tanks the boss, which swings like it did in the log (see sim/tank.ts). */
+  tank?: BossMelee;
 }) {
   const { spec, player, env, encounter } = opts;
   const execute20 = encounter.executeProportion ?? 0.2;
 
   const items = SIM_SLOT_ORDER.map((i) => {
     const g = player.gear[i];
-    if (!g || !g.id) return {};
+    // Items WoWSims doesn't have (newer Anniversary items) would fail the whole sim; leave them out.
+    if (!g || !g.id || !itemInfo(g.id)) return {};
     return {
       id: g.id,
       ...(g.permanentEnchant ? { enchant: g.permanentEnchant } : {}),
@@ -201,6 +214,7 @@ export function buildRequest(opts: {
               rotation: loadRotation(spec, player.aplFile, player.timing),
               [spec.sim.specField]: player.specOptions,
               distanceFromTarget: spec.sim.distanceFromTarget,
+              ...(opts.tank ? { inFrontOfTarget: true } : {}),
             },
           ],
           buffs: env.partyBuffs,
@@ -208,6 +222,7 @@ export function buildRequest(opts: {
       ],
       buffs: env.raidBuffs,
       debuffs: env.debuffs,
+      ...(opts.tank ? { tanks: [{ type: 'Player', index: 0 }] } : {}),
     },
     encounter: {
       duration: opts.durationSec,
@@ -226,8 +241,11 @@ export function buildRequest(opts: {
           level: game.boss.level,
           mobType: game.boss.mobType[baseEncounterId(encounter.id)] ?? 'MobTypeUnknown',
           stats,
-          swingSpeed: 2,
-          minBaseDamage: 15113,
+          swingSpeed: opts.tank?.swingSpeed ?? 2,
+          minBaseDamage: opts.tank?.minBaseDamage ?? 15113,
+          ...(opts.tank?.dualWield ? { dualWield: true } : {}),
+          // Tank sims: the boss starts on the player (index 0 in raid.tanks); otherwise untanked.
+          ...(opts.tank ? { tankIndex: 0 } : {}),
           parryHaste: true,
           canCrush: true,
           damageSpread: 0.5,

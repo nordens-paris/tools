@@ -340,6 +340,12 @@ td.you-col { background: var(--accent-soft); }
 .verdict { padding: 12px 14px; border-radius: 10px; font-size: 13px; border: 1px solid var(--line); background: var(--sunk); }
 .verdict.lucky { background: var(--ok-soft); border-color: transparent; color: var(--ok); }
 .verdict.unlucky { background: var(--bad-soft); border-color: transparent; color: var(--bad); }
+.verdict ul { margin: 8px 0 0; padding-left: 18px; color: var(--fg); display: flex; flex-direction: column; gap: 4px; }
+.gap-split { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; color: var(--fg); }
+.nowrap { white-space: nowrap; }
+table.t tr.muted td { color: var(--muted); }
+table.t tr.muted img { opacity: 0.6; }
+table.t tr.divider td { background: var(--accent-soft); color: var(--fg); font-weight: 500; }
 
 /* Gear */
 .gear-row { display: grid; grid-template-columns: 96px minmax(0, 1fr) minmax(0, 1fr); gap: 16px; padding: 10px 0; border-top: 1px solid var(--line); align-items: center; }
@@ -361,6 +367,8 @@ td.you-col { background: var(--accent-soft); }
 /* Sim */
 .scenario { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) 110px; gap: 16px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
 .scenario:first-child { border-top: 0; padding-top: 0; }
+/* Tank gear swaps: threat and damage taken side by side instead of a bar. */
+.scenario.two-num { grid-template-columns: minmax(0, 1fr) 120px 150px; }
 .bar-track { height: 8px; background: var(--track); border-radius: 99px; overflow: hidden; }
 .bar-track .bar { height: 100%; border-radius: 99px; background: var(--ok); }
 .bar-track .bar.neg { background: var(--bad); }
@@ -571,7 +579,7 @@ i.sw.ov-own, i.sw.ov-others, i.sw.ov-bounce, i.sw.ov-hot, i.sw.ov-proc { border-
 .sw-crush { background: color-mix(in srgb, var(--bad) 60%, var(--warn)); }
 .sw-hit { background: var(--warn); }
 .sw-block { background: var(--accent); }
-.sw-parry { background: color-mix(in srgb, var(--ok) 70%, var(--accent)); }
+.sw-parry { background: var(--gold); }
 .sw-dodge { background: var(--ok); }
 .sw-miss { background: var(--range); }
 i.sw.sw-crit, i.sw.sw-crush, i.sw.sw-hit, i.sw.sw-block, i.sw.sw-parry, i.sw.sw-dodge, i.sw.sw-miss { border-radius: 2px; }
@@ -598,6 +606,8 @@ i.sw.sw-crit, i.sw.sw-crush, i.sw.sw-hit, i.sw.sw-block, i.sw.sw-parry, i.sw.sw-
   .gear-head { display: none; }
   .scenario { grid-template-columns: 1fr 90px; }
   .scenario .bar-track { display: none; }
+  .scenario.two-num { grid-template-columns: 1fr 1fr; }
+  .scenario.two-num > :first-child { grid-column: 1 / -1; }
   .exec-row { grid-template-columns: 96px 1fr 44px; gap: 8px; }
   .exec-row > :nth-child(3) { display: none; }
   .gap-row { grid-template-columns: 96px 1fr 52px; gap: 8px; }

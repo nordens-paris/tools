@@ -440,6 +440,8 @@ export interface OverhealSplit {
 export interface HealerMetrics {
   source: number;
   name: string;
+  /** Kill length, for rows that would otherwise favour shorter kills. */
+  durationSec: number;
   /** Class-spec icon, e.g. "Priest-Holy". */
   icon: string;
   specLabel: string;
@@ -676,6 +678,75 @@ export interface TankGear {
   stats: Record<string, number>;
 }
 
+/** One of the tank's actions in the opener, in order. */
+export interface TankOpenerAction {
+  /** Seconds after the pull. */
+  t: number;
+  name: string;
+  icon?: string;
+  /** How it landed; 'cast' for abilities without a hit (Sunder Armor, Holy Shield, shouts). */
+  outcome: 'hit' | 'crit' | 'block' | 'glance' | 'miss' | 'dodge' | 'parry' | 'resist' | 'cast';
+  threat: number;
+  /** Avoided attacks: the threat that ability usually does when it lands. */
+  lost?: number;
+  /** One of their own attacks (not damage from a buff like Thorns). */
+  attack?: boolean;
+  /** Uses a global cooldown. */
+  gcd: boolean;
+}
+
+/**
+ * The opener. Threat from the pull is what the DPS can open on; the rest is measured over the same
+ * window from the tank's first attack, which is what's in their hands once in melee: bad luck
+ * (attacks missed, dodged or parried, fewer crits than their usual rate) and the rotation (unused
+ * global cooldowns, weaker abilities).
+ */
+export interface TankOpener {
+  windowSec: number;
+  /** Threat in the window from the pull. */
+  pullThreat: number;
+  /** Their first attack (auto attacks included) and the enemy's first swing on them, after the pull. */
+  startSec?: number;
+  bossSwingSec?: number;
+  /** Their first ability (not an auto attack), after the pull. */
+  firstActionSec?: number;
+  /** Threat in the window from their first attack. */
+  threat: number;
+  /** Their own attacks in that window that could miss, and how many missed, were dodged or parried. */
+  attacks: number;
+  avoided: number;
+  /** Avoided at their own rate over the rest of the kill. */
+  expectedAvoided: number;
+  /** Threat the avoided attacks would have done. */
+  lostThreat: number;
+  /** Crits among their attacks that landed, and what their crit rate over the rest of the kill gives. */
+  crits: number;
+  landed: number;
+  expectedCrits: number;
+  /** Threat bad luck cost, from avoids and from crits (negative: good luck gained threat). */
+  avoidLuckThreat: number;
+  critLuckThreat: number;
+  luckThreat: number;
+  /** Global cooldowns used in the window, of those available. */
+  gcds: number;
+  possibleGcds: number;
+  /** Uses per ability in the window (their own abilities only). */
+  abilities: Record<string, number>;
+  /** Everything from the pull to the end of the window. */
+  actions: TankOpenerAction[];
+}
+
+/** How the enemy they tanked swung at them, from the log; the tank sims are set up from this. */
+export interface TankBossMelee {
+  /** Average seconds between swings on them while they tanked (slows and parry haste included). */
+  swingGapSec: number;
+  /** Two weapons: about every other swing comes right after the one before. */
+  dualWield: boolean;
+  /** Average landed normal hit before armor and block. */
+  hitBeforeArmor: number;
+  swings: number;
+}
+
 export interface TankMetrics {
   source: number;
   name: string;
@@ -710,12 +781,18 @@ export interface TankMetrics {
     tps: number;
     /** Threat per second over the first 5, 10 and 20 seconds. */
     opener: [number, number, number];
+    /** Threat per second on the enemy they tanked (the sims have that one target). */
+    onTanked: number;
     byAbility: { name: string; icon?: string; share: number }[];
   };
   /** The enemy they tanked: when it first swung, and how much it swung at players who aren't tanks.
    * Missing for peers: only your own raid's data shows who else the enemy hit. */
   holding?: { firstSwingSec?: number; firstSwingOnYou: boolean; swingsOnNonTanks: number; nonTankShare: number };
   dtps: number;
+  /** Melee damage taken per second from the enemy they tanked. */
+  meleeDtps: number;
+  opener: TankOpener;
+  bossMelee?: TankBossMelee;
   nearDeaths: number;
   died: boolean;
 }
@@ -727,7 +804,73 @@ export interface TankFightSummary {
   tanks: TankMetrics[];
 }
 
-export type TankTab = 'Overview' | 'Survivability' | 'Swings' | 'Mitigation' | 'Threat' | 'Cooldowns' | 'Peers';
+export type TankTab = 'Overview' | 'Survivability' | 'Swings' | 'Mitigation' | 'Threat' | 'Cooldowns' | 'Sim' | 'Peers';
+
+/** The opener next to the peers': fine, or held back mostly by a later start, bad luck or the rotation. */
+export interface TankOpenerVerdict {
+  /** 'mixed': no part is close to half the gap. */
+  verdict: 'fine' | 'start' | 'luck' | 'rotation' | 'mixed';
+  /** Threat per second from the pull: yours and the peers' median. */
+  tps: number;
+  peerTps: number;
+  /** From your first attack, with your usual luck: yours and the peers' median. */
+  engagedTps: number;
+  peerEngagedTps: number;
+  /**
+   * The gap to the peers in threat per second, split into starting later than them, worse luck than
+   * them, and the rest (rotation and gear). Negative parts went your way.
+   */
+  parts: { start: number; luck: number; rotation: number };
+  /** Your and the peers' median first attack and first boss swing on you, seconds after the pull. */
+  start: { you?: number; peers?: number; bossYou?: number; bossPeers?: number };
+  reasons: string[];
+}
+
+/** One tank in the tank sims: what they did next to what WoWSims says their setup can do. */
+export interface TankSimPlayer {
+  name: string;
+  you?: boolean;
+  role: TankRole;
+  swingShare: number;
+  /** Threat per second on the boss: from the log, and simmed with their own gear and buffs. */
+  actualTps: number;
+  simTps: number;
+  /** Actual ÷ simmed threat, and that next to the peers' median (100% = like the peers). */
+  threatPct: number;
+  relativePct: number;
+  /** The same over the opener. */
+  actualOpenerTps: number;
+  simOpenerTps: number;
+  openerPct: number;
+  /** Melee damage taken per second from the boss while tanking it: from the log (melee taken ÷ share
+   * of the boss's swings), and simmed. */
+  actualDtps: number;
+  simDtps: number;
+}
+
+export interface TankSimScenario {
+  key: string;
+  label: string;
+  description: string;
+  changes?: string[];
+  tps: number;
+  dtps: number;
+  openerTps?: number;
+  deltaTps: number;
+  deltaDtps: number;
+}
+
+export interface TankSimResult {
+  kind: 'tank';
+  analysisId: string;
+  iterations: number;
+  /** The boss as the sims have it, set up from your raid's main tank. */
+  boss: { from: string; swingSpeed: number; swingGapSec: number; dualWield: boolean; minBaseDamage: number; hitBeforeArmor: number };
+  scenarios: TankSimScenario[];
+  players: TankSimPlayer[];
+  notes: string[];
+  warnings: string[];
+}
 
 export interface TankFinding {
   severity: Severity;
@@ -773,6 +916,7 @@ export interface TankAnalysis {
   /** Depends on the raid and the fight: shown, not judged. */
   context: HealerRow[];
   findings: TankFinding[];
+  openerVerdict?: TankOpenerVerdict;
   /** Other tanks in your raid on this kill (name, role, share). */
   raidTanks: { name: string; icon: string; role: TankRole; swingShare: number }[];
   warnings: string[];

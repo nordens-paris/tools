@@ -1,6 +1,7 @@
 // Everything a healer analysis needs from one fight, raid-wide, so a single fetch covers every
-// healer in the raid. About 10 requests; each view is one page (10,000 events) on fights up to
-// ~6 minutes. Report data is cached forever, so a second healer from the same raid costs nothing.
+// healer in the raid. About 10 requests, more on long fights (each request returns up to 10,000
+// events, and the rest is fetched page by page). Report data is cached forever, so a second healer
+// from the same raid costs nothing.
 import type { WclClient } from '../../wcl/client.ts';
 import type { WclActor, WclCombatantInfo, WclEvent, WclFight, WclFightsResponse } from '../../wcl/types.ts';
 

@@ -26,7 +26,7 @@ const ROLL_STATS = {
 export const CLI_PARALLEL = Number(process.env.SIM_PARALLEL) || Math.max(1, Math.min(8, os.cpus().length - 1));
 
 /** Wraps an async function so at most `limit` calls run at once; the rest wait in call order. */
-function limited<A, T>(fn: (arg: A) => Promise<T>, limit: number): (arg: A) => Promise<T> {
+export function limited<A, T>(fn: (arg: A) => Promise<T>, limit: number): (arg: A) => Promise<T> {
   let active = 0;
   const waiting: (() => void)[] = [];
   return async (arg) => {

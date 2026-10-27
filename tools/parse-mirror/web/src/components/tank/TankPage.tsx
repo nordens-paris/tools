@@ -6,8 +6,10 @@ import { Findings } from '../Findings.tsx';
 import { Hint } from '../Hint.tsx';
 import { Kpi } from '../SummaryCards.tsx';
 import { RowTable, fmtRow, iconOf, pct, rowTone } from '../healer/HealerTables.tsx';
+import { TankOpener } from './TankOpener.tsx';
+import { TankSim } from './TankSim.tsx';
 
-export const TANK_TABS: TankTab[] = ['Overview', 'Survivability', 'Swings', 'Mitigation', 'Threat', 'Cooldowns', 'Peers'];
+export const TANK_TABS: TankTab[] = ['Overview', 'Survivability', 'Swings', 'Mitigation', 'Threat', 'Cooldowns', 'Sim', 'Peers'];
 
 const ROLE: Record<TankMetrics['role'], string> = { main: 'Main tank', off: 'Off-tank', adds: 'Add tank' };
 const MATCH: Record<TankAnalysis['group']['match'], { label: string; pill: string }> = {
@@ -316,6 +318,36 @@ function Swings({ analysis: a }: { analysis: TankAnalysis }) {
           </div>
         ))}
       </div>
+      <div className="table-scroll">
+        <table className="t compact">
+          <thead>
+            <tr>
+              <th>Tank</th>
+              <th className="num">Swings</th>
+              <th className="num">Avoided</th>
+              {OUTCOMES.map((o) => (
+                <th key={o.key} className="num">
+                  <i className={`sw ${o.cls}`} /> {o.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rowsOf(a).map((r) => (
+              <tr key={r.name} className={r.you ? 'you' : ''}>
+                <td>{r.name}</td>
+                <td className="num mono">{r.m.swings.total}</td>
+                <td className="num mono strong">{pct(r.m.swings.avoided)}</td>
+                {OUTCOMES.map((o) => (
+                  <td key={o.key} className={`num mono ${(o.key === 'crit' || o.key === 'crush') && r.m.swings[o.key] ? 'tone-bad' : r.m.swings[o.key] ? '' : 'muted'}`}>
+                    {r.m.swings[o.key]}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <div className="muted small">
         Your hits that landed did {fmt(a.you.swings.damagePerHit)} on average, from {fmt(a.you.swings.unmitigatedPerHit)} before armor and block (the boss and its buffs decide that part).
       </div>
@@ -325,7 +357,8 @@ function Swings({ analysis: a }: { analysis: TankAnalysis }) {
 
 function Mitigation({ analysis: a }: { analysis: TankAnalysis }) {
   const you = a.you;
-  const names = [...new Set([...you.bossDebuffs, ...a.peers.flatMap((p) => p.bossDebuffs)].map((d) => d.name))];
+  // Debuffs someone kept up for at least a moment (a single early cast rounds to 0% for everyone).
+  const names = [...new Set([...you.bossDebuffs, ...a.peers.flatMap((p) => p.bossDebuffs)].filter((d) => d.uptime >= 0.005).map((d) => d.name))];
   return (
     <>
       {you.mitigation.length > 0 && (
@@ -691,8 +724,14 @@ export function TankPage({ analysis: a, tab, onTab, onRaid, picker }: { analysis
       {tab === 'Survivability' && <Survivability analysis={a} />}
       {tab === 'Swings' && <Swings analysis={a} />}
       {tab === 'Mitigation' && <Mitigation analysis={a} />}
-      {tab === 'Threat' && <Threat analysis={a} />}
+      {tab === 'Threat' && (
+        <>
+          <Threat analysis={a} />
+          <TankOpener analysis={a} />
+        </>
+      )}
       {tab === 'Cooldowns' && <Cooldowns analysis={a} />}
+      {tab === 'Sim' && <TankSim analysis={a} />}
       {tab === 'Peers' && <PeerTable analysis={a} />}
     </>
   );

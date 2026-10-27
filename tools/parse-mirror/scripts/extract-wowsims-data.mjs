@@ -93,6 +93,9 @@ copy('ui/specs/warlock/dps/apls/affliction.apl.json', 'warlock-affliction.apl.js
 copy('ui/specs/mage/dps/apls/arcane.apl.json', 'mage-arcane.apl.json');
 copy('ui/specs/priest/dps/apls/default.apl.json', 'priest-shadow.apl.json');
 copy('ui/specs/warlock/dps/apls/demonology.apl.json', 'warlock-demonology.apl.json');
+copy('ui/specs/warrior/protection/apls/default.apl.json', 'warrior-protection.apl.json');
+copy('ui/specs/paladin/protection/apls/default.apl.json', 'paladin-protection.apl.json');
+copy('ui/specs/druid/feralbear/apls/default.apl.json', 'druid-bear.apl.json');
 
 // Talent trees (talent order and rank spell IDs), to turn armory talents into talent strings.
 fs.mkdirSync(path.join(out, 'talents'), { recursive: true });

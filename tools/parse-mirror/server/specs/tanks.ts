@@ -38,6 +38,10 @@ export interface TankSpec {
   threatDrops: string[];
   /** Taunts. */
   taunts: string[];
+  /** Abilities on the global cooldown (1.5 s), for the opener. */
+  gcd: string[];
+  /** Class abilities off the global cooldown that belong in an opener (not trinkets or potions). */
+  offGcd: string[];
 }
 
 export const tankSpecs: TankSpec[] = [
@@ -68,6 +72,8 @@ export const tankSpecs: TankSpec[] = [
     cooldowns: ['Shield Wall', 'Last Stand', 'Shield Block'],
     threatDrops: [],
     taunts: ['Taunt', 'Mocking Blow', 'Challenging Shout'],
+    offGcd: ['Bloodrage', 'Berserker Rage', 'Shield Block'],
+    gcd: ['Shield Slam', 'Revenge', 'Devastate', 'Sunder Armor', 'Thunder Clap', 'Demoralizing Shout', 'Battle Shout', 'Commanding Shout', 'Shield Bash', 'Mocking Blow', 'Execute', 'Hamstring', 'Disarm', 'Challenging Shout'],
   },
   {
     icons: ['Paladin-Protection', 'Paladin-Justicar'],
@@ -84,6 +90,9 @@ export const tankSpecs: TankSpec[] = [
     cooldowns: ['Divine Protection', 'Avenging Wrath'],
     threatDrops: ['Divine Shield', 'Blessing of Protection', 'Divine Intervention'],
     taunts: ['Righteous Defense'],
+    // Judgement is off the global cooldown in TBC.
+    offGcd: ['Judgement', 'Avenging Wrath'],
+    gcd: ['Holy Shield', 'Consecration', "Avenger's Shield", 'Exorcism', 'Hammer of Wrath', 'Seal of Righteousness', 'Seal of Vengeance', 'Seal of Wisdom', 'Seal of Light', 'Seal of the Crusader', 'Seal of Command', 'Holy Wrath', 'Flash of Light', 'Holy Light', 'Cleanse'],
   },
   {
     icons: ['Druid-Guardian'],
@@ -104,6 +113,8 @@ export const tankSpecs: TankSpec[] = [
     cooldowns: ['Frenzied Regeneration', 'Barkskin', 'Survival Instincts'],
     threatDrops: [],
     taunts: ['Growl', 'Challenging Roar'],
+    offGcd: ['Enrage', 'Frenzied Regeneration'],
+    gcd: ['Mangle (Bear)', 'Lacerate', 'Swipe', 'Demoralizing Roar', 'Faerie Fire (Feral)', 'Challenging Roar', 'Bear Form', 'Dire Bear Form', 'Cat Form'],
   },
 ];
 

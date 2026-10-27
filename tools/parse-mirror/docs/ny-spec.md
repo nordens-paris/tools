@@ -80,8 +80,11 @@ at der findes peers.
 
 ## Tank-specs
 
-Tanks simmes ikke endnu. En tank-spec er en post i `server/specs/tanks.ts`: ikonerne, Warcraft Logs
-klasse- og spec-id, tank-auraen (stance/form/Righteous Fury) med threat-multiplier, talent-multiplier,
-spellenes threat (`mult`, `flat`) med WoWSims-kildefil og den tekst, `scripts/check-threat.ts` leder
-efter, samt mitigation-buffs, debuffs på bossen, cooldowns, threat-drops og taunts. Tjek med
-`scripts/tank-check.ts` og `scripts/tank-analyze.ts`.
+En tank-spec er en post i `server/specs/tanks.ts`: ikonerne, Warcraft Logs klasse- og spec-id,
+tank-auraen (stance/form/Righteous Fury) med threat-multiplier, talent-multiplier, spellenes threat
+(`mult`, `flat`) med WoWSims-kildefil og den tekst, `scripts/check-threat.ts` leder efter, samt
+mitigation-buffs, debuffs på bossen, cooldowns, threat-drops, taunts og evnerne på og uden for
+global cooldown (`gcd`, `offGcd`, til opener'en). Til tank-simmen kommer en post i
+`server/specs/tank-sim.ts` (DPS-formatet: `sim.specField`, options, APL-fil og talent-preset fra
+WoWSims' `ui/specs/<klasse>/<spec>/`); APL'en kopieres med `scripts/extract-wowsims-data.mjs`. Tjek
+med `scripts/tank-check.ts`, `scripts/tank-analyze.ts` og `scripts/tank-sim.ts`.

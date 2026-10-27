@@ -49,6 +49,12 @@ for (const arg of process.argv.slice(2)) {
       `     debuffs ${t.bossDebuffs.map((d) => `${d.name} ${pct(d.uptime)}`).join(', ') || '-'} | cds ${t.cooldowns.map((c) => `${c.name}@${c.atSec}s${c.hpPct !== undefined ? `(${pct(c.hpPct)})` : ''}`).join(' ') || '-'}` +
         ` | drops ${t.threatDrops.map((d) => `${d.name}@${d.atSec}s`).join(' ') || '-'} | taunts ${t.taunts.length} | dtps ${Math.round(t.dtps)} near-deaths ${t.nearDeaths}${t.died ? ' DIED' : ''}`,
     );
+    const o = t.opener;
+    console.log(
+      `     opener ${o.windowSec}s: pull ${Math.round(o.pullThreat)} from start ${Math.round(o.threat)} start ${o.startSec?.toFixed(1) ?? '-'}s boss ${o.bossSwingSec?.toFixed(1) ?? '-'}s first ability ${o.firstActionSec?.toFixed(1) ?? '-'}s gcds ${o.gcds}/${o.possibleGcds} avoided ${o.avoided}/${o.attacks} (usual ${o.expectedAvoided.toFixed(1)}) crits ${o.crits}/${o.landed} (usual ${o.expectedCrits.toFixed(1)}) luck avoid ${Math.round(o.avoidLuckThreat)} crit ${Math.round(o.critLuckThreat)} | ` +
+        o.actions.filter((x) => x.name !== 'Melee').map((x) => `${x.t.toFixed(1)} ${x.name}${x.outcome === 'hit' || x.outcome === 'cast' ? '' : ` ${x.outcome.toUpperCase()}`}`).join(', '),
+    );
+    console.log(`     on tanked TPS ${Math.round(t.threat.onTanked)} melee dtps ${Math.round(t.meleeDtps)} boss ${t.bossMelee ? `${t.bossMelee.swingGapSec.toFixed(2)}s ${Math.round(t.bossMelee.hitBeforeArmor)} (${t.bossMelee.swings})` : '-'}`);
   }
   console.log(`  (${client.quota().requestsLastHour - before} requests sent)`);
 }

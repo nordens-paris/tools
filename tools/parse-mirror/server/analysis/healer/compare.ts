@@ -111,6 +111,11 @@ function row(
 }
 
 const cdCount = (h: HealerMetrics, names: string[]) => h.cooldowns.filter((c) => names.includes(c.name) && !c.from).length;
+// Peers' kills are shorter or longer than yours, so time-based rows are shares, not seconds.
+const ofKill = (sec: number | undefined, h: HealerMetrics) => (sec === undefined || !h.durationSec ? null : sec / h.durationSec);
+const below10 = (h: HealerMetrics) => ofKill(h.mana?.secBelow10, h);
+const cancelLost = (h: HealerMetrics) => ofKill(h.cancels.secLost, h);
+const idleShare = (h: HealerMetrics) => (h.idleWhileNeeded.ofSec ? h.idleWhileNeeded.sec / h.idleWhileNeeded.ofSec : null);
 const upkeep = (name: string, field: 'uptime' | 'stack3' = 'uptime') => (h: HealerMetrics) => h.upkeep.find((u) => u.name === name)?.[field] ?? null;
 
 function judgedRows(you: HealerMetrics, peers: HealerMetrics[]): HealerRow[] {
@@ -119,12 +124,12 @@ function judgedRows(you: HealerMetrics, peers: HealerMetrics[]): HealerRow[] {
     row('ownOverheal', 'Overheal by your own choice', you, peers, ownOverheal, 'pct', false, 'Heal bigger than the gap when you committed, as a share of all your healing.'),
     row('potions', 'Mana potions and runes', you, peers, (h) => cdCount(h, [POTION, ...RUNES]), 'int', true),
     row('cooldowns', 'Other cooldowns used', you, peers, (h) => h.cooldowns.filter((c) => ![POTION, ...RUNES].includes(c.name) && !c.from).length, 'int', true),
-    row('below10', 'Seconds under 10% mana', you, peers, (h) => h.mana?.secBelow10, 'sec', false),
-    row('cancelLost', 'Time lost to cancelled casts', you, peers, (h) => h.cancels.secLost, 'sec', false),
-    row('idle', 'Idle while someone you heal was low', you, peers, (h) => h.idleWhileNeeded.sec, 'sec', false, 'Seconds not casting while a player you heal was under 70%.'),
+    row('below10', 'Time under 10% mana', you, peers, below10, 'pct', false, 'Share of the kill.'),
+    row('cancelLost', 'Time lost to cancelled casts', you, peers, cancelLost, 'pct', false, 'Share of the kill spent on casts you cancelled.'),
+    row('idle', 'Idle while someone you heal was low', you, peers, idleShare, 'pct', false, 'Share of the time a player you heal was under 70% that you weren’t casting.'),
     row('reaction', 'Reaction to a drop below 50%', you, peers, (h) => h.reaction.medianSec, 'sec', false, 'Median time from a player you heal dropping below 50% to your next heal landing on them.'),
     row('first', 'First to heal after a drop', you, peers, (h) => h.reaction.firstResponder, 'pct', true),
-    row('saves', 'Saves', you, peers, (h) => h.saves, 'int', true, 'Someone under 25% your heal brought back, who lived 5 more seconds.'),
+    row('saves', 'Saves per minute', you, peers, (h) => (h.durationSec ? h.saves / (h.durationSec / 60) : null), 'dec', true, 'Someone under 25% your heal brought back, who lived 5 more seconds.'),
     row('preheal', 'Tank preheals that landed usefully', you, peers, (h) => h.tankPreheal?.prehealEffective, 'pct', true),
     row('es', 'Earth Shield uptime', you, peers, upkeep('Earth Shield'), 'pct', true),
     row('lb', 'Lifebloom uptime (main target)', you, peers, upkeep('Lifebloom'), 'pct', true),
@@ -243,8 +248,14 @@ function healerFindings(you: HealerMetrics, peers: HealerMetrics[], spells: Heal
     if (cd === POTION || RUNES.includes(cd) || yourCds.has(cd) || users < Math.ceil(n * 0.6)) continue;
     out.push({ severity: 'medium', tab: 'Mana', title: `${cd} not used`, detail: `${users} of ${n} peers used it on this kill.` });
   }
-  if (you.mana && you.mana.secBelow10 >= 10 && you.mana.secBelow10 > 2 * (median(peers.map((p) => p.mana?.secBelow10 ?? 0)) + 2)) {
-    out.push({ severity: 'medium', tab: 'Mana', title: `Under 10% mana for ${you.mana.secBelow10} s`, detail: 'Use mana cooldowns earlier, or lower ranks while the raid is stable.' });
+  const low = median(peers.map((p) => below10(p) ?? 0));
+  if (you.mana && you.mana.secBelow10 >= 10 && (below10(you) ?? 0) > 2 * low + 0.02) {
+    out.push({
+      severity: 'medium',
+      tab: 'Mana',
+      title: `Under 10% mana for ${you.mana.secBelow10} s (${pct(below10(you) ?? 0)} of the kill), peers ${pct(low)}`,
+      detail: 'Use mana cooldowns earlier, or lower ranks while the raid is stable.',
+    });
   } else if (you.mana && you.mana.end >= 0.35 && you.mana.end > median(peers.map((p) => p.mana?.end ?? 0)) + 0.15) {
     out.push({ severity: 'low', tab: 'Mana', title: `Ended the kill with ${pct(you.mana.end)} mana`, detail: 'Mana left at the end is healing you could have done: bigger ranks or more casts were affordable.' });
   }
@@ -257,22 +268,23 @@ function healerFindings(you: HealerMetrics, peers: HealerMetrics[], spells: Heal
     if (y < m - 0.15) out.push({ severity: 'medium', tab: 'Overview', title: `${label} ${pct(y)}, peers ${pct(m)}`, detail: `Kept on ${you.upkeep.find((u) => u.name === name)?.target}.` });
   }
   // Response
-  const lost = median(peers.map((p) => p.cancels.secLost));
-  if (you.cancels.secLost >= 8 && you.cancels.secLost > 2 * lost + 3) {
+  const lost = median(peers.map((p) => cancelLost(p) ?? 0));
+  if (you.cancels.secLost >= 8 && (cancelLost(you) ?? 0) > 2 * lost + 0.01) {
     out.push({
       severity: 'low',
       tab: 'Response',
       title: `${Math.round(you.cancels.secLost)} s lost to ${you.cancels.count} cancelled casts`,
-      detail: `Peers lost ${Math.round(lost)} s. Cancelling a heal the target no longer needs saves mana; cancelling to move or retarget loses the cast time.`,
+      detail: `That's ${pct(cancelLost(you) ?? 0)} of the kill; peers lost ${pct(lost)} of theirs. Cancelling a heal the target no longer needs saves mana; cancelling to move or retarget loses the cast time.`,
     });
   }
-  const idle = median(peers.map((p) => p.idleWhileNeeded.sec));
-  if (you.idleWhileNeeded.sec >= 5 && you.idleWhileNeeded.sec > idle + 5) {
+  const idle = median(peers.map((p) => idleShare(p) ?? 0));
+  const yourIdle = idleShare(you) ?? 0;
+  if (you.idleWhileNeeded.sec >= 5 && yourIdle > idle + 0.1) {
     out.push({
       severity: 'medium',
       tab: 'Response',
       title: `${Math.round(you.idleWhileNeeded.sec)} s not casting while someone you heal was under 70%`,
-      detail: `Peers: ${Math.round(idle)} s. Moving and out-of-range time count too.`,
+      detail: `That's ${pct(yourIdle)} of the time they were low; peers ${pct(idle)}. Moving and out-of-range time count too.`,
     });
   }
   const rx = med(peers.map((p) => p.reaction.medianSec));

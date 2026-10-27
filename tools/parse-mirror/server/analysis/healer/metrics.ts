@@ -126,7 +126,19 @@ export function healerMetrics(m: FightModel, id: number): HealerMetrics {
     .sort((a, b) => b.effective - a.effective || b.casts - a.casts)
     .map(({ rankSet, ...r }) => (rankSet.size > 1 ? { ...r, ranks: [...rankSet].sort((a, b) => a - b) } : r));
 
-  // Cast pairs (cast start -> finished cast), cancels, and tank preheals.
+  // Cast pairs (cast start -> finished cast), cancels, and tank preheals. A cast start ends with
+  // its own cast within 5 s; another cast start first means it was cancelled. Other casts in
+  // between (trinkets, racials, off-GCD items used while casting) don't end it.
+  const finishOf = (i: number): { j?: number; end: number } => {
+    const e = mc[i];
+    for (let j = i + 1; j < mc.length; j++) {
+      const x = mc[j];
+      if (x.timestamp - e.timestamp > 5000 || x.type === 'begincast') return { end: x.timestamp - e.timestamp > 5000 ? e.timestamp + 1500 : x.timestamp };
+      if (x.type === 'cast' && x.ability?.guid === e.ability?.guid) return { j, end: x.timestamp };
+    }
+    return { end: e.timestamp + 1500 };
+  };
+  const finished = new Set<number>();
   const begins = mc.filter((e) => e.type === 'begincast');
   const cancels: { lost: number; topped: boolean }[] = [];
   const preheal: number[] = [];
@@ -138,13 +150,14 @@ export function healerMetrics(m: FightModel, id: number): HealerMetrics {
     const e = mc[i];
     if (e.type === 'cast' && e.targetID !== undefined && m.players.has(e.targetID) && !HOTS.has(e.ability?.name ?? '')) lastDirectTarget = e.targetID;
     if (e.type !== 'begincast') continue;
-    const next = mc[i + 1];
-    if (!next || next.type !== 'cast' || next.ability?.guid !== e.ability?.guid || next.timestamp - e.timestamp > 5000) {
-      const end = next ? next.timestamp : e.timestamp + 1500;
+    const { j, end } = finishOf(i);
+    if (j === undefined) {
       // A cast start has no target; guess the last direct heal's target, and whether it was topped.
       cancels.push({ lost: (end - e.timestamp) / 1000, topped: lastDirectTarget !== undefined && m.hpAt(lastDirectTarget, end) >= 95 });
       continue;
     }
+    finished.add(j);
+    const next = mc[j];
     const tgt = next.targetID;
     if (tgt === undefined || !m.players.has(tgt)) continue;
     const land = mine.find((x) => x.type === 'heal' && !x.tick && x.targetID === tgt && x.timestamp >= next.timestamp && x.timestamp < next.timestamp + 400);
@@ -225,8 +238,8 @@ export function healerMetrics(m: FightModel, id: number): HealerMetrics {
   };
   for (let i = 0; i < mc.length; i++) {
     const e = mc[i];
-    if (e.type === 'begincast') mark(e.timestamp, mc[i + 1]?.timestamp ?? e.timestamp + 2500);
-    else if (!(mc[i - 1]?.type === 'begincast' && mc[i - 1].ability?.guid === e.ability?.guid)) mark(e.timestamp, e.timestamp + 1500);
+    if (e.type === 'begincast') mark(e.timestamp, finishOf(i).end);
+    else if (!finished.has(i)) mark(e.timestamp, e.timestamp + 1500);
   }
   let aliveTicks = 0;
   let busyTicks = 0;
@@ -270,6 +283,7 @@ export function healerMetrics(m: FightModel, id: number): HealerMetrics {
   return {
     source: id,
     name: m.name(id),
+    durationSec: dur,
     icon: spec.icon,
     specLabel: spec.label,
     hps: dur ? effective / dur : 0,
