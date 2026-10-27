@@ -218,7 +218,8 @@ siger, hvor tæt det passer: **Close match**, **Looser match** (±1 healer eller
 **Hvad der bedømmes, og hvad der kun er kontekst.** Healing per mana (også pr. spell), overheal du
 selv valgte, potions, runes og cooldowns, tid under 10 % mana, tid tabt på afbrudte casts, tid uden
 at caste mens nogen, du healer, var under 70 %, reaktionstid, saves og præ-heals på tanks bliver
-sammenlignet. HPS, andel af raidets healing, samlet overheal og mana tilbage er kun kontekst, fordi
+sammenlignet. Tider er andele af kampen (og saves pr. minut), fordi peers' kills er kortere eller
+længere end dit. HPS, andel af raidets healing, samlet overheal og mana tilbage er kun kontekst, fordi
 de afhænger af raidet. Øverst står også raidets antal healere og skade pr. healer ved siden af
 dit.
 
@@ -282,16 +283,44 @@ mange tanks og en kill-tid tæt på din, som ikke døde. Tank-parses bruges ikke
   tid i Cat Form, og debuffs på bossen (Demoralizing Shout/Roar, Thunder Clap, Lacerate).
 - **Threat:** threat pr. sekund og i de første 5, 10 og 20 sekunder, regnet med WoWSims' threat-værdier
   (stance, form, talenter og Righteous Fury med; healing og rage tæller ikke, som i WoWSims).
+- **Opener:** threat i de første 10 sekunder fra pull'et er det, DPS'erne kan åbne på. Siden viser
+  også, hvornår dit første angreb landede, og hvornår bossen første gang slog dig, ved siden af
+  peers: startede de tidligere (f.eks. med raidet stablet på bossen, eller Faerie Fire (Feral),
+  Charge eller Avenger's Shield fra afstand), siges det. Resten måles over 10 sekunder fra dit
+  første angreb, handling for handling. Uheld er angreb misset, dodget eller parryet ud over din
+  egen rate resten af kampen (din hit og expertise) og færre crits end din egen crit-rate, hver
+  regnet til den threat, evnen plejer at give; held tæller den anden vej. Er din opener svag, deles
+  forskellen til peers i en senere start, uheld (ved siden af peers' held) og resten, rotation og
+  gear (global cooldowns brugt, evner de fleste peers åbnede med). Off-tanks bedømmes ikke her
+  (deres opener afhænger af, hvornår bossen kom til dem).
 - **Cooldowns:** forsvars-cooldowns og potions med dit liv på tidspunktet, og threat du selv smed
   (Divine Shield eller Blessing of Protection på dig selv).
 
 Skade taget pr. sekund og hvor hårdt bossen slår er kontekst: det afgør bossen, healerne og din rolle.
 
-**Fanerne:** Overview, Survivability, Swings, Mitigation, Threat, Cooldowns og Peers.
+**Fanerne:** Overview, Survivability, Swings, Mitigation, Threat, Cooldowns, Sim og Peers.
 
 ![Bossens slag](docs/billeder/27-tank-swings.png)
 
 ![Threat](docs/billeder/28-tank-threat.png)
+
+![Opener](docs/billeder/30-tank-opener.png)
+
+**Tank-sims (fanen Sim):** du og dine peers simmes hver med eget gear, talenter og raid buffs, mens
+I tanker bossen med WoWSims' tank-rotation. Bossen slår som i dit raid: tiden mellem dens slag på
+raidets main tank (medianen, så parry haste ikke tæller dobbelt; to våben findes automatisk) og dens
+gennemsnitlige slag før armor, regnet tilbage til WoWSims' tal. Fanen viser:
+
+- **Threat mod hvad dit gear kan:** din threat på bossen ÷ simmens, og det sammenholdt med peers'
+  median (100 % = som peers). Simmen er en perfekt spiller, så alle ligger under 100 %; sammenligningen
+  med peers fjerner det, simmen tager fejl af for alle. Det samme for opener'en.
+- **Skade taget fra bossens melee:** pr. sekund mens du tankede den, ved siden af simmen, der holder
+  aktiv mitigation og debuffs oppe hele tiden og ingen healing har. Tager du klart mere end simmen,
+  peger det på mitigation, der var nede, crushing blows eller manglende debuffs på bossen.
+- **Dit setup med en peers gear:** threat og skade taget med gearet fra den peer med mest effektivt
+  liv og den med mest threat, så du kan se, hvad der byttes.
+
+![Tank-sim](docs/billeder/31-tank-sim.png)
 
 **Raid-siderne:** en tanks egen raid viser effektivt liv, undgåede slag, crushing blows, threat og
 åbnings-threat pr. boss. På **Everyone in this raid** henter **Show tanks** alle tanks på alle bosses.
@@ -300,8 +329,10 @@ Skade taget pr. sekund og hvor hårdt bossen slår er kontekst: det afgør bosse
 
 **Godt at vide om tanks:** Warcraft Logs' API har ingen threat-tal, så threat regnes selv ud fra din
 skade og dine evner. Combatant info har armor fra pull'et (før en bear skifter form), så armor tages
-fra slagene i kampen. Ingen tank-sims endnu. Hvem bossen slår mod andre end tanks tæller mekanikker
-med (f.eks. Fel Rage). Første tank-analyse af et kill henter omkring 30–100 kald.
+fra slagene i kampen. Hvem bossen slår mod andre end tanks tæller mekanikker med (f.eks. Fel Rage).
+Første tank-analyse af et kill henter omkring 30–100 kald, og fanen Sim omkring 10 mere pr. tank
+(gear og buffs til simmen) første gang. Tank-sims simmer kun bossens melee, ikke dens andre evner,
+og items, WoWSims ikke kender (nyere Anniversary-items), udelades og nævnes under fanen.
 
 ### 11. Del og gem
 

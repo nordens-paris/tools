@@ -48,7 +48,7 @@ export const getProgress = (code: string, source: number) => request<ProgressSum
 /** A DPS analysis, or a healer or tank analysis when the player healed or tanked (kind: 'healer' / 'tank'). */
 export const analyze = (report: string, fight: number, source: number, mode: 'top' | 'peers' = 'top') =>
   request<AnalysisResult | HealerAnalysis | TankAnalysis>('/api/analyze', { report, fight, source, mode });
-export const runSim = (analysisId: string) => request<SimResult>('/api/sim', { analysisId });
+export const runSim = <T = SimResult>(analysisId: string) => request<T>('/api/sim', { analysisId });
 
 /** Pulls report code, fight and source out of a Warcraft Logs URL. */
 export function parseLogUrl(url: string): { report?: string; fight?: number; source?: number } {

@@ -169,7 +169,8 @@ Sæt [Caddy](https://caddyserver.com) foran til HTTPS (`reverse_proxy localhost:
 
 - **Kvote:** serverens Warcraft Logs-nøgle har et timebudget (3.600 point). En analyse koster
   omkring 30 kald første gang, en healer- eller tank-analyse 30–110 (peers deles af alle med samme spec
-  på samme boss); gentagne visninger kommer fra cachen. Grænsen pr. besøgende
+  på samme boss), og en tank-analyses Sim-fane omkring 10 mere pr. tank; gentagne visninger kommer fra
+  cachen. Grænsen pr. besøgende
   (`VISITOR_LOOKUPS_PER_HOUR`) beskytter budgettet. Klik ikke "Use New Limits" på Warcraft Logs;
   det sænker budgettet til 1.000.
 - **Besøgendes egne nøgler** gemmes kun i deres browser, sendes kun med deres egne forespørgsler

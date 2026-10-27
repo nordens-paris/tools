@@ -14,6 +14,9 @@ function slim(player) {
   const TARGET = ['casts', 'hits', 'crits', 'glances', 'misses', 'dodges', 'parries', 'damage', 'tickDamage', 'resistedHits', 'resistedCrits', 'resistedDamage', 'resistedTickDamage'];
   return {
     dps: { avg: player.dps.avg, stdev: player.dps.stdev },
+    // Tank sims: threat and damage taken per second.
+    ...(player.threat ? { threat: { avg: player.threat.avg ?? 0, stdev: player.threat.stdev ?? 0 } } : {}),
+    ...(player.dtps ? { dtps: { avg: player.dtps.avg ?? 0, stdev: player.dtps.stdev ?? 0 } } : {}),
     actions: (player.actions ?? []).map((a) => ({ id: a.id, targets: (a.targets ?? []).map((t) => pick(t, TARGET)) })),
     auras: (player.auras ?? []).map((a) => pick(a, ['id', 'uptimeSecondsAvg', 'procsAvg'])),
   };

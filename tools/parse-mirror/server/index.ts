@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import express from 'express';
 
-import type { SimResult } from '../shared/types.ts';
+import type { SimResult, TankSimResult } from '../shared/types.ts';
 import { analyze, type StoredAnalysis } from './analysis/analyze.ts';
 import { guildSummary } from './analysis/guild.ts';
 import { analyzeHealer } from './analysis/healer/compare.ts';
@@ -16,7 +16,8 @@ import { raidSummary } from './analysis/raid.ts';
 import { game, publicGameConfig } from './game.ts';
 import { BrowserSims, type JobOutcome } from './sim/browser.ts';
 import { runSim } from './sim/runner.ts';
-import { runScenarios } from './sim/scenarios.ts';
+import { CLI_PARALLEL, runScenarios, type SimRun } from './sim/scenarios.ts';
+import { runTankSims } from './sim/tank.ts';
 import { mayHeal } from './specs/healers.ts';
 import { mayTank } from './specs/tanks.ts';
 import { specForIcon } from './specs/index.ts';
@@ -37,11 +38,18 @@ const iterations = Number(process.env.SIM_ITERATIONS ?? 2500);
 // while a result is on its way back; the browser runs them one per worker.
 const BROWSER_PARALLEL = 24;
 
-interface Stored extends StoredAnalysis {
-  sim?: Promise<SimResult>;
+type AnySimResult = SimResult | TankSimResult;
+
+interface Stored {
+  /**
+   * Runs the analysis's sims through `run`. Tank sims fetch the peers' gear first, with the Warcraft
+   * Logs client of the request that starts them (the visitor's own key, if they gave one).
+   */
+  simulate: (run: SimRun, parallel: number, client: () => WclClient) => Promise<AnySimResult>;
+  sim?: Promise<AnySimResult>;
   /** Browser mode: the jobs waiting for the browser, and how the run ended. */
   browser?: BrowserSims;
-  simResult?: SimResult;
+  simResult?: AnySimResult;
   simError?: string;
 }
 
@@ -49,10 +57,11 @@ interface Stored extends StoredAnalysis {
 // Each takes a few MB; free hosts often have 512 MB.
 const MAX_ANALYSES = Number(process.env.MAX_ANALYSES ?? 50);
 const analyses = new Map<string, Stored>();
-const remember = (stored: StoredAnalysis) => {
-  analyses.set(stored.result.id, stored);
+const remember = (id: string, simulate: Stored['simulate']) => {
+  analyses.set(id, { simulate });
   while (analyses.size > MAX_ANALYSES) analyses.delete(analyses.keys().next().value!);
 };
+const rememberDps = (stored: StoredAnalysis) => remember(stored.result.id, (run, parallel) => runScenarios(stored, run, iterations, log, parallel));
 
 // Sims use every CPU core, so they run one at a time.
 let simQueue: Promise<unknown> = Promise.resolve();
@@ -121,6 +130,12 @@ function clientFor(req: express.Request): WclClient {
   }
   if (!serverClient) throw new BadRequest('This server has no Warcraft Logs key. Add your own under “API key”.');
   return serverClient;
+}
+
+/** The client for tank and healer work: with ROLES_NEED_OWN_KEY, only the visitor's own key. */
+function roleClient(req: express.Request): WclClient {
+  requireRoleKey(req);
+  return clientFor(req);
 }
 
 function reportCode(value: unknown): string {
@@ -230,12 +245,17 @@ app.post('/api/analyze', async (req, res) => {
     if (actor && !specForIcon(actor.icon)) {
       requireRoleKey(req);
       limitVisitor(req, 2);
-      const tank = await isTanking(client, code, fight, source, fights);
-      res.json(tank ? await analyzeTank(client, code, fight, source, log) : await analyzeHealer(client, code, fight, source, log));
+      if (await isTanking(client, code, fight, source, fights)) {
+        const stored = await analyzeTank(client, code, fight, source, log);
+        remember(stored.analysis.id, async (run, parallel, simClient) => runTankSims(stored, simClient(), run, iterations, log, parallel));
+        res.json(stored.analysis);
+      } else {
+        res.json(await analyzeHealer(client, code, fight, source, log));
+      }
       return;
     }
     const stored = await analyze(client, code, fight, source, log, mode);
-    remember(stored);
+    rememberDps(stored);
     res.json(stored.result);
   } catch (err) {
     fail(res, 'Analyze', err);
@@ -255,7 +275,7 @@ app.post('/api/sim', async (req, res) => {
       stored.browser = browser;
       stored.simResult = undefined;
       stored.simError = undefined;
-      stored.sim = runScenarios(stored, browser.run, iterations, log, BROWSER_PARALLEL);
+      stored.sim = stored.simulate(browser.run, BROWSER_PARALLEL, () => roleClient(req));
       stored.sim.then(
         (result) => {
           stored.simResult = result;
@@ -278,7 +298,7 @@ app.post('/api/sim', async (req, res) => {
   }
   try {
     // Asking again for the same analysis (a retry, a second tab) reuses the run.
-    stored.sim ??= queued(() => runScenarios(stored, (request) => runSim(cliPath, request), iterations, log));
+    stored.sim ??= queued(() => stored.simulate((request) => runSim(cliPath, request), CLI_PARALLEL, () => roleClient(req)));
     res.json(await stored.sim);
   } catch (err) {
     stored.sim = undefined;

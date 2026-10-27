@@ -23,6 +23,7 @@ const WARRIOR = 'r=dqF8J9TbnCHQ4jgk&f=10&s=6'; // Nuttý, Fury, Rage Winterchill
 const RAID = 'r=q1Jr4LdHVzycnGA9';
 const HEALER = 'r=nbfHKZ2Ax6JghkjD&f=64&s=13'; // Sanctalux, Holy Paladin, Gurtogg Bloodboil
 const TANK = 'r=nbfHKZ2Ax6JghkjD&f=64&s=30'; // Tinkywiinky, Protection Paladin, Gurtogg Bloodboil
+const BEAR = 'r=nbfHKZ2Ax6JghkjD&f=114&s=4'; // Storbøf, bear, Archimonde (main tank: the opener is judged)
 
 fs.mkdirSync(OUT, { recursive: true });
 const browser = await puppeteer.launch({
@@ -152,6 +153,12 @@ async function shots(page: Page) {
   await panel('27-tank-swings.png', 'How the boss');
   await tab('Threat');
   await panel('28-tank-threat.png', 'Threat');
+  await tab('Sim');
+  await page.waitForSelector('.setup-notes', { timeout: 600_000 });
+  await panel('31-tank-sim.png', 'Threat next to what your gear can do');
+  await open(`${BEAR}&tab=Threat`);
+  await page.waitForFunction(() => [...document.querySelectorAll('h2')].some((h) => h.textContent === 'Your opener'), { timeout: 300_000 });
+  await panel('30-tank-opener.png', 'Your opener');
 
   log('Raid, progress and guild overviews');
   await open(`${RAID}&s=19`);

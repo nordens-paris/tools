@@ -35,6 +35,9 @@ export interface SimPlayerMetrics {
     }[];
   }[];
   auras: { id: { spellId?: number; itemId?: number; tag?: number }; uptimeSecondsAvg?: number; procsAvg?: number }[];
+  /** Threat and damage taken per second (tank sims). */
+  threat?: { avg?: number; stdev?: number };
+  dtps?: { avg?: number; stdev?: number };
 }
 
 export async function runSim(cliPath: string, request: unknown): Promise<SimDps> {

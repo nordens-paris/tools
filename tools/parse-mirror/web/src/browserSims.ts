@@ -35,7 +35,7 @@ function wasmModule() {
 }
 
 class SimWorker {
-  private worker = new Worker('/sim/worker.js');
+  private worker = new Worker('/sim/worker.js?v=2');
   private pending = new Map<string, (r: JobResult) => void>();
   readonly ready: Promise<void>;
 
@@ -119,10 +119,10 @@ async function call<T>(url: string, body?: unknown): Promise<T> {
  * coming while earlier ones finish (luck sims depend on each player's first sim), so fetching new
  * jobs and running them happen side by side.
  */
-export async function runBrowserSims(analysisId: string, onProgress: (done: number, total: number) => void): Promise<SimResult> {
+export async function runBrowserSims<T = SimResult>(analysisId: string, onProgress: (done: number, total: number) => void): Promise<T> {
   active++;
   try {
-    return await simulate(analysisId, onProgress);
+    return await simulate<T>(analysisId, onProgress);
   } finally {
     if (--active === 0) closeWhenIdle();
   }
@@ -130,7 +130,7 @@ export async function runBrowserSims(analysisId: string, onProgress: (done: numb
 // Runs in progress (a second tab of the app has its own count).
 let active = 0;
 
-async function simulate(analysisId: string, onProgress: (done: number, total: number) => void): Promise<SimResult> {
+async function simulate<T>(analysisId: string, onProgress: (done: number, total: number) => void): Promise<T> {
   const pool = await workers();
   await call('/api/sim', { analysisId });
   let done = 0;
@@ -162,7 +162,7 @@ async function simulate(analysisId: string, onProgress: (done: number, total: nu
 
   for (;;) {
     if (failure) throw failure;
-    const r = await call<{ jobs: Job[]; result?: SimResult; error?: string }>(`/api/sim/${analysisId}/jobs`);
+    const r = await call<{ jobs: Job[]; result?: T; error?: string }>(`/api/sim/${analysisId}/jobs`);
     if (r.error) throw new Error(r.error);
     if (r.result) return r.result;
     // The server hands a job out again if no answer came for a while; it may still be running here.

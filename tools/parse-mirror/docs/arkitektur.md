@@ -171,6 +171,39 @@ af alle healere med samme spec på samme boss.
    melee). Peers, der døde, springes over.
 5. **`compare.ts`** deler i bedømt og kontekst og laver fund; **`raid.ts`** laver rækkerne til
    raid-siderne.
+   - Opener'en (`openerOf` i `metrics.ts`): threat de første 10 s fra pull'et (`pullThreat`), første
+     angreb (`startSec`, auto attacks med) og bossens første slag på tanken (`bossSwingSec`). Resten
+     måles over 10 s fra første angreb: kun tankens egne angreb (ikke Thorns eller Blessing of
+     Sanctuary); undgåede angreb regnes til evnens gennemsnitlige threat, når den lander, og crits
+     pr. evne mod tankens egen crit-rate resten af kampen (den samlede rate for evner med under 10
+     landede slag) til forskellen mellem evnens crit og almindelige hit. Begge dele er med fortegn
+     (held er negativt). Brug af evner og global cooldowns tælles fra casts (skade står kun i
+     stedet for evner uden casts i loggen; seal- og Thorns-skade er ikke brug).
+   - `openerVerdict` i `compare.ts` deler forskellen til peers' median: start = sekunder efter peers
+     × din threat pr. sekund fra første angreb, held = dit uheld minus peers' median, resten =
+     rotation og gear. Dommen er den største del, eller `mixed`, hvis ingen er tæt på halvdelen.
+   - `analyzeTank` returnerer også `simInput` til tank-simmen: hvem der skal simmes (dig og peers)
+     og bossens melee (`bossMeleeOf`) fra den tank i dit raid, der tog flest af dens slag.
+
+### Tank-sims (`server/sim/tank.ts`)
+
+- Tank-specs i DPS-formatet ligger i `server/specs/tank-sim.ts` (WoWSims' tank-talenter, -options og
+  -APL'er i `data/wowsims/`), så DPS-analysens `collectPlayerFight` (gear, race, armory-talenter,
+  raid buffs) og `buildRequest` genbruges. `buildRequest` får `tank`: spilleren står foran bossen
+  som dens tank (`raid.tanks`, `tankIndex`, `inFrontOfTarget`), og bossen slår med `swingSpeed`,
+  `minBaseDamage` og evt. `dualWield` fra loggen.
+- Bossen: medianen af tiden mellem slag (for to våben: til slaget efter næste), divideret med Thunder
+  Claps 10 % efter dens uptime i dit raid; `minBaseDamage` = gennemsnitligt slag før armor ÷ (1,25 +
+  0,00052 × attack power), med bossens 320 AP sænket af Demoralizing Shout efter uptime
+  (`core/attack.go` `EnemyWeaponDamage`). WoWSims lægger selv sine debuffs på: warrior- og
+  bear-rotationerne holder Demoralizing Shout/Roar og Thunder Clap oppe; for paladins tilføjes de,
+  hvis en anden havde dem oppe mindst halvdelen af tiden.
+- Pr. tank to sims (hele kampen og 10 s opener) og to gear-byt for dig; højst 1.000 iterationer
+  (threat og skade taget falder hurtigt til ro). Sims kører som DPS-sims via `/api/sim`; serveren
+  husker for hver analyse en `simulate`-funktion, og tank-simmen henter peers' gear med klienten fra
+  den forespørgsel, der starter den (med `ROLES_NEED_OWN_KEY` kun den besøgendes egen nøgle).
+  `worker.js` sender threat og dtps med tilbage.
+- Items, WoWSims ikke har, udelades af alle sims (før fejlede hele simmen) og nævnes i noterne.
 
 ## Simmen (`server/sim/`)
 
@@ -210,8 +243,10 @@ af alle healere med samme spec på samme boss.
 - `group.ts` giver alle paneler de samme ord for sammenligningsgruppen.
 - Komponenterne i `components/` svarer til fanerne: Overview (Fix first, fund), Rotation,
   Cooldowns, Consumes, Gear (inkl. hit), Sim (held, what-ifs, hvor forskellen kommer fra), Players.
-- `components/tank/` er tank-siden (Overview, Survivability, Swings, Mitigation, Threat, Cooldowns,
-  Peers) og tank-delene af raid-siderne; `/api/analyze` svarer med `kind: 'tank'` for tanks.
+- `components/tank/` er tank-siden (Overview, Survivability, Swings, Mitigation, Threat med
+  opener'en i `TankOpener.tsx`, Cooldowns, Sim i `TankSim.tsx`, Peers) og tank-delene af
+  raid-siderne; `/api/analyze` svarer med `kind: 'tank'` for tanks. Tank-simmen startes, når fanen
+  Sim åbnes, og huskes pr. analyse.
 - `components/healer/` er healer-siden (Overview, Mana, Spells, Overheal, Response, Deaths, Peers)
   og healer-delene af raid-siderne. `/api/analyze` svarer med `kind: 'healer'` for healere.
 
