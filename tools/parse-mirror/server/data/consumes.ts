@@ -42,9 +42,8 @@ const OTHER_CASTS: Record<string, { name: string; conjuredId?: number; flag?: Fl
   // Same mana and shared cooldown; WoWSims only has the Demonic Rune.
   'Dark Rune': { name: 'Dark Rune', conjuredId: 12662 },
   'Demonic Rune': { name: 'Demonic Rune', conjuredId: 12662 },
-  // Simmed as uptime-weighted spell damage in the environment (see STAT_BUFFS).
-  'Dark Iron Pipeweed': { name: 'Dark Iron Pipeweed', simulated: true },
-  'Hopped Up': { name: 'Hopped Up', simulated: true },
+  // Not here: "Dark Iron Pipeweed" and "Hopped Up" are the on-use buffs of the trinkets Dark Iron
+  // Smoking Pipe and Direbrew Hops, which WoWSims sims from the player's gear.
 };
 
 const SCROLLS: Record<number, { name: string; sim: Flag }> = {

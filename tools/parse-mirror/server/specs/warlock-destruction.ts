@@ -47,7 +47,7 @@ export const warlockDestruction: SpecConfig = {
   gcdSec: 1.5,
   cooldowns: ['Blood Fury', 'Berserking', 'Destruction', 'Restore Mana', 'Dark Rune', 'Blessing of the Silver Crescent', 'Dark Iron Pipeweed', 'Shadowburn', 'Inferno'],
   finishers: ['Shadowburn'],
-  castLabels: { Destruction: 'Destruction Potion', 'Restore Mana': 'Super Mana Potion' },
+  castLabels: { Destruction: 'Destruction Potion', 'Restore Mana': 'Super Mana Potion', 'Dark Iron Pipeweed': 'Dark Iron Smoking Pipe' },
   uptimes: ['Bloodlust', 'Drums of Battle', 'Power Infusion', 'Flameshadow', 'Shadowflame'],
   debuffUptimes: ['Curse of Doom', 'Curse of Agony', 'Curse of the Elements', 'Immolate', 'Corruption'],
   expectedAbilities: [],

@@ -34,6 +34,7 @@ Scripts, der arbejder på tværs af mange spillere (`sim-vs-log`, `crit-unbiased
 | `healer-analyze.ts <rapport>:<fight> <navn>` | Hele healer-analysen som tekst: bedømte tal, kontekst, spells og fund |
 | `tank-check.ts <rapport>:<fight>[:<navn>] [...]` | Tank-tallene for alle tanks (eller én) i et eller flere kills |
 | `tank-analyze.ts <rapport>:<fight> <navn>` | Hele tank-analysen som tekst: peers, bedømte tal, kontekst og fund |
+| `unknown-ids.ts` | Gear-items, gems og enchants i de cachede logs (alle spillere i alle analyser kørt på maskinen), som WoWSims eller vores data ikke kender, mest brugte først med Wowhead-link. Ukendte items udelades af sims; er et ID samme item under et andet ID, kan det skrives i `ITEM_ALIASES` i `server/data/db.ts` |
 | `role-sweep.ts <rapport> [...]` | Healer- og tank-tallene for alle healere og tanks på alle boss-kills i rapporterne, med tjek for NaN, nedbrud og tal uden for deres grænser (fx armor over 75 %) |
 | `tank-sim.ts <rapport>:<fight> <navn> [iterationer]` | Tank-simmen med kommandolinje-simmen (`WOWSIMS_CLI`): bossen, opener-dommen, threat og skade taget mod simmen for dig og peers, og gear-byt |
 
