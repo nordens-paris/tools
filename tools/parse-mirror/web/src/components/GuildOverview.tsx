@@ -6,6 +6,7 @@ import { fmt, itemIcon, wclReportUrl, wclUrl } from '../format.ts';
 import { Hint } from './Hint.tsx';
 import { DebuffsPanel, GearPanel, PartiesPanel, PlayerName, shortBoss } from './RaidChecks.tsx';
 import { pctClass } from './RaidOverview.tsx';
+import { HealerRaidPanel } from './healer/HealerRaid.tsx';
 
 const median = (xs: number[]) => {
   if (!xs.length) return undefined;
@@ -286,6 +287,7 @@ export function GuildOverview({ guild, onRaid, onFight }: { guild: GuildSummary;
         <GearPanel guild={guild} />
       </div>
       <PartiesPanel guild={guild} />
+      <HealerRaidPanel report={guild.report} onFight={onFight} />
     </>
   );
 }

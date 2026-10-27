@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { getQuota, type Quota } from '../api.ts';
-import { getApiKey, isApiKeyRemembered, setApiKey } from '../apiKey.ts';
+import { OPEN_KEY_FORM, getApiKey, isApiKeyRemembered, setApiKey } from '../apiKey.ts';
 import { game } from '../game.ts';
 
 const KEY_FORMAT = /^[A-Za-z0-9]{32}$/;
@@ -34,6 +34,12 @@ export function ApiKeyPanel() {
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
   }, [open]);
+
+  useEffect(() => {
+    const show = () => setOpen(true);
+    window.addEventListener(OPEN_KEY_FORM, show);
+    return () => window.removeEventListener(OPEN_KEY_FORM, show);
+  }, []);
 
   const save = (e: React.FormEvent) => {
     e.preventDefault();

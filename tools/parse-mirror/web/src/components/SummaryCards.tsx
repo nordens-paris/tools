@@ -35,7 +35,7 @@ export function SummaryCards({ analysis, sim }: { analysis: AnalysisResult; sim?
   );
 }
 
-function Kpi(props: {
+export function Kpi(props: {
   label: string;
   value: string;
   unit?: string;

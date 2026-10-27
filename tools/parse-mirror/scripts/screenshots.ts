@@ -21,6 +21,7 @@ const BROWSERS = [
 const WARLOCK = 'r=q1Jr4LdHVzycnGA9&f=40&s=19'; // Darkfadè, Destruction, Kaz'rogal
 const WARRIOR = 'r=dqF8J9TbnCHQ4jgk&f=10&s=6'; // Nuttý, Fury, Rage Winterchill
 const RAID = 'r=q1Jr4LdHVzycnGA9';
+const HEALER = 'r=nbfHKZ2Ax6JghkjD&f=64&s=13'; // Sanctalux, Holy Paladin, Gurtogg Bloodboil
 
 fs.mkdirSync(OUT, { recursive: true });
 const browser = await puppeteer.launch({
@@ -131,6 +132,17 @@ async function shots(page: Page) {
   await waitForSims();
   await view('15-peers.png', 700);
 
+  log('Healer: Holy Paladin on Bloodboil');
+  await open(HEALER);
+  await page.waitForSelector('.kpis', { timeout: 300_000 });
+  await view('21-healer.png', 1400);
+  await tab('Mana');
+  await panel('22-healer-mana.png', 'Mana over the kill');
+  await tab('Overheal');
+  await panel('23-healer-overheal.png', 'Overheal by cause');
+  await tab('Deaths');
+  await panel('24-healer-deaths.png', 'Deaths');
+
   log('Raid, progress and guild overviews');
   await open(`${RAID}&s=19`);
   await page.waitForSelector('h2', { timeout: 300_000 });
@@ -145,6 +157,9 @@ async function shots(page: Page) {
   // Debuffs and gear check sit side by side; shoot the row they share.
   await row('19-debuffs-gear.png', 'Debuffs on the boss');
   await panel('20-parties.png', 'Parties');
+  await click('Show healers');
+  await page.waitForFunction(() => document.body.innerText.includes('Healing per mana'), { timeout: 300_000 });
+  await panel('25-healers.png', 'Healers');
 }
 
 /** Screenshot of the grid row holding the panel whose heading starts with `heading`. */

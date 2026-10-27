@@ -15,6 +15,9 @@ services:
         value: tbc-anniversary
       - key: SIM_MODE
         value: browser
+      # Healer analyses fetch several raids' logs: only on visitors' own keys here.
+      - key: HEALERS_NEED_OWN_KEY
+        value: "true"
       # Set in the Render dashboard (never in git).
       - key: WCL_API_KEY
         sync: false

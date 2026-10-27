@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 
-import type { AnalysisResult, GuildSummary, ProgressSummary, RaidSummary, SimResult } from '../../shared/types.ts';
-import { analyze, getGuild, getProgress, getRaid, runSim } from './api.ts';
+import type { AnalysisResult, GuildSummary, HealerAnalysis, HealerTab, ProgressSummary, RaidSummary, SimResult } from '../../shared/types.ts';
+import { ApiError, analyze, getGuild, getProgress, getRaid, runSim } from './api.ts';
+import { KEY_CHANGED, openKeyForm } from './apiKey.ts';
 import { runBrowserSims } from './browserSims.ts';
 import { game } from './game.ts';
 import { APP_NAME, GUILD_NAME } from './brand.ts';
@@ -15,6 +16,7 @@ import { Findings } from './components/Findings.tsx';
 import { FixFirst } from './components/FixFirst.tsx';
 import { Gear } from './components/Gear.tsx';
 import { GuildOverview } from './components/GuildOverview.tsx';
+import { HEALER_TABS, HealerPage } from './components/healer/HealerPage.tsx';
 import { Landing } from './components/Landing.tsx';
 import { LogSearch } from './components/LogSearch.tsx';
 import { MetricTable } from './components/MetricTable.tsx';
@@ -32,15 +34,21 @@ import { parseRoute, rememberLast, routeUrl, type Route } from './route.ts';
 const TABS = ['Overview', 'Rotation', 'Cooldowns', 'Consumes', 'Gear', 'Sim', 'Players'] as const;
 type Tab = (typeof TABS)[number];
 const asTab = (t?: string): Tab => (TABS as readonly string[]).includes(t ?? '') ? (t as Tab) : 'Overview';
+const asHealerTab = (t?: string): HealerTab => (HEALER_TABS as string[]).includes(t ?? '') ? (t as HealerTab) : 'Overview';
 
 export function App() {
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.search));
   const [analysis, setAnalysis] = useState<AnalysisResult>();
+  const [healer, setHealer] = useState<HealerAnalysis>();
   const [raid, setRaid] = useState<RaidSummary>();
   const [guild, setGuild] = useState<GuildSummary>();
   const [progress, setProgress] = useState<ProgressSummary>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
+  // The last error asked for the visitor's own key; saving one retries the page.
+  const [needsKey, setNeedsKey] = useState(false);
+  // Whether the page shown would look different with the visitor's own key (retried when one is saved).
+  const keyRetry = useRef(false);
   const [sim, setSim] = useState<SimResult>();
   const [simLoading, setSimLoading] = useState(false);
   const [simError, setSimError] = useState<string>();
@@ -51,16 +59,24 @@ export function App() {
   // Fights opened this session, so back/forward doesn't re-run the analysis and sims.
   const fightCache = useRef(new Map<string, { analysis: AnalysisResult; sim?: SimResult }>());
   const fightKey = (r: Extract<Route, { view: 'analysis' }>) => `${r.report}:${r.fight}:${r.source}:${r.peers ? 'peers' : 'top'}`;
+  // Healer analyses have no sims and no "top/peers" toggle: one per fight and player.
+  const healerCache = useRef(new Map<string, HealerAnalysis>());
+  const healerKey = (r: Extract<Route, { view: 'analysis' }>) => `${r.report}:${r.fight}:${r.source}`;
+  const matchesHealer = (x: HealerAnalysis | undefined, r: Route): x is HealerAnalysis =>
+    !!x && r.view === 'analysis' && x.report === r.report && x.fight === r.fight && x.you.source === r.source;
   /** Whether an analysis is the one a route asks for (same fight, player and comparison group). */
   const matches = (x: AnalysisResult | undefined, r: Route): x is AnalysisResult =>
     !!x && r.view === 'analysis' && x.you.report === r.report && x.you.fight === r.fight && x.you.source === r.source && x.comparison.mode === (r.peers ? 'peers' : 'top');
   const tab = route.view === 'analysis' ? asTab(route.tab) : 'Overview';
+  const healerTab = route.view === 'analysis' ? asHealerTab(route.tab) : 'Overview';
 
   useEffect(() => {
     const title =
       route.view === 'analysis' && analysis
         ? `${analysis.you.name} · ${analysis.encounter.name}`
-        : route.view === 'raid' && raid
+        : route.view === 'analysis' && healer
+          ? `${healer.you.name} · ${healer.encounter.name}`
+          : route.view === 'raid' && raid
           ? `${raid.player.name} · ${raid.title}`
           : route.view === 'progress' && progress
             ? `${progress.player.name} · progress`
@@ -69,7 +85,7 @@ export function App() {
               : '';
     document.title = title ? `${title} · ${APP_NAME}` : APP_NAME;
     if (title) rememberLast(route, title);
-  }, [route, analysis, raid, guild, progress]);
+  }, [route, analysis, healer, raid, guild, progress]);
 
   const startSim = async (id: string, token = latest.current) => {
     setSimLoading(true);
@@ -100,13 +116,23 @@ export function App() {
   /** Fetches what a route shows, unless it's already loaded. */
   const load = async (r: Route, force = false) => {
     setError(undefined);
+    setNeedsKey(false);
+    keyRetry.current = false;
     if (r.view === 'home') return;
     const loaded =
       (r.view === 'guild' && guild?.report === r.report) ||
       (r.view === 'raid' && raid?.report === r.report && raid.player.source === r.source) ||
       (r.view === 'progress' && progress?.report === r.report && progress.player.source === r.source) ||
-      matches(analysis, r);
+      matches(analysis, r) ||
+      matchesHealer(healer, r);
     if (loaded && !force) return;
+    const cachedHealer = r.view === 'analysis' ? healerCache.current.get(healerKey(r)) : undefined;
+    if (cachedHealer && !force) {
+      ++latest.current;
+      setHealer(cachedHealer);
+      setLoading(false);
+      return;
+    }
     const cached = r.view === 'analysis' ? fightCache.current.get(fightKey(r)) : undefined;
     if (cached) {
       ++latest.current;
@@ -126,7 +152,10 @@ export function App() {
         if (token === latest.current) setGuild(g);
       } else if (r.view === 'raid') {
         const x = await getRaid(r.report, r.source);
-        if (token === latest.current) setRaid(x);
+        if (token === latest.current) {
+          setRaid(x);
+          keyRetry.current = !!x.player.healerLocked;
+        }
       } else if (r.view === 'progress') {
         const p = await getProgress(r.report, r.source);
         if (token === latest.current) setProgress(p);
@@ -136,13 +165,22 @@ export function App() {
         setSimLoading(false);
         const result = await analyze(r.report, r.fight, r.source, r.peers ? 'peers' : 'top');
         if (token !== latest.current) return;
+        if (result.kind === 'healer') {
+          healerCache.current.set(healerKey(r), result);
+          setHealer(result);
+          return;
+        }
         fightCache.current.set(fightKey(r), { analysis: result });
         setAnalysis(result);
         // Sims take a few seconds; start them in the background right away.
         void startSim(result.id, token);
       }
     } catch (err) {
-      if (token === latest.current) setError((err as Error).message);
+      if (token === latest.current) {
+        setError((err as Error).message);
+        setNeedsKey(err instanceof ApiError && err.needsKey);
+        keyRetry.current = err instanceof ApiError && err.needsKey;
+      }
     } finally {
       if (token === latest.current) setLoading(false);
     }
@@ -154,7 +192,7 @@ export function App() {
     window.scrollTo({ top: 0 });
     void load(r);
   };
-  const setTab = (t: Tab) => {
+  const setTab = (t: Tab | HealerTab) => {
     if (route.view !== 'analysis') return;
     const r = { ...route, tab: t };
     window.history.replaceState(null, '', routeUrl(r));
@@ -172,7 +210,13 @@ export function App() {
       void loadRef.current(r);
     };
     window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
+    // A saved key retries the page; a raid page also shows healer columns it skipped without one.
+    const onKey = () => keyRetry.current && void loadRef.current(parseRoute(window.location.search), true);
+    window.addEventListener(KEY_CHANGED, onKey);
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      window.removeEventListener(KEY_CHANGED, onKey);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -183,6 +227,7 @@ export function App() {
 
   // Show data only when it belongs to the current route (a new route may still be loading).
   const a = matches(analysis, route) ? analysis : undefined;
+  const h = matchesHealer(healer, route) ? healer : undefined;
   const raidShown = route.view === 'raid' && raid?.report === route.report && raid.player.source === route.source ? raid : undefined;
   const guildShown = route.view === 'guild' && guild?.report === route.report ? guild : undefined;
   const progressShown = route.view === 'progress' && progress?.report === route.report && progress.player.source === route.source ? progress : undefined;
@@ -199,6 +244,17 @@ export function App() {
               <small>{GUILD_NAME}</small>
             </span>
           </button>
+          {h && (
+            <nav className="tabs" aria-label="Report sections">
+              {HEALER_TABS.map((t) => (
+                <button key={t} aria-current={t === healerTab ? 'page' : undefined} onClick={() => setTab(t)}>
+                  {t}
+                  {t === 'Overview' && h.findings.length > 0 && <span className="count">{h.findings.length}</span>}
+                  {t === 'Deaths' && h.deaths.length > 0 && <span className="count">{h.deaths.length}</span>}
+                </button>
+              ))}
+            </nav>
+          )}
           {a && (
             <nav className="tabs" aria-label="Report sections">
               {TABS.map((t) => (
@@ -219,7 +275,19 @@ export function App() {
       </header>
 
       <main className="wrap">
-        {error && <div className="banner error">{error}</div>}
+        {error && (
+          <div className="banner error">
+            {error}
+            {needsKey && (
+              <>
+                {' '}
+                <button className="btn small" onClick={openKeyForm}>
+                  Add your API key
+                </button>
+              </>
+            )}
+          </div>
+        )}
 
         {route.view === 'home' && <Landing onAnalyze={openFight} onRaid={openRaid} onGuild={openGuild} loading={loading} />}
 
@@ -229,7 +297,7 @@ export function App() {
             <div>
               <strong>Fetching logs…</strong>
               <div className="muted small">
-                {route.view === 'analysis' ? 'Pulling the fight and the top 10 parses from Warcraft Logs.' : 'Pulling the boss kills and parses from Warcraft Logs.'}
+                {route.view === 'analysis' ? 'Pulling the fight and the players to compare with from Warcraft Logs.' : 'Pulling the boss kills and parses from Warcraft Logs.'}
               </div>
             </div>
           </div>
@@ -263,6 +331,18 @@ export function App() {
             </button>
             <Progress progress={progressShown} />
           </>
+        )}
+
+        {h && route.view === 'analysis' && (
+          <GroupContext.Provider value={{ short: 'Peer', players: 'peers' }}>
+            <HealerPage
+              analysis={h}
+              tab={healerTab}
+              onTab={setTab}
+              onRaid={() => openRaid(h.report, h.you.source)}
+              picker={<BossPicker report={h.report} fight={h.fight} source={h.you.source} loading={loading} onChange={(fight) => go({ ...route, fight })} />}
+            />
+          </GroupContext.Provider>
         )}
 
         {a && (

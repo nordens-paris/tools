@@ -19,8 +19,9 @@ web (React)  ──/api──▶  server (Express)  ──▶  Warcraft Logs v1 
 | `server/wcl/` | Warcraft Logs v1-klient med disk-cache og rate limit-styring |
 | `server/armory/` | Rigtige talenter fra classic-armory.org (loggene gemmer kun point pr. træ) |
 | `server/analysis/` | Henter én spillers kamp, finder sammenligningsgruppen, bygger metrics og fund |
+| `server/analysis/healer/` | Healer-analysen: raid-wide data, metrics, peers fra velspillede raids, sammenligning |
 | `server/sim/` | Bygger WoWSims-forespørgsler ud fra loggen, kører what-ifs, held og "hvor kommer forskellen fra" |
-| `server/specs/` | Alt spec-specifikt; én fil pr. spec (se [ny-spec.md](ny-spec.md)) |
+| `server/specs/` | Alt spec-specifikt; én fil pr. spec (se [ny-spec.md](ny-spec.md)); healer-specs i `healers.ts` |
 | `server/data/` | Opslag i WoWSims-data: items, enchants, gems, staveformer, talenter, consumables |
 | `server/game.ts` | Alt der afhænger af spilversionen (se [forever.md](forever.md)) |
 | `web/src/` | UI'et. Produktnavnet står i `web/src/brand.ts`, URL-skemaet i `web/src/route.ts` |
@@ -30,12 +31,14 @@ web (React)  ──/api──▶  server (Express)  ──▶  Warcraft Logs v1 
 
 ## Warcraft Logs-klienten (`server/wcl/client.ts`)
 
-- **Cache.** Rapportdata ændrer sig ikke, så de caches for altid i `.cache/wcl`. Undtagelse: fight-listen
+- **Cache.** Rapportdata ændrer sig ikke, så de caches for altid i `.cache/wcl`, gzippet (event-data
+  fylder cirka en tiendedel; ældre ukomprimerede filer læses stadig). `events(..., fields)` gemmer
+  kun de felter, der bruges: raid-wide events har position, stats og meget mere på hver linje. Undtagelse: fight-listen
   for en rapport, der sluttede for under 12 timer siden, opdateres hvert 5. minut (den kan stadig
   blive logget). Rankings og en spillers parses caches i 6 timer. Ens forespørgsler, der er i gang
   samtidig, deler ét kald.
 - **Rate limits.** Hvert svar har `x-ratelimit-limit`/`x-ratelimit-remaining` for et vindue på
-  cirka et minut (800 på den nuværende plan). Klienten kører højst 3 kald ad gangen og holder pause,
+  cirka et minut (800 på den nuværende plan). Klienten kører højst 8 kald ad gangen (`WCL_CONCURRENCY`) og holder pause,
   når der er under 25 tilbage. Ved 429 venter den som serveren beder om (ellers 15–120 s), og ved
   netværksfejl eller 5xx prøver den igen to gange.
 - **Timebudgettet** (3.600 point i timen pr. nøgle) kan ikke ses gennem v1, så kald i den seneste
@@ -105,6 +108,44 @@ of Air og Mana Spring, plus Totem of Wrath fra en Elemental). Windfury findes fr
 
 En shadow priest i partyet giver desuden præstens DPS videre til simmen som Vampiric Touch-mana.
 
+## Healere (`server/analysis/healer/`)
+
+Healere simmes ikke (WoWSims' healer-specs har ingen rotation eller indkommende skade), så alt
+kommer fra loggen og en sammenligning med andre healere.
+
+1. **`data.ts`** henter et kill raid-wide i cirka 10 kald: healing, damage taken, casts, buffs,
+   deaths, mana-ændringer (`resourcechange`), combatant info, healing-tabellen (spec-ikoner) og
+   bossens melee pr. spiller (finder tanks). Ét hent dækker alle healere i raidet.
+2. **`model.ts`** (`FightModel`) bygger det fælles billede: HP over tid for alle (HP står i *procent*
+   på events, for den aktør `resourceActor` peger på), maksimalt liv (store hits delt med det
+   procenttal, de tog, ellers `10 × stamina + 4000`), dødsfald (Feign Death logges som død ved fuldt
+   liv og springes over), tanks (tank-spec med en reel del af bossens melee, eller over 20 % af den,
+   f.eks. Bloodboils Fel Rage-mål) og healere (healer-spec og mindst 5 % af raidets healing).
+   Mana læses i to layouts: `amount/max/type 0/cost`, eller forskudt ét felt (`amount` = max,
+   `max` = pris, `type` = nuværende), som nogle loggere skriver, også guildens.
+3. **`metrics.ts`** regner pr. healer: opgave (andel på tanks), mana og cooldowns, spells med ranks,
+   overheal fordelt på årsag (bedømt ud fra hullet, da healeren lagde sig fast: cast-start, eller
+   lige før en instant lander), afbrudte casts, reaktion, saves, præ-heals på tanks, aktivitet og
+   tomgang i 100 ms-trin, upkeep (Earth Shield, Lifebloom-stacks) og dispels, samt dødsfald (burst,
+   fast eller med tid til at redde, og om evnen rammer på en timer).
+4. **`peers.ts`** finder fem healere at sammenligne med: bossens `execution`- og `speed`-rangeringer
+   (hele raids; rækkerne har antal healere, damage taken og dødsfald, så miljøet matches uden ekstra
+   kald). Rankings' `damageTaken` er præcis summen af skade på spillere uden absorbs, samme tal som
+   vores. Pr. kandidat-raid ét kald: healing-tabellen `by=target` (rækkens `startTime - reportStart`
+   er kampens start i rapporten, så fight-listen er unødvendig), der giver hver healers andel på
+   tanks og spec-ikon. Raids tjekkes 8 ad gangen og kun, til der er nok healere at vælge imellem.
+   Tre trin: samme antal healere og ±25 % skade pr. healer;
+   ±1 healer og ±40 %; ellers nærmeste opgave. Op til 12 kandidater pr. trin får tjekket deres
+   parses på én gang (fight-liste for serveren og 1 opslag hver): median ≥ 50 over mindst 3 kills, og de mest stabile vælges. (HPS-parses er
+   lave for alle i raids med mange healere, så en højere grænse smider netop dem ud.)
+5. **`compare.ts`** henter peers' kills, deler tallene i *bedømt* (rimeligt uanset raidet) og
+   *kontekst* (HPS, andel af raidets healing, samlet overheal, mana tilbage) og laver fund.
+6. **`raid.ts`** laver healer-rækkerne til raid-siderne, uden peers.
+
+En healer-analyse koster cirka 10 kald for eget kill, 10–60 for at finde peers og cirka 50 for
+deres kills første gang (omkring 10 sekunder kold, mod 47 før kaldene kørte parallelt); peers deles
+af alle healere med samme spec på samme boss.
+
 ## Simmen (`server/sim/`)
 
 - **`request.ts`** oversætter en spillers kamp til en WoWSims `RaidSimRequest`: gear, talenter,
@@ -143,6 +184,8 @@ En shadow priest i partyet giver desuden præstens DPS videre til simmen som Vam
 - `group.ts` giver alle paneler de samme ord for sammenligningsgruppen.
 - Komponenterne i `components/` svarer til fanerne: Overview (Fix first, fund), Rotation,
   Cooldowns, Consumes, Gear (inkl. hit), Sim (held, what-ifs, hvor forskellen kommer fra), Players.
+- `components/healer/` er healer-siden (Overview, Mana, Spells, Overheal, Response, Deaths, Peers)
+  og healer-delene af raid-siderne. `/api/analyze` svarer med `kind: 'healer'` for healere.
 
 ## API'et
 
@@ -153,12 +196,14 @@ En shadow priest i partyet giver desuden præstens DPS videre til simmen som Vam
 | `GET /api/report/:code` | Rapportens bosses og spillere |
 | `GET /api/raid/:code/:source` | En spillers raid |
 | `GET /api/guild/:code` | Alle på alle bosses |
+| `GET /api/guild/:code/healers` | Alle healere på alle bosses (uden peers) |
 | `GET /api/progress/:code/:source` | En spillers parses over tid |
-| `POST /api/analyze` `{report, fight, source, mode}` | Analysen (`mode`: `top` eller `peers`) |
+| `POST /api/analyze` `{report, fight, source, mode}` | Analysen (`mode`: `top` eller `peers`); for en healer healer-analysen (`kind: 'healer'`) |
 | `POST /api/sim` `{analysisId}` | Starter sims for en analyse (med `SIM_MODE=cli`: venter og returnerer resultatet) |
 | `GET /api/sim/:id/jobs` | Browser-sims: ventende jobs, eller det færdige resultat |
 | `POST /api/sim/:id/results` | Browser-sims: resultater af kørte jobs |
 
 Analyser holdes i hukommelsen (de seneste 50, `MAX_ANALYSES`), så sim-trinnet kan genbruge de
 hentede data. Opslag på serverens Warcraft Logs-nøgle er begrænset pr. besøgende
-(`VISITOR_LOOKUPS_PER_HOUR`); med egen nøgle er der ingen grænse.
+(`VISITOR_LOOKUPS_PER_HOUR`); en healer-analyse tæller som tre opslag og healer-panelet som to. Med
+egen nøgle er der ingen grænse.

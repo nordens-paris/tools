@@ -1,4 +1,4 @@
-// Minimal Warcraft Logs v1 API client with an on-disk cache.
+// Minimal Warcraft Logs v1 API client with an on-disk cache (gzipped JSON).
 //
 // Reports don't change once a fight is logged, so report data is cached forever (except the fight
 // list of a report that may still be logging). Rankings change over time and are cached for a few
@@ -11,6 +11,8 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { promisify } from 'node:util';
+import zlib from 'node:zlib';
 
 import { game } from '../game.ts';
 import type {
@@ -18,6 +20,7 @@ import type {
   WclEvent,
   WclFightsResponse,
   WclParse,
+  WclRaidRankingsResponse,
   WclRankingsResponse,
   WclTableAuras,
   WclTableEntries,
@@ -28,7 +31,8 @@ const RANKINGS_TTL_MS = 6 * 60 * 60 * 1000;
 /** Fight list of a report that ended less than this long ago: it may still be logging. */
 const LIVE_REPORT_MS = 12 * 60 * 60 * 1000;
 const LIVE_FIGHTS_TTL_MS = 5 * 60 * 1000;
-const MAX_CONCURRENT = 3;
+/** Requests at once. Each takes ~0.4 s, so this sets the speed; the per-minute window still applies. */
+const MAX_CONCURRENT = Number(process.env.WCL_CONCURRENCY ?? 8);
 /** Pause when the short window has fewer requests left than this. */
 const WINDOW_RESERVE = 25;
 const WINDOW_MS = 60 * 1000;
@@ -48,6 +52,31 @@ export interface QuotaStatus {
   windowLimit?: number;
   windowRemaining?: number;
   requestsLastHour: number;
+}
+
+const gzip = promisify(zlib.gzip);
+const gunzip = promisify(zlib.gunzip);
+const cachePath = (key: string) => path.join(CACHE_DIR, crypto.createHash('sha1').update(key).digest('hex'));
+
+/** A cached response: gzipped (event data shrinks about 10x), or plain JSON from older caches. */
+async function readCache<T>(base: string): Promise<{ data: T; mtimeMs: number } | undefined> {
+  for (const [ext, zipped] of [['.json.gz', true], ['.json', false]] as const) {
+    try {
+      const [stat, buf] = await Promise.all([fs.stat(base + ext), fs.readFile(base + ext)]);
+      return { data: JSON.parse((zipped ? await gunzip(buf) : buf).toString('utf8')) as T, mtimeMs: stat.mtimeMs };
+    } catch {
+      // Not there (or broken): try the next format.
+    }
+  }
+  return undefined;
+}
+
+/** Writes to a temp file and renames, so a concurrent read never sees half a file. */
+async function writeCache(base: string, data: unknown) {
+  await fs.mkdir(CACHE_DIR, { recursive: true });
+  const tmp = `${base}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  await fs.writeFile(tmp, await gzip(JSON.stringify(data)));
+  await fs.rename(tmp, `${base}.json.gz`);
 }
 
 /** Report data requests in flight, so identical concurrent requests share one fetch. */
@@ -137,26 +166,32 @@ export class WclClient {
     }
   }
 
+  /** `slim` trims a response before it's cached (and is part of the cache key). */
   private async get<T>(
     endpoint: string,
     params: Record<string, string | number>,
     ttlMs?: number | ((cached: T) => number | undefined),
+    slim?: { key: string; apply: (data: T) => T },
   ): Promise<T> {
     // translate=true makes non-English logs return English ability names. Only use it when
     // needed: it maps to modern names, which we then fix up by spell ID (see spellName()).
     const report = endpoint.match(/^report\/(?!fights\/)[^/]+\/(?:[^/]+\/)?([A-Za-z0-9]+)$/)?.[1];
     const all = report && (await this.fights(report)).lang !== 'en' ? { ...params, translate: 'true' } : params;
     const query = new URLSearchParams(Object.entries(all).map(([k, v]) => [k, String(v)]));
-    const cacheKey = `${this.host}/v1/${endpoint}?${query}`;
-    const file = path.join(CACHE_DIR, crypto.createHash('sha1').update(cacheKey).digest('hex') + '.json');
+    const cacheKey = `${this.host}/v1/${endpoint}?${query}${slim ? `#${slim.key}` : ''}`;
+    const base = cachePath(cacheKey);
 
-    try {
-      const stat = await fs.stat(file);
-      const cached = JSON.parse(await fs.readFile(file, 'utf8')) as T;
-      const ttl = typeof ttlMs === 'function' ? ttlMs(cached) : ttlMs;
-      if (ttl === undefined || Date.now() - stat.mtimeMs < ttl) return cached;
-    } catch {
-      // Not cached yet (or a broken file, which gets refetched).
+    const cached = await readCache<T>(base);
+    if (cached) {
+      const ttl = typeof ttlMs === 'function' ? ttlMs(cached.data) : ttlMs;
+      if (ttl === undefined || Date.now() - cached.mtimeMs < ttl) return cached.data;
+    }
+    // A slimmed response can be made from the full one if that's cached (report data never changes).
+    const full = slim && (await readCache<T>(cachePath(cacheKey.split('#')[0])));
+    if (slim && full) {
+      const data = slim.apply(full.data);
+      await writeCache(base, data);
+      return data;
     }
 
     const pending = inflight.get(cacheKey);
@@ -164,12 +199,9 @@ export class WclClient {
     const fetching = (async () => {
       query.set('api_key', this.apiKey);
       const url = `https://${this.host}/v1/${endpoint}?${query}`;
-      const data = (await withSlot(() => this.fetchWithQuota(url, endpoint))) as T;
-      // Write to a temp file and rename, so a concurrent read never sees half a file.
-      await fs.mkdir(CACHE_DIR, { recursive: true });
-      const tmp = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;
-      await fs.writeFile(tmp, JSON.stringify(data));
-      await fs.rename(tmp, file);
+      const raw = (await withSlot(() => this.fetchWithQuota(url, endpoint))) as T;
+      const data = slim ? slim.apply(raw) : raw;
+      await writeCache(base, data);
       return data;
     })();
     inflight.set(cacheKey, fetching);
@@ -188,7 +220,7 @@ export class WclClient {
   }
 
   table<T = WclTableEntries>(
-    view: 'damage-done' | 'damage-taken' | 'casts' | 'buffs' | 'debuffs',
+    view: 'damage-done' | 'damage-taken' | 'healing' | 'casts' | 'buffs' | 'debuffs',
     report: string,
     params: Record<string, string | number>,
   ) {
@@ -204,15 +236,31 @@ export class WclClient {
     return this.table<WclTableAuras>('debuffs', report, { start, end, hostility: 1, ...(sourceId ? { sourceid: sourceId } : {}) });
   }
 
-  /** All events of a view for one player, following pagination. */
-  async events(view: 'casts' | 'summary' | 'damage-done' | 'buffs', report: string, start: number, end: number, params: Record<string, string | number>) {
+  /**
+   * All events of a view (one player, or everyone without a sourceid), following pagination.
+   * With `fields`, only those fields of each event are kept (and cached): raid-wide events carry
+   * position, stats and more on every line, several MB per fight.
+   */
+  async events(
+    view: 'casts' | 'summary' | 'damage-done' | 'damage-taken' | 'healing' | 'buffs' | 'debuffs' | 'deaths',
+    report: string,
+    start: number,
+    end: number,
+    params: Record<string, string | number>,
+    fields?: readonly string[],
+  ) {
+    type Page = { events: WclEvent[]; nextPageTimestamp?: number };
+    const slim = fields && {
+      key: `fields=${fields.join(',')}`,
+      apply: (page: Page): Page => ({
+        ...page,
+        events: page.events.map((e) => Object.fromEntries(fields.filter((f) => f in e).map((f) => [f, e[f]])) as WclEvent),
+      }),
+    };
     const events: WclEvent[] = [];
     let from = start;
     for (let page = 0; page < 50; page++) {
-      const res = await this.get<{ events: WclEvent[]; nextPageTimestamp?: number }>(
-        `report/events/${view}/${report}`,
-        { start: from, end, ...params },
-      );
+      const res = await this.get<Page>(`report/events/${view}/${report}`, { start: from, end, ...params }, undefined, slim);
       events.push(...res.events);
       if (!res.nextPageTimestamp || res.nextPageTimestamp >= end) break;
       from = res.nextPageTimestamp;
@@ -227,19 +275,28 @@ export class WclClient {
   }
 
   /** A character's ranked kills; without a zone, Warcraft Logs uses the current raid tier. */
-  parses(name: string, server: string, region: string, zone?: number) {
+  parses(name: string, server: string, region: string, zone?: number, metric: 'dps' | 'hps' = 'dps') {
     return this.get<WclParse[]>(
       `parses/character/${encodeURIComponent(name)}/${encodeURIComponent(server)}/${region}`,
-      { metric: 'dps', ...(zone ? { zone } : {}) },
+      { metric, ...(zone ? { zone } : {}) },
       RANKINGS_TTL_MS,
     );
   }
 
   /** Rankings, 100 per page (page 1 = ranks 1-100). */
-  rankings(encounterId: number, classId: number, specId: number, page = 1) {
+  rankings(encounterId: number, classId: number, specId: number, page = 1, metric: 'dps' | 'hps' = 'dps') {
     return this.get<WclRankingsResponse>(
       `rankings/encounter/${encounterId}`,
-      { metric: 'dps', class: classId, spec: specId, ...(page > 1 ? { page } : {}) },
+      { metric, class: classId, spec: specId, ...(page > 1 ? { page } : {}) },
+      RANKINGS_TTL_MS,
+    );
+  }
+
+  /** Whole-raid rankings: fastest kills, or cleanest (least damage taken, fewest deaths). */
+  raidRankings(encounterId: number, metric: 'speed' | 'execution', page = 1) {
+    return this.get<WclRaidRankingsResponse>(
+      `rankings/encounter/${encounterId}`,
+      { metric, ...(page > 1 ? { page } : {}) },
       RANKINGS_TTL_MS,
     );
   }

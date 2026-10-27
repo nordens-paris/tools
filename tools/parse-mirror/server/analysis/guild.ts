@@ -3,6 +3,7 @@
 // boss (damage table, combatant info, debuff table, one event query) plus each player's parses
 // (cached for hours), so it stays cheap on the Warcraft Logs quota.
 import type { GuildSummary } from '../../shared/types.ts';
+import { mayHeal } from '../specs/healers.ts';
 import { specForIcon } from '../specs/index.ts';
 import type { WclClient } from '../wcl/client.ts';
 import { parseOf, parsesFor } from './characters.ts';
@@ -45,7 +46,7 @@ export async function guildSummary(client: WclClient, report: string): Promise<G
         name: p.name,
         server: p.server,
         icon: p.icon,
-        supported: !!specForIcon(p.icon),
+        supported: !!specForIcon(p.icon) || mayHeal(p.icon),
         dps: !NOT_DPS.has(p.icon),
         fights: Object.fromEntries(
           perBoss

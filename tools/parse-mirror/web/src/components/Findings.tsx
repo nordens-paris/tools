@@ -7,7 +7,8 @@ const LABEL: Record<Severity, string> = { high: 'Big impact', medium: 'Worth fix
 const ICON: Record<Severity, string> = { high: '!!', medium: '!', low: '·', info: 'i' };
 const PILL: Record<Severity, string> = { high: 'bad', medium: 'warn', low: '', info: 'acc' };
 
-export function Findings({ findings, warnings }: { findings: Finding[]; warnings: string[] }) {
+/** `area` groups the findings (DPS areas, or healer tabs). */
+export function Findings({ findings, warnings }: { findings: (Omit<Finding, 'area'> & { area: string })[]; warnings: string[] }) {
   const [area, setArea] = useState<string>();
   const G = useGroup();
   const areas = [...new Set(findings.map((f) => f.area))];

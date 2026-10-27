@@ -6,6 +6,8 @@ export const game = {
   wowheadPath: 'tbc',
   /** Where sims run: in this browser (WebAssembly) or on the server. */
   simMode: 'browser' as 'browser' | 'cli',
+  /** Healer views only run on the visitor's own Warcraft Logs key (the hosted site). */
+  healersNeedOwnKey: false,
 };
 
 export async function loadGame() {
