@@ -213,7 +213,9 @@ af alle healere med samme spec på samme boss.
   det tidspunkt, spilleren brugte dem.
 - **`environment.ts`** oversætter buffs og debuffs fra loggen til WoWSims' raid/party/individual
   buffs og debuffs, plus mana fra andre (Innervate, Mana Tide, Vampiric Touch). Buffs WoWSims ikke
-  kender (Dark Iron Pipeweed, Rallying Cry...) lægges til som stats vægtet med uptime.
+  kender (Rallying Cry, Power Core...) lægges til som stats vægtet med uptime. Trinkets' on-use buffs
+  (Dark Iron Pipeweed fra Dark Iron Smoking Pipe, Hopped Up fra Direbrew Hops) gør ikke: WoWSims
+  simmer selve trinket'en fra gearet.
 - **`scenarios.ts`** kører what-ifs og execution:
   - *Your setup* (dit eget), *consumes* (gruppens mest brugte, byttet ind pr. kategori; flask og
     battle/guardian elixirs udelukker hinanden), *raid buffs* (det flertallet af gruppen havde; der

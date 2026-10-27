@@ -21,15 +21,15 @@ export const STAT = { spellDamage: 5, spellCritRating: 13, spirit: 16, attackPow
 // That ignores burst alignment (these are usually popped with Bloodlust), so it's slightly low.
 const STAT_BUFFS: Record<number, { name: string; stats: Partial<Record<keyof typeof STAT, number>>; consumable?: boolean }> = {
   31732: { name: 'Rallying Cry', stats: { attackPower: 165 } }, // Hyjal NPC buff
-  1312270: { name: 'Dark Iron Pipeweed', stats: { spellDamage: 209 }, consumable: true },
-  1312306: { name: 'Hopped Up', stats: { spellDamage: 135 }, consumable: true },
+  // Not trinket buffs like Dark Iron Pipeweed (Dark Iron Smoking Pipe) or Hopped Up (Direbrew
+  // Hops): WoWSims has those trinkets and sims them from the gear, so adding them would count twice.
   29308: { name: 'Power Surge', stats: { spellDamage: 25 }, consumable: true }, // Power Core
   43722: { name: 'Enlightened', stats: { spellCritRating: 20, spirit: 20 }, consumable: true },
 };
 
 /**
  * Applies another player's consumable-driven environment (drums, stat-buff consumables like
- * Dark Iron Pipeweed) on top of an environment, for the "top 10 consumes" scenario.
+ * Power Core) on top of an environment, for the "top 10 consumes" scenario.
  */
 export function withConsumablesFrom(
   env: SimEnvironment,
@@ -159,7 +159,7 @@ export function buildEnvironment(
   buffs: AuraUptime[],
   bossDebuffs: AuraUptime[],
   drums?: string,
-  // consumableBuffs: whose consumable stat buffs (Pipeweed...) to use; defaults to `buffs`.
+  // consumableBuffs: whose consumable stat buffs (Power Core...) to use; defaults to `buffs`.
   // isbHitPct: share of the player's shadow hits that had Improved Shadow Bolt, if measured.
   // shadowPriestDps: a shadow priest in the party (Vampiric Touch mana).
   opts: { consumableBuffs?: AuraUptime[]; isbHitPct?: number; shadowPriestDps?: number } = {},

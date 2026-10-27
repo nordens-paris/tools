@@ -36,7 +36,21 @@ const spellNames = load<Record<string, string>>('spell-names.json');
 /** The TBC name of a spell, falling back to the name Warcraft Logs gave. */
 export const spellName = (id: number, fallback: string) => spellNames[id] ?? fallback;
 
-export const itemInfo = (id: number) => items[id];
+/**
+ * Items whose ID in the logs differs from WoWSims' for the same item. The Battlemaster's trinkets
+ * show up in Anniversary logs as 34576-34580; WoWSims has them as 34163, 34162, 33832, 34049 and
+ * 34050 (same names, icons and effects).
+ */
+const ITEM_ALIASES: Record<number, number> = {
+  34576: 34163, // Battlemaster's Cruelty
+  34577: 34162, // Battlemaster's Depravity
+  34578: 33832, // Battlemaster's Determination
+  34579: 34049, // Battlemaster's Audacity
+  34580: 34050, // Battlemaster's Perseverance
+};
+/** The WoWSims item ID for an item ID from a log. */
+export const simItemId = (id: number) => ITEM_ALIASES[id] ?? id;
+export const itemInfo = (id: number) => items[simItemId(id)];
 export const enchantInfo = (effectId: number) => enchants[effectId];
 export const gemInfo = (id: number) => gems[id];
 
@@ -54,7 +68,7 @@ export function gearStats(gear: { id: number; permanentEnchant?: number; gems?: 
   };
   for (const g of gear) {
     if (!g.id) continue;
-    add(tankStats.items[g.id]);
+    add(tankStats.items[simItemId(g.id)]);
     if (g.permanentEnchant) add(tankStats.enchants[g.permanentEnchant]);
     for (const gem of g.gems ?? []) add(tankStats.gems[gem.id]);
   }

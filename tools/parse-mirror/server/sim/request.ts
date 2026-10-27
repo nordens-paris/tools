@@ -2,7 +2,7 @@
 import type { ConsumeUse } from '../../shared/types.ts';
 import { SIM_SLOT_ORDER, type PlayerFightRaw } from '../analysis/collect.ts';
 import type { DetectedConsumes } from '../data/consumes.ts';
-import { itemInfo, loadJson } from '../data/db.ts';
+import { itemInfo, loadJson, simItemId } from '../data/db.ts';
 import { baseEncounterId, game } from '../game.ts';
 import { talentSplit, type SpecConfig } from '../specs/types.ts';
 import type { WclGear } from '../wcl/types.ts';
@@ -181,7 +181,7 @@ export function buildRequest(opts: {
     // Items WoWSims doesn't have (newer Anniversary items) would fail the whole sim; leave them out.
     if (!g || !g.id || !itemInfo(g.id)) return {};
     return {
-      id: g.id,
+      id: simItemId(g.id),
       ...(g.permanentEnchant ? { enchant: g.permanentEnchant } : {}),
       ...(g.gems?.length ? { gems: g.gems.map((gem) => gem.id) } : {}),
     };

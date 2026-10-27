@@ -26,6 +26,14 @@ const RAID_PROVIDED = ['Bloodlust', 'Drums of Battle', 'Power Infusion', 'Feroci
 
 // Cooldowns whose absence costs the most.
 const MAJOR_COOLDOWNS = ['Death Wish', 'Recklessness', 'Arcane Power'];
+/**
+ * Trinket on-use cooldowns (as shown) and the trinket. Without the trinket equipped, a top player's
+ * use isn't a cooldown you skipped but a gear difference.
+ */
+const TRINKET_COOLDOWNS: Record<string, { item: string; ids: number[] }> = {
+  'Blessing of the Silver Crescent': { item: 'Icon of the Silver Crescent', ids: [29370] },
+  'Dark Iron Smoking Pipe': { item: 'Dark Iron Smoking Pipe', ids: [281735] },
+};
 
 // Rage generators whose timing is about rage, not burst windows.
 const RAGE_TOOLS = ['Bloodrage', 'Berserker Rage'];
@@ -141,7 +149,18 @@ export function buildFindings(
     const yours = you.cooldowns.find((c) => c.name === name);
     const topUses = top.map((p) => p.cooldowns.find((c) => c.name === name)).filter(Boolean);
     if (!topUses.length) continue;
-    if (!yours && most(topUses.length)) {
+    const trinket = TRINKET_COOLDOWNS[name];
+    if (!yours && trinket && !you.gear.some((g) => trinket.ids.includes(g.id))) {
+      const wearers = top.filter((p) => p.gear.some((g) => trinket.ids.includes(g.id))).length;
+      if (most(wearers)) {
+        findings.push({
+          severity: 'low',
+          area: 'Gear',
+          title: `${trinket.item}: ${wearers} of ${n} ${G} wear it`,
+          detail: `You don't have it equipped. Its on-use is in their sims through their gear; the Gear tab and the gear what-if show what trinkets like it are worth to you.`,
+        });
+      }
+    } else if (!yours && most(topUses.length)) {
       findings.push({
         severity: MAJOR_COOLDOWNS.includes(name) ? 'high' : 'medium',
         area: 'Cooldowns',

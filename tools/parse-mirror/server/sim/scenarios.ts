@@ -68,7 +68,7 @@ export async function runScenarios(
     .map((d) => d.replace(/ \(top 10(, )?/, ' (').replace(' ()', ''))
     .filter((d) => !consumes.changes.some((c) => c.includes(d.replace(/ \(.*\)$/, ''))))
     .map((d) => `Consumable buff: + ${d}`);
-  // Top players' raid buffs with your own consumable buffs (Pipeweed...), so only raid setup differs.
+  // Top players' raid buffs with your own consumable buffs (Power Core...), so only raid setup differs.
   const raidBuffs = withTopRaidBuffs(
     yourEnv,
     top.map((t) => buildEnvironment(t.fight.buffs, t.fight.bossDebuffs, undefined, { consumableBuffs: you.fight.buffs, isbHitPct: t.fight.isbHitPct, shadowPriestDps: t.fight.partyShadowPriestDps })),
@@ -94,7 +94,7 @@ export async function runScenarios(
       description: `Your gear, with the consumes most ${group.players} used added or swapped in. Consumes you used that they skip are kept.`,
       changes: [...consumes.changes, ...consumeEnvChanges],
       player: { ...yourSetup, consumes: consumes.list, flags: consumes.flags, conjuredId: consumes.conjuredId },
-      // Drums and smokes like Dark Iron Pipeweed are applied through the environment.
+      // Drums and stat-buff consumables like Power Core are applied through the environment.
       env: consumeEnv,
     },
     {
