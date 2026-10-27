@@ -14,22 +14,22 @@ const median = (xs: number[]) => {
   return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : undefined;
 };
 
-/** Whether healer views can run now: always locally, on the hosted site only with the visitor's own key. */
-function useHealersAllowed() {
+/** Whether healer and tank views can run now: always locally, on the hosted site only with the visitor's own key. */
+export function useRolesAllowed() {
   const [hasKey, setHasKey] = useState(!!getApiKey());
   useEffect(() => {
     const update = () => setHasKey(!!getApiKey());
     window.addEventListener(KEY_CHANGED, update);
     return () => window.removeEventListener(KEY_CHANGED, update);
   }, []);
-  return !game.healersNeedOwnKey || hasKey;
+  return !game.rolesNeedOwnKey || hasKey;
 }
 
-/** On the hosted site, healer views need the visitor's own key; says so with a button to add it. */
+/** On the hosted site, healer and tank views need the visitor's own key; says so with a button to add it. */
 export function HealerKeyNote() {
   return (
     <div className="banner info">
-      Healer stats fetch other raids' logs, so on this site they use your own Warcraft Logs key (it stays in your browser).{' '}
+      Healer and tank stats fetch other raids' logs, so on this site they use your own Warcraft Logs key (it stays in your browser).{' '}
       <button className="btn small" onClick={openKeyForm}>
         Add your API key
       </button>
@@ -174,7 +174,7 @@ export function HealerRaidPanel({ report, onFight }: { report: string; onFight: 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const [view, setView] = useState<(typeof VIEWS)[number]['key']>('hpm');
-  const allowed = useHealersAllowed();
+  const allowed = useRolesAllowed();
   const load = async () => {
     setLoading(true);
     setError(undefined);

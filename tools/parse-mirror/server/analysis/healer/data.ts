@@ -32,8 +32,8 @@ export interface HealerFightData {
   meleeTaken: ActorTableEntry[];
 }
 
-/** The event fields the healer metrics read; the rest is dropped before caching. */
-const FIELDS = [
+/** The event fields the healer and tank metrics read; the rest is dropped before caching. */
+export const FIELDS = [
   'timestamp',
   'type',
   'sourceID',
@@ -51,6 +51,14 @@ const FIELDS = [
   'resourceChange',
   'resourceChangeType',
   'waste',
+  // How each hit landed, for the tank metrics: hit type (dodge, parry, block, crushing...),
+  // what it would have done, and what armor, block and absorbs took off.
+  'hitType',
+  'unmitigatedAmount',
+  'mitigated',
+  'blocked',
+  // The actor's armor at the time (combatant info has it only at the pull, before a bear shifts).
+  'armor',
 ] as const;
 
 /** Raid-wide healer data for one fight. */

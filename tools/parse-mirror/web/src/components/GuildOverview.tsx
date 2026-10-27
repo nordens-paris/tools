@@ -7,6 +7,7 @@ import { Hint } from './Hint.tsx';
 import { DebuffsPanel, GearPanel, PartiesPanel, PlayerName, shortBoss } from './RaidChecks.tsx';
 import { pctClass } from './RaidOverview.tsx';
 import { HealerRaidPanel } from './healer/HealerRaid.tsx';
+import { TankRaidPanel } from './tank/TankRaid.tsx';
 
 const median = (xs: number[]) => {
   if (!xs.length) return undefined;
@@ -288,6 +289,7 @@ export function GuildOverview({ guild, onRaid, onFight }: { guild: GuildSummary;
       </div>
       <PartiesPanel guild={guild} />
       <HealerRaidPanel report={guild.report} onFight={onFight} />
+      <TankRaidPanel report={guild.report} onFight={onFight} />
     </>
   );
 }

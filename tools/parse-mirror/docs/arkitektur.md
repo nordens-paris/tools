@@ -21,7 +21,7 @@ web (React)  ──/api──▶  server (Express)  ──▶  Warcraft Logs v1 
 | `server/analysis/` | Henter én spillers kamp, finder sammenligningsgruppen, bygger metrics og fund |
 | `server/analysis/healer/` | Healer-analysen: raid-wide data, metrics, peers fra velspillede raids, sammenligning |
 | `server/sim/` | Bygger WoWSims-forespørgsler ud fra loggen, kører what-ifs, held og "hvor kommer forskellen fra" |
-| `server/specs/` | Alt spec-specifikt; én fil pr. spec (se [ny-spec.md](ny-spec.md)); healer-specs i `healers.ts` |
+| `server/specs/` | Alt spec-specifikt; én fil pr. spec (se [ny-spec.md](ny-spec.md)); healer- og tank-specs i `healers.ts` og `tanks.ts` |
 | `server/data/` | Opslag i WoWSims-data: items, enchants, gems, staveformer, talenter, consumables |
 | `server/game.ts` | Alt der afhænger af spilversionen (se [forever.md](forever.md)) |
 | `web/src/` | UI'et. Produktnavnet står i `web/src/brand.ts`, URL-skemaet i `web/src/route.ts` |
@@ -146,6 +146,32 @@ En healer-analyse koster cirka 10 kald for eget kill, 10–60 for at finde peers
 deres kills første gang (omkring 10 sekunder kold, mod 47 før kaldene kørte parallelt); peers deles
 af alle healere med samme spec på samme boss.
 
+## Tanks (`server/analysis/tank/`)
+
+1. **`data.ts`** genbruger healer-analysens raid-wide data (hvem bossen slog, hvert slags udfald,
+   casts, dødsfald, combatant info) og henter 3 kald mere pr. tank: deres skade (threat), deres buffs
+   med bands (hvornår de var oppe) og deres debuffs på bossen. Til peers henter `fetchTankFightLite`
+   kun tankens egne data (cirka 8 kald). `isTanking` afgør med melee-taken-tabellen (spec-ikoner),
+   om `/api/analyze` skal give en tank- eller healer-analyse.
+   - Med `hostility=1` læses `sourceid` som en fjendes id, så "debuffs denne spiller lagde på bossen"
+     hentes med filteret `source.name="…"` (`source.id` virker ikke i tabeller). Det rettede også
+     DPS-analysens egne debuff-rækker, som før altid var tomme.
+2. **`specs/tanks.ts`** har threat-værdierne fra WoWSims med kildefil for hver;
+   `scripts/check-threat.ts` tjekker dem mod en WoWSims-klon. Formlen er WoWSims':
+   `(skade × spellens multiplier + flat bonus) × spillerens multiplier`, kun for slag der lander.
+3. **`metrics.ts`** regner: hvem tanken tankede (den fjende, der slog dem mest) og rollen (main ≥ 40 %
+   af dens slag), effektivt liv (armor er medianen fra slagene, fordi combatant info kun har den fra
+   pull'et), defense fra gear (`data/wowsims/tank-stats.json`, udtrukket fra WoWSims' database) plus
+   talenter og resilience (`resilienceCritTaken` er ratingen), slagenes udfald (hitType: 0 miss,
+   1 hit, 2 crit, 4 block, 7 dodge, 8 parry, 15 crushing), mitigation-dækning, threat, cooldowns,
+   taunts og hvor meget bossen slog ikke-tanks.
+4. **`peers.ts`**: execution- og speed-rangeringerne som for healere. Rækkerne har antal tanks; raids
+   hvor spec'ens egne (DPS-)rankings har en tank af spec'en tjekkes først, så sjældnere specs (bears)
+   findes. Pr. kandidat-raid ét kald (melee-taken-tabellen med spec-ikoner og andel af bossens
+   melee). Peers, der døde, springes over.
+5. **`compare.ts`** deler i bedømt og kontekst og laver fund; **`raid.ts`** laver rækkerne til
+   raid-siderne.
+
 ## Simmen (`server/sim/`)
 
 - **`request.ts`** oversætter en spillers kamp til en WoWSims `RaidSimRequest`: gear, talenter,
@@ -184,6 +210,8 @@ af alle healere med samme spec på samme boss.
 - `group.ts` giver alle paneler de samme ord for sammenligningsgruppen.
 - Komponenterne i `components/` svarer til fanerne: Overview (Fix first, fund), Rotation,
   Cooldowns, Consumes, Gear (inkl. hit), Sim (held, what-ifs, hvor forskellen kommer fra), Players.
+- `components/tank/` er tank-siden (Overview, Survivability, Swings, Mitigation, Threat, Cooldowns,
+  Peers) og tank-delene af raid-siderne; `/api/analyze` svarer med `kind: 'tank'` for tanks.
 - `components/healer/` er healer-siden (Overview, Mana, Spells, Overheal, Response, Deaths, Peers)
   og healer-delene af raid-siderne. `/api/analyze` svarer med `kind: 'healer'` for healere.
 
@@ -197,6 +225,7 @@ af alle healere med samme spec på samme boss.
 | `GET /api/raid/:code/:source` | En spillers raid |
 | `GET /api/guild/:code` | Alle på alle bosses |
 | `GET /api/guild/:code/healers` | Alle healere på alle bosses (uden peers) |
+| `GET /api/guild/:code/tanks` | Alle tanks på alle bosses (uden peers) |
 | `GET /api/progress/:code/:source` | En spillers parses over tid |
 | `POST /api/analyze` `{report, fight, source, mode}` | Analysen (`mode`: `top` eller `peers`); for en healer healer-analysen (`kind: 'healer'`) |
 | `POST /api/sim` `{analysisId}` | Starter sims for en analyse (med `SIM_MODE=cli`: venter og returnerer resultatet) |
@@ -205,5 +234,5 @@ af alle healere med samme spec på samme boss.
 
 Analyser holdes i hukommelsen (de seneste 50, `MAX_ANALYSES`), så sim-trinnet kan genbruge de
 hentede data. Opslag på serverens Warcraft Logs-nøgle er begrænset pr. besøgende
-(`VISITOR_LOOKUPS_PER_HOUR`); en healer-analyse tæller som tre opslag og healer-panelet som to. Med
+(`VISITOR_LOOKUPS_PER_HOUR`); en healer- eller tank-analyse tæller som tre opslag og deres paneler som to. Med
 egen nøgle er der ingen grænse.

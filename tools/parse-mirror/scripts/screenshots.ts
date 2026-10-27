@@ -22,6 +22,7 @@ const WARLOCK = 'r=q1Jr4LdHVzycnGA9&f=40&s=19'; // Darkfadè, Destruction, Kaz'r
 const WARRIOR = 'r=dqF8J9TbnCHQ4jgk&f=10&s=6'; // Nuttý, Fury, Rage Winterchill
 const RAID = 'r=q1Jr4LdHVzycnGA9';
 const HEALER = 'r=nbfHKZ2Ax6JghkjD&f=64&s=13'; // Sanctalux, Holy Paladin, Gurtogg Bloodboil
+const TANK = 'r=nbfHKZ2Ax6JghkjD&f=64&s=30'; // Tinkywiinky, Protection Paladin, Gurtogg Bloodboil
 
 fs.mkdirSync(OUT, { recursive: true });
 const browser = await puppeteer.launch({
@@ -143,6 +144,15 @@ async function shots(page: Page) {
   await tab('Deaths');
   await panel('24-healer-deaths.png', 'Deaths');
 
+  log('Tank: Protection Paladin on Bloodboil');
+  await open(TANK);
+  await page.waitForSelector('.kpis', { timeout: 300_000 });
+  await view('26-tank.png', 1400);
+  await tab('Swings');
+  await panel('27-tank-swings.png', 'How the boss');
+  await tab('Threat');
+  await panel('28-tank-threat.png', 'Threat');
+
   log('Raid, progress and guild overviews');
   await open(`${RAID}&s=19`);
   await page.waitForSelector('h2', { timeout: 300_000 });
@@ -160,6 +170,9 @@ async function shots(page: Page) {
   await click('Show healers');
   await page.waitForFunction(() => document.body.innerText.includes('Healing per mana'), { timeout: 300_000 });
   await panel('25-healers.png', 'Healers');
+  await click('Show tanks');
+  await page.waitForFunction(() => document.body.innerText.includes('Holy Shield / Shield Block'), { timeout: 300_000 });
+  await panel('29-tanks.png', 'Tanks');
 }
 
 /** Screenshot of the grid row holding the panel whose heading starts with `heading`. */

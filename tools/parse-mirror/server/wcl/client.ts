@@ -231,9 +231,14 @@ export class WclClient {
     return this.table<WclTableAuras>('buffs', report, { start, end, sourceid: sourceId });
   }
 
-  /** Debuffs on enemies; with sourceId, only those the player applied. */
-  bossDebuffs(report: string, start: number, end: number, sourceId?: number) {
-    return this.table<WclTableAuras>('debuffs', report, { start, end, hostility: 1, ...(sourceId ? { sourceid: sourceId } : {}) });
+  /**
+   * Debuffs on enemies; with sourceName, only those that player applied. (With hostility=1 a
+   * `sourceid` is read as an enemy's id, and `source.id` filters don't work in tables: by name does.)
+   */
+  bossDebuffs(report: string, start: number, end: number, sourceName?: string) {
+    const params: Record<string, string | number> = { start, end, hostility: 1 };
+    if (sourceName) params.filter = `source.name="${sourceName.replace(/"/g, '\\"')}"`;
+    return this.table<WclTableAuras>('debuffs', report, params);
   }
 
   /**

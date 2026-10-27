@@ -335,7 +335,7 @@ export async function collectPlayerFight(
     spec.executeSpellId
       ? client.events('damage-done', report, start, end, { sourceid: source, abilityid: spec.executeSpellId })
       : Promise.resolve([]),
-    spec.debuffUptimes ? client.bossDebuffs(report, start, end, source) : Promise.resolve(undefined),
+    spec.debuffUptimes ? client.bossDebuffs(report, start, end, actor.name) : Promise.resolve(undefined),
     // Casters: partial resists and which hits had Improved Shadow Bolt are only in the events.
     spec.caster ? client.events('damage-done', report, start, end, { sourceid: source }) : Promise.resolve([]),
     // The sim has one target; damage on adds doesn't count when comparing with it.

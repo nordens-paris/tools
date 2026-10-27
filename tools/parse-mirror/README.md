@@ -12,6 +12,8 @@ Anniversary (fresh.warcraftlogs.com), fordi det er der, logs og sim findes.
 **Understøttede specs:** Fury Warrior, Destruction Warlock, Arcane Mage, Shadow Priest.
 **Healere:** Holy og Discipline Priest, Holy Paladin, Restoration Shaman og Restoration Druid,
 sammenlignet med healere fra velspillede raids ([afsnit 9](#9-healere)).
+**Tanks:** Protection Warrior, Protection Paladin og bear, sammenlignet med tanks fra velspillede
+raids ([afsnit 10](#10-tanks)).
 
 ![Forsiden](docs/billeder/01-forside.png)
 
@@ -26,7 +28,7 @@ tryk **Analyze**. Hvad du får, afhænger af linket:
 
 | Link indeholder | Du får |
 |---|---|
-| `fight=` og `source=` | Ét kill sammenlignet med top 10 (det meste af denne vejledning), eller for en healer med healere fra velspillede raids ([afsnit 9](#9-healere)) |
+| `fight=` og `source=` | Ét kill sammenlignet med top 10 (det meste af denne vejledning), eller for en healer eller tank med spillere fra velspillede raids ([afsnit 9](#9-healere), [10](#10-tanks)) |
 | kun `source=` | Din raid: DPS og parse på hver boss ([afsnit 8](#8-hele-raidet)) |
 | kun rapporten | Alle spillere på alle bosses ([afsnit 8](#8-hele-raidet)) |
 
@@ -254,10 +256,54 @@ tomgang pr. boss. På **Everyone in this raid** henter **Show healers** alle hea
 (eller stamina, ±7 %). Et påbegyndt cast har intet mål i loggen, så et afbrudt cast kan ikke
 bedømmes sikkert. WoWSims kan ikke simme healere, så der er ingen what-ifs. Første healer-analyse
 af et kill henter omkring 50–60 kald fra Warcraft Logs; derefter deles det meste gennem cachen. Derfor
-kræver healer-siderne på den hostede side din egen Warcraft Logs-nøgle (**API key** øverst til
-højre); den bliver i din browser.
+kræver healer- og tank-siderne på den hostede side din egen Warcraft Logs-nøgle (**API key** øverst
+til højre); den bliver i din browser.
 
-### 10. Del og gem
+### 10. Tanks
+
+![Tank-overblik](docs/billeder/26-tank.png)
+
+Tank-parses på Warcraft Logs måler kun DPS, og det belønner tanks i DPS-gear og forkert stance.
+Indsætter du et kill, hvor du tankede, sammenlignes du i stedet med tanks af samme klasse og rolle
+(main tank eller off-tank, ud fra din andel af bossens slag) fra velspillede raids med lige så
+mange tanks og en kill-tid tæt på din, som ikke døde. Tank-parses bruges ikke til at vælge dem.
+
+**Hvad der bedømmes:**
+
+- **Overlevelse og gear:** effektivt liv (liv ÷ (1 − armor-reduktion) mod en level 73-boss), armor,
+  liv (målt ud fra store hits, raid buffs og form med), undgåede slag, og om du er crit immun
+  (defense, talenter og resilience mod bossens 5,6 %). Gear-fanen viser, hvor stor en del af dit
+  gears stats der går til overlevelse frem for threat.
+- **Bossens slag:** hvordan hvert slag landede: crit, crushing blow, hit, block, parry, dodge, miss.
+  Crushing blows slår for 150 %. En warrior eller paladin med Shield Block eller Holy Shield oppe
+  kan ikke få dem; bears får altid nogle (nogle bosser crusher slet ikke).
+- **Aktiv mitigation:** ikke kun Holy Shield/Shield Block-uptime, men andelen af slag, der landede,
+  mens den var oppe, og hvor mange crushing blows der kom, mens den var nede. Desuden stance/form,
+  tid i Cat Form, og debuffs på bossen (Demoralizing Shout/Roar, Thunder Clap, Lacerate).
+- **Threat:** threat pr. sekund og i de første 5, 10 og 20 sekunder, regnet med WoWSims' threat-værdier
+  (stance, form, talenter og Righteous Fury med; healing og rage tæller ikke, som i WoWSims).
+- **Cooldowns:** forsvars-cooldowns og potions med dit liv på tidspunktet, og threat du selv smed
+  (Divine Shield eller Blessing of Protection på dig selv).
+
+Skade taget pr. sekund og hvor hårdt bossen slår er kontekst: det afgør bossen, healerne og din rolle.
+
+**Fanerne:** Overview, Survivability, Swings, Mitigation, Threat, Cooldowns og Peers.
+
+![Bossens slag](docs/billeder/27-tank-swings.png)
+
+![Threat](docs/billeder/28-tank-threat.png)
+
+**Raid-siderne:** en tanks egen raid viser effektivt liv, undgåede slag, crushing blows, threat og
+åbnings-threat pr. boss. På **Everyone in this raid** henter **Show tanks** alle tanks på alle bosses.
+
+![Tanks i raidet](docs/billeder/29-tanks.png)
+
+**Godt at vide om tanks:** Warcraft Logs' API har ingen threat-tal, så threat regnes selv ud fra din
+skade og dine evner. Combatant info har armor fra pull'et (før en bear skifter form), så armor tages
+fra slagene i kampen. Ingen tank-sims endnu. Hvem bossen slår mod andre end tanks tæller mekanikker
+med (f.eks. Fel Rage). Første tank-analyse af et kill henter omkring 30–100 kald.
+
+### 11. Del og gem
 
 - Hver visning har sin egen adresse, så du kan dele et link på Discord, og tilbage-knappen virker.
   `&vs=peers` vælger "Same gear, a step ahead", `&tab=Sim` åbner en bestemt fane.

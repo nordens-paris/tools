@@ -41,3 +41,22 @@ export const enchantInfo = (effectId: number) => enchants[effectId];
 export const gemInfo = (id: number) => gems[id];
 
 export const loadJson = load;
+
+// Tank-relevant stats on items, gems and enchants (str, agi, sta, def, dodge, parry, block...).
+type Stats = Record<string, number>;
+const tankStats = load<{ items: Record<string, Stats>; gems: Record<string, Stats>; enchants: Record<string, Stats> }>('tank-stats.json');
+
+/** Sum of the tank-relevant stats on a player's gear, gems and enchants (no set bonuses or procs). */
+export function gearStats(gear: { id: number; permanentEnchant?: number; gems?: { id: number }[] }[]): Stats {
+  const total: Stats = {};
+  const add = (st?: Stats) => {
+    for (const [k, v] of Object.entries(st ?? {})) total[k] = (total[k] ?? 0) + v;
+  };
+  for (const g of gear) {
+    if (!g.id) continue;
+    add(tankStats.items[g.id]);
+    if (g.permanentEnchant) add(tankStats.enchants[g.permanentEnchant]);
+    for (const gem of g.gems ?? []) add(tankStats.gems[gem.id]);
+  }
+  return total;
+}

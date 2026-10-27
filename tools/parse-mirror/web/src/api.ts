@@ -1,4 +1,4 @@
-import type { AnalysisResult, GuildSummary, HealerAnalysis, HealerRaidSummary, ProgressSummary, RaidSummary, SimResult } from '../../shared/types.ts';
+import type { AnalysisResult, GuildSummary, HealerAnalysis, HealerRaidSummary, ProgressSummary, RaidSummary, SimResult, TankAnalysis, TankRaidSummary } from '../../shared/types.ts';
 import { getApiKey } from './apiKey.ts';
 
 export interface Quota {
@@ -43,10 +43,11 @@ export const getQuota = () => request<Quota>('/api/quota');
 export const getRaid = (code: string, source: number) => request<RaidSummary>(`/api/raid/${code}/${source}`);
 export const getGuild = (code: string) => request<GuildSummary>(`/api/guild/${code}`);
 export const getGuildHealers = (code: string) => request<HealerRaidSummary>(`/api/guild/${code}/healers`);
+export const getGuildTanks = (code: string) => request<TankRaidSummary>(`/api/guild/${code}/tanks`);
 export const getProgress = (code: string, source: number) => request<ProgressSummary>(`/api/progress/${code}/${source}`);
-/** A DPS analysis, or a healer analysis when the player is healing (kind: 'healer'). */
+/** A DPS analysis, or a healer or tank analysis when the player healed or tanked (kind: 'healer' / 'tank'). */
 export const analyze = (report: string, fight: number, source: number, mode: 'top' | 'peers' = 'top') =>
-  request<AnalysisResult | HealerAnalysis>('/api/analyze', { report, fight, source, mode });
+  request<AnalysisResult | HealerAnalysis | TankAnalysis>('/api/analyze', { report, fight, source, mode });
 export const runSim = (analysisId: string) => request<SimResult>('/api/sim', { analysisId });
 
 /** Pulls report code, fight and source out of a Warcraft Logs URL. */
