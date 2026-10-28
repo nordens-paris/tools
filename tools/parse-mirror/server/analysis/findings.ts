@@ -131,6 +131,10 @@ export function buildFindings(
   for (const m of metrics.uptimes) {
     // No drums at all is reported once, as a missing consumable.
     if (m.label.startsWith('Drums') && m.you === 0) continue;
+    // A debuff with a cast efficiency of its own (Curse of Doom) was cast every time it could be:
+    // the uptime share is then down to the kill length (a second Doom only lands on a 120 s+ kill).
+    const eff = metrics.efficiency.find((e) => e.key === `eff:${m.key.replace(/^debuff:/, '')}`);
+    if (m.key.startsWith('debuff:') && eff && eff.you >= 95) continue;
     if (m.median >= 20 && m.you < m.median - 12) {
       // Buffs that come from other players (and longer kills dilute) are context, not a mistake.
       const external = RAID_PROVIDED.includes(m.label);

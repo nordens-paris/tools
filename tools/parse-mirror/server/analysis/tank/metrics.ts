@@ -119,13 +119,18 @@ export function tankMetrics(data: TankFightData, model = new FightModel(data.rai
 
   // Survivability.
   const info = data.raid.combatants.find((c) => c.sourceID === id) as unknown as { armor?: number; stamina?: number } | undefined;
-  // Armor as it was when hits landed (median): combatant info has it only at the pull.
+  // Armor as it was when hits landed (median): combatant info has it only at the pull. Hits with
+  // far more armor than at the pull are under a big temporary buff, like Gurtogg's Fel Rage (+20k
+  // armor and a lot of health, not shown as a buff in the log); a tank who only took hits then
+  // would read as 140k effective health, so those hits count for neither armor nor health.
+  // Potions, Stoneform and forms stay well under 1.5x.
+  const boosted = (e: LogEvent) => !!info?.armor && (e.armor ?? 0) > info.armor * 1.5;
   const armors = model.damage
-    .filter((e) => e.targetID === id && e.resourceActor === 2 && (e.armor ?? 0) > 0)
+    .filter((e) => e.targetID === id && e.resourceActor === 2 && (e.armor ?? 0) > 0 && !boosted(e))
     .map((e) => e.armor!)
     .sort((a, b) => a - b);
   const armor = armors.length ? armors[armors.length >> 1] : (info?.armor ?? 0);
-  const hp = model.maxHp(id);
+  const hp = model.maxHp(id, boosted);
   const dr = armorReduction(armor);
 
   // Active mitigation: uptime, and how many of the swings (and crushes) landed while it was up.

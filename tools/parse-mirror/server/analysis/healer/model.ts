@@ -197,17 +197,18 @@ export class FightModel {
   }
 
   /** Max HP: from big hits and the HP percent they took off, else from stamina (~7% off). */
-  maxHp(id: number) {
-    let m = this.maxHpCache.get(id);
+  /** `skip`: hits to leave out (a tank's hits under a big temporary buff); not cached. */
+  maxHp(id: number, skip?: (e: LogEvent) => boolean) {
+    let m = skip ? undefined : this.maxHpCache.get(id);
     if (m) return m;
     const ests: number[] = [];
     for (const e of this.damage) {
-      if (e.targetID !== id || e.resourceActor !== 2 || e.hitPoints === undefined || (e.amount ?? 0) <= 1200) continue;
+      if (e.targetID !== id || e.resourceActor !== 2 || e.hitPoints === undefined || (e.amount ?? 0) <= 1200 || skip?.(e)) continue;
       const drop = this.hpAt(id, e.timestamp - 1) - e.hitPoints;
       if (drop >= 8) ests.push(((e.amount ?? 0) * 100) / drop);
     }
     m = ests.length >= 3 ? { value: median(ests), from: 'damage' } : { value: (this.stamina.get(id) || 600) * 10 + 4000, from: 'stamina' };
-    this.maxHpCache.set(id, m);
+    if (!skip) this.maxHpCache.set(id, m);
     return m;
   }
 }
