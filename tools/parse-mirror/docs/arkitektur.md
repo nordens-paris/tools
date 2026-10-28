@@ -40,7 +40,11 @@ web (React)  ──/api──▶  server (Express)  ──▶  Warcraft Logs v1 
 - **Rate limits.** Hvert svar har `x-ratelimit-limit`/`x-ratelimit-remaining` for et vindue på
   cirka et minut (800 på den nuværende plan). Klienten kører højst 8 kald ad gangen (`WCL_CONCURRENCY`) og holder pause,
   når der er under 25 tilbage. Ved 429 venter den som serveren beder om (ellers 15–120 s), og ved
-  netværksfejl eller 5xx prøver den igen to gange.
+  netværksfejl eller 5xx prøver den igen to gange. Warcraft Logs begrænser også enkelte endpoints
+  for sig: efter mange karakter-opslag kan `parses/character` give 429 med `Retry-After` på et
+  kvarter, selv om vinduet har 799 tilbage. Beder serveren om mere end 20 s, venter klienten ikke
+  (det fik siderne til at hænge på "Fetching logs"), men fejler med det samme for den slags kald,
+  til tiden er gået. Parses er valgfri på raid-siderne, så de vises bare uden percentiler imens.
 - **Timebudgettet** (3.600 point i timen pr. nøgle) kan ikke ses gennem v1, så kald i den seneste
   time tælles som et skøn. Klik **ikke** "Use New Limits" på Warcraft Logs: det sænker budgettet
   til 1.000.
