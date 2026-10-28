@@ -188,6 +188,14 @@ export function buildEnvironment(
   }
   apply(INDIVIDUAL, buffs, env.individualBuffs, env.detected);
   apply(DEBUFFS, bossDebuffs, env.debuffs, env.detected);
+  // WoWSims puts the raid's Expose Armor up at 10 s; raids sunder until it lands (5 Sunders by
+  // ~6 s in the logs), and Sunder loses its uptime to it. Both in the sim: Sunder ramps up as in
+  // the game and Expose Armor, the stronger, replaces it at 10 s.
+  const sunder = bossDebuffs.find((a) => a.name === 'Sunder Armor');
+  if (env.debuffs.exposeArmor && !env.debuffs.sunderArmor && sunder && (sunder.uptimePct > 0 || sunder.uses > 0)) {
+    env.debuffs.sunderArmor = true;
+    env.detected.push('Sunder Armor (until Expose Armor)');
+  }
   if (drums) {
     env.partyBuffs.drums = drums;
     env.detected.push('Drums');
