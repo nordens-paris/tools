@@ -21,30 +21,36 @@ medianen; median og den midterste halvdel), oktober 2026:
 
 | Spec | Kills | Median | Midterste halvdel |
 |---|---|---|---|
-| Fury Warrior | Kaz'rogal, Archimonde | 100,7 % | 97–103 % |
-| Arms Warrior | Kaz'rogal, Archimonde | 101,3 % | 100–106 % |
+| Fury Warrior | Kaz'rogal, Archimonde | 99,4 % | 97–103 % |
+| Arms Warrior | Kaz'rogal, Archimonde | 101,0 % | 98–105 % |
 | Destruction Warlock | Kaz'rogal | 98,5 % | 98–100 % |
 | Affliction Warlock | Kaz'rogal, Archimonde | 97,8 % | 96–100 % |
 | Arcane Mage | Kaz'rogal | 101,4 % | 101–102 % |
 | Shadow Priest | Kaz'rogal | 101,1 % | 101–102 % |
 | Elemental Shaman | Kaz'rogal, Archimonde | 101,6 % | 95–106 % |
 | Balance Druid | Kaz'rogal, Archimonde | 94,8 % | 93–98 % |
-| Combat Rogue | Kaz'rogal, Archimonde | 104,1 % | 100–105 % |
-| Feral Druid | Kaz'rogal, Archimonde | 91,7 % | 91–95 % |
-| Retribution Paladin | Kaz'rogal, Archimonde | 108,4 % | 105–112 % |
-| Enhancement Shaman | Kaz'rogal, Archimonde | 110,4 % | 106–113 % |
-| Beast Mastery Hunter | Kaz'rogal, Archimonde | 100,1 % | 95–104 % |
-| Survival Hunter | Kaz'rogal, Archimonde | 89,6 % | 88–92 % |
-| Marksmanship Hunter | Kaz'rogal, Archimonde | 84,5 % | 73–88 % |
+| Combat Rogue | Kaz'rogal, Archimonde | 104,7 % | 100–105 % |
+| Feral Druid | Kaz'rogal, Archimonde | 91,2 % | 90–94 % |
+| Retribution Paladin | Kaz'rogal, Archimonde | 106,4 % | 103–110 % |
+| Enhancement Shaman | Kaz'rogal, Archimonde | 107,5 % | 105–109 % |
+| Beast Mastery Hunter | Kaz'rogal, Archimonde | 95,7 % | 93–100 % |
+| Survival Hunter | Kaz'rogal, Archimonde | 87,0 % | 86–89 % |
+| Marksmanship Hunter | Kaz'rogal, Archimonde | 83,2 % | 73–85 % |
 
 Warriors lå 5–6 % over 100 %, til Windfury Totem-rettelsen nedenfor. `validate-spec` trækker kun
 det direkte held fra (ikke trinket-procs), så proc-tunge melee-specs ligger en smule højt.
-Retribution og Enhancement ligger 8–10 % over: deres hvide slag rammer cirka 10 % hårdere i loggen
-end i simmen (en Combat rogues 4 %), og for Retribution critter de hvide slag 54 % over 552 slag
-på 16 top-spillere mod simmens 46 % (karakterarket giver cirka 40 %). Ingen af delene er forklaret
-endnu; Two-Handed Weapon Specialization, Vengeance, Crusade og Weapon Mastery virker i simmen (uden
-dem falder den 3–12 %). Forskellen er ens for alle af specen, så den forsvinder i sammenligningen
-med top 10. Marksmanship er sjælden og svag i Anniversary: dens "top 10" er almindelige spillere
+Retribution og Enhancement ligger 6–8 % over. Bossens armor og armor-debuffs passer (se "Armor"
+nedenfor), og et hvidt slag før armor er det samme i loggen og simmen (attack power, våbenskade og
+talenter). Top-paladins critter 52,3 % med hvide slag mod simmens 44,3 % (1.108 slag på fire
+Hyjal-bosser, `scripts/swing-table.ts`), men det er udvælgelse som for warlocks (se "Crit"
+nedenfor): over alle 276 kills fra 24 Retribution-paladins længere nede i rankings er forskellen
++1,0 ± 0,3 point, og de rankede top-kills er heldige; held-analysen trækker det fra. Det, der er
+tilbage for **Retribution** efter held, er mest, at top-paladins twister oftere end WoWSims' APL
+(11–14 seal-skift pr. minut mod 9–10). For **Enhancement** er udfaldene af
+de hvide slag præcis som i simmen; forskellen er cirka 4 % mere attack power i loggen, når
+cooldowns er nede, ikke forklaret endnu. Forskellen er ens for alle af specen, så den forsvinder
+i sammenligningen med top 10. Hunterne faldt 1–4 point med reaktionstiden på 100 ms (se "Reaktionstid"
+nedenfor): hunter-APL'en giver cirka 2 % mere DPS med den reaktionstid, den er skrevet til. Marksmanship er sjælden og svag i Anniversary: dens "top 10" er almindelige spillere
 (2,1–3,6k DPS mod 4,3–5k for Beast Mastery), som ikke når en perfekt sim. Survival-simmen melee-weaver
 mere end de rigtige (Raptor Strike 8,4 mod 5,8 pr. minut), så den ligger lidt over dem.
 Elementals spreder mere, mest på held (Lightning Bolt critter op til 76 % på et kort kill) og
@@ -73,7 +79,8 @@ mange, og selv rank 200 er top 1 % af ~28.000 parses. Ser man på **alle** kills
 | Hver spillers bedste kill pr. boss | +6,6 ± 1,7 |
 | Alle deres andre kills | +1,0 ± 0,5 |
 
-Fury warriors over 261 kills: −1,0 point samlet. Almindelige kills critter som forudsagt; gode
+Fury warriors over 261 kills: −1,0 point samlet. Retribution-paladins over 276 kills: +1,0 ± 0,3
+point samlet (+4,1 for percentil 90–100, +8 for rankede top-kills). Almindelige kills critter som forudsagt; gode
 parses er heldige. Simmens crit passer også med den papirværdi, loggens egne combatant-stats
 giver. Derfor kører simmen uden crit-justering, og top-spillernes ekstra crit vises som held.
 Arcane mages har det samme, bare større, fordi et kort kill har færre Arcane Blasts.
@@ -90,6 +97,30 @@ Held regnes i tre dele:
 3. **Procs:** trinkets, enchants og set-bonusser, der var oppe mere eller mindre end forventet,
    simmes med den forskel i uptime. Item-procs fra WoWSims-databasen, enchant- og set-procs i
    hånden. Mongoose på begge våben springes over, fordi loggen slår de to buffs sammen.
+
+## Armor
+
+Warcraft Logs giver hvert fysisk slag skade før armor (`unmitigatedAmount`) og hvad armor tog
+(`mitigated`), så bossens armor kan måles slag for slag (`scripts/armor-check.ts`,
+`scripts/armor-timeline.ts`). På Kaz'rogal viser første slag før debuffs 6.182 (tabellen siger
+6.200); Curse of Recklessness tager 800, Faerie Fire 610 og hver Sunder Armor 520, præcis som i
+simmen. Blood Frenzy (+4 % fysisk skade, lagt på efter armor) ser ud som cirka 500 armor mindre i
+de tal; regnes den med, passer bossens armor med Improved Expose Armor (1.715) og med fem Sunders
+(2.190) inden for ~30. Spillere med armor penetration (Warp-Spring Coil, 1.000 i 15 s) ser lavere
+armor, og det simmer WoWSims selv.
+
+Det, der ikke passede, var tidspunktet: WoWSims sætter raidets Expose Armor på efter 10 s, mens
+raids sunder fra pull, til den kommer. Når loggen har Expose Armor og der også blev sundret, får
+simmen begge: Sunder bygger op over de første 6 s, og Expose Armor, den stærkeste, tager over ved
+10 s. Det er værd 1–2 % for melee på et 70-sekunders kill.
+
+## Reaktionstid
+
+Requests sætter `reactionTimeMs: 100`, WoWSims-sidens standard. Uden den bruger WoWSims 10 ms, og
+en rogue, der venter på energi, eller en hunter, der venter på Auto Shot, kører hele rotationen
+igennem hvert 10. ms: rogue-sims tog 5 gange og hunter-sims 2,7 gange længere i browseren (14 og
+11 ms pr. iteration mod 0,7 for en warlock). Casters og warriors får samme DPS; hunters cirka 2 %
+mere, rogues det samme.
 
 ## Rettelser i WoWSims (`wowsims-patches/`)
 
@@ -131,7 +162,8 @@ Bygges ind af `scripts/build-wowsims.mjs`:
   Spring, så de totems holdes ude af miljøet. "Windfury Attack" er også navnet på Windfury Weapons
   procs, så den kan ikke vise en party-Windfury Totem for en Enhancement. Imbues tages fra våbnene
   (Windfury Weapon, når loggen ikke viser noget). Stormstrike logger en cast pr. våben-slag, så kun
-  17364 tæller.
+  17364 tæller. APL'en kaster Fire Elemental fra en gruppe (totem-twist), så tidsætningen fra loggen
+  lægges på gruppens reference; før simmede den en Fire Elemental for spillere, der ikke brugte en.
 - **Combat:** egen Expose Armor simmes kun, hvis spilleren brugte den (APL'en gør det ellers, når
   Improved Expose Armor er talentet). Adrenaline Rush og Blade Flurry tidsættes fra loggen; APL'en
   brugte Adrenaline Rush før pull. Gifte kommer fra våbnene; med Windfury Totem på main hand er der

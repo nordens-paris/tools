@@ -376,9 +376,9 @@ over cap'en kaldes kun spild for dual wield (Fury, Combat, Enhancement) over 27 
 slag bruger det.
 
 Simmen rammer ikke alle specs lige præcist; se [sim-noejagtighed.md](docs/sim-noejagtighed.md).
-Retribution og Enhancement simmes 8–10 % for lavt for alle (de hvide slag rammer hårdere i loggen end
-i simmen, ikke forklaret endnu), så deres execution-procent er for høj, mens sammenligningen med top
-10 holder. Marksmanship-hunteres top 10 er almindelige spillere, fordi specen er sjælden.
+Retribution og Enhancement simmes 6–8 % for lavt for alle (top-paladins twister oftere end
+WoWSims, og Enhancement har lidt mere attack power i loggen, ikke forklaret endnu), så deres
+execution-procent er for høj, mens sammenligningen med top 10 holder. Marksmanship-hunteres top 10 er almindelige spillere, fordi specen er sjælden.
 
 ### Godt at vide
 

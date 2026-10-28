@@ -50,6 +50,20 @@ Scripts, der arbejder på tværs af mange spillere (`sim-vs-log`, `crit-unbiased
 | `crit-unbiased.ts` | Crit mod sim over *alle* kills for et udsnit af spillere (udvælgelses-tjekket) |
 | `audit-auras.ts <encounterIds...>` | Auras på top-spillere, der ikke er koblet til simmen |
 | `cd-timing.ts <cooldown> <encounterIds...>` | Hvornår top-spillere bruger en cooldown, som andel af kampen |
+| `swing-table.ts <spec-key> <encounterIds...> [--n=8]` | Hvide slag over en specs top-spillere, log mod deres egne sims: crit, glancing, miss, dodge og parry |
+| `white-hits.ts <rapport> <fight> <source> [kørsler]` | Én spillers hvide slag: slag pr. sekund, udfald, attack power og slagets skade før armor, log (`unmitigatedAmount`) mod simmens debug-log |
+| `armor-check.ts <rapport> <fight> <source>` | Bossens armor målt fra loggen (hvert normalt fysisk slag har skade før og efter armor) pr. 10 s, mod det simmen antager. Blood Frenzy (+4 % efter armor) ses som cirka 500 armor mindre |
+| `armor-timeline.ts <rapport> <fight> [sekunder]` | De første fysiske slag med bossens armor ved siden af hvornår armor-debuffs kom på: bossens egen armor og hvad hver debuff tager |
+| `resist-check.ts <rapport> <fight> <source>` | Andel af en spillers spell-hits med partial resist, og skade resisteret, pr. ability |
+| `seal-procs.ts <rapport> <fight> <source>...` | Hvad en Retribution-paladins seal-procs kom fra (hvidt slag, Crusader Strike, den anden seal) |
+
+## Sim-hastighed
+
+| Script | Hvad det gør |
+|---|---|
+| `sim-timing.ts <rapport> <fight> <source> [iterationer]` | Én spillers egen sim med kommandolinje-simmen: tid, hændelser pr. sekund og auras. Gemmer requesten i `.cache/sim/timing-*.in.json` |
+| `sim-timing-page.ts <rapport> <fight> <source> [iterationer]` | Alle sims bag en DPS-side én ad gangen: antal, samlet tid og de langsomste |
+| `wasm-timing.mjs <request.json>...` | Browserens sim (WebAssembly på én kerne, som i en Web Worker) på gemte requests |
 
 `EXTRA_STATS="13:221,17:140"` lægger stats til alle sims i `sim-vs-log.ts` (13 spell crit rating,
 17 AP, 21 melee crit rating) til eksperimenter. Fresh encounter-ID'er: Hyjal 50618–50622, BT

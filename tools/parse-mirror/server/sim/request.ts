@@ -148,11 +148,23 @@ interface AplItem {
 }
 
 const BLOODLUST = { spellId: 2825, tag: -1 };
+
+/** Whether an APL action (or anything nested in it: a sequence, a group's actions) casts this spell. */
+function castsSpell(node: unknown, spellId: number): boolean {
+  if (Array.isArray(node)) return node.some((n) => castsSpell(n, spellId));
+  if (!node || typeof node !== 'object') return false;
+  const cast = (node as { castSpell?: { spellId?: { spellId?: number } } }).castSpell;
+  if (cast?.spellId?.spellId === spellId) return true;
+  // Conditions only test the spell (spellIsReady...); they don't cast it.
+  return Object.entries(node).some(([k, v]) => k !== 'condition' && castsSpell(v, spellId));
+}
 const atOrAfter = (sec: number) => ({ cmp: { op: 'OpGe', lhs: { currentTime: {} }, rhs: { const: { val: `${sec.toFixed(1)}s` } } } });
 
 function loadRotation(spec: SpecConfig, player: SimPlayerSetup) {
   const { aplFile, timing, skipSpells = [], gear } = player;
-  const apl = structuredClone(loadJson<{ priorityList: AplItem[]; prepullActions?: AplPrepull[]; valueVariables?: { name: string; value: unknown }[] }>(aplFile));
+  const apl = structuredClone(
+    loadJson<{ priorityList: AplItem[]; prepullActions?: AplPrepull[]; valueVariables?: { name: string; value: unknown }[]; groups?: { name: string; actions: unknown[] }[] }>(aplFile),
+  );
   for (const [name, value] of Object.entries(spec.sim.aplVariables?.(gear, player.used ?? { used: [], ownAuras: [] }) ?? {})) {
     const variable = apl.valueVariables?.find((v) => v.name === name);
     if (variable) variable.value = value;
@@ -194,7 +206,20 @@ function loadRotation(spec: SpecConfig, player: SimPlayerSetup) {
       const own = item.action.condition;
       item.action.condition = t.keepCondition && own && t.atSec !== undefined ? { and: { vals: [condition, own] } } : condition;
     }
-    if (!actions.length) apl.priorityList.unshift({ action: { condition, castSpell: { spellId: t.spellId } } });
+    // Some APLs cast it from a group (Enhancement's Fire Elemental, inside a totem-twist sequence):
+    // the group's reference gets the timing on top of its own condition.
+    const groupRefs =
+      t.spellId.tag === undefined
+        ? apl.priorityList.filter((i) => {
+            const group = apl.groups?.find((g) => g.name === i.action.groupReference?.groupName);
+            return !i.hide && !!group && castsSpell(group.actions, t.spellId.spellId);
+          })
+        : [];
+    for (const item of groupRefs) {
+      const own = item.action.condition;
+      item.action.condition = own ? { and: { vals: [condition, own] } } : condition;
+    }
+    if (!actions.length && !groupRefs.length) apl.priorityList.unshift({ action: { condition, castSpell: { spellId: t.spellId } } });
   }
   return apl;
 }
@@ -257,6 +282,9 @@ export function buildRequest(opts: {
               rotation: loadRotation(spec, player),
               [spec.sim.specField]: player.specOptions,
               distanceFromTarget: spec.sim.distanceFromTarget,
+              // The WoWSims site's default. Left out, WoWSims uses 10 ms: a rogue pooling energy or a
+              // hunter waiting on Auto Shot re-runs the whole rotation every 10 ms, 5x slower.
+              reactionTimeMs: 100,
               ...(opts.tank ? { inFrontOfTarget: true } : {}),
             },
           ],
