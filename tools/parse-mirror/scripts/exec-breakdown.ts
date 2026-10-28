@@ -17,10 +17,14 @@ const { spec } = stored;
 interface Row { casts: number; landed: number; hits: number; crits: number; avoided: number; damage: number; critDamage: number; normalDamage: number }
 function simRows(p: SimPlayerMetrics, iterations: number): Map<string, Row> {
   const out = new Map<string, Row>();
-  for (const a of p.actions) {
+  // Pets' abilities are "Pet: <name>", as in the log (see collect.ts); the ranged auto attack is Auto Shot.
+  const actions = [...p.actions.map((a) => ({ a, prefix: '' })), ...(p.pets ?? []).flatMap((pet) => pet.actions.map((a) => ({ a, prefix: 'Pet: ' })))];
+  for (const { a, prefix } of actions) {
     const white = a.id.otherId === 'OtherActionAttack';
     // Windfury Totem's extra swings are plain "Melee" in the log.
-    const name = white ? 'Melee' : spellName(a.id.spellId ?? a.id.itemId ?? -1, `#${a.id.spellId ?? a.id.itemId ?? a.id.otherId}`);
+    const base = white ? 'Melee' : a.id.otherId === 'OtherActionShoot' ? 'Auto Shot' : spellName(a.id.spellId ?? a.id.itemId ?? -1, `#${a.id.spellId ?? a.id.itemId ?? a.id.otherId}`);
+    if (prefix && !white && base.startsWith('#')) continue;
+    const name = prefix + base;
     const r = out.get(name) ?? { casts: 0, landed: 0, hits: 0, crits: 0, avoided: 0, damage: 0, critDamage: 0, normalDamage: 0 };
     for (const t of a.targets) {
       // Metrics are summed over all iterations.

@@ -52,8 +52,10 @@ web (React)  ──/api──▶  server (Express)  ──▶  Warcraft Logs v1 
 
 ## Analysen (`server/analysis/`)
 
-1. **`analyze.ts`** finder spec ud fra spillerens ikon (`Warrior-Fury` osv.), vælger
-   sammenligningsgruppen og samler alle spillere parallelt:
+1. **`analyze.ts`** finder spec ud fra spillerens ikon (`Warrior-Fury` osv.). Har loggen kun
+   klassen ("Shaman", "Druid"), afgør træet med flest talentpoint i combatant info; tanker spilleren
+   (en feral med bjørne-talenter), går de til tank-analysen først. Derefter vælges
+   sammenligningsgruppen, og alle spillere samles parallelt:
    - *Top 10:* side 1 af rankings for boss/klasse/spec.
    - *Same gear, a step ahead:* spillerens egen parse (`characters.ts`) giver percentil, item level
      og antal parses; derfra findes et rank-bånd 5–25 percentilpoint over, op til tre rankings-sider,
@@ -62,7 +64,14 @@ web (React)  ──/api──▶  server (Express)  ──▶  Warcraft Logs v1 
 2. **`collect.ts`** henter én spillers kamp: gear og stats (combatant info), buffs, debuffs på
    bossen, casts, skade (også kun mod bossen, så skade på adds ikke tæller mod simmen), consumables,
    cooldowns, aktiv tid og huller mellem casts (channels som Mind Flay tæller med), hit chance,
-   Power Infusion, Improved Shadow Bolt-andel af egne hits, party og totems.
+   expertise (melee), Power Infusion, Improved Shadow Bolt-andel af egne hits, party og totems.
+   Pets, guardians og totems er sammensatte poster i skadetabellen med pet'ens abilities under sig:
+   en hunters pet (familien ud fra dens abilities, Gore → Ravager) og en warlocks dæmon er `pet`,
+   Fire Elemental, Shadowfiend og trinket-væsner er `guardian`. Deres abilities går ind i held som
+   "Pet: Bite" osv., men ikke i spillerens egen crit og hit. En shamans egne totems er ikke
+   party-buffs (simmen sætter dem selv), og spillerens egne auras (`ownAuras`) bruges til
+   `sim.selfProvided`. Våben-enchants: rogue-gifte er consumes, som WoWSims tager som imbue;
+   shamanernes egne imbues (Windfury Weapon osv.) er klasse-spells og gives til simmen som options.
 3. **`findings.ts`** laver den rangerede liste af fund (rotation, cooldowns, consumables, gear,
    hit, talenter, raid buffs, kill-tid). Teksterne følger gruppen ("top players" / "players a step
    ahead").
@@ -103,7 +112,8 @@ of Air og Mana Spring, plus Totem of Wrath fra en Elemental). Windfury findes fr
 | Spec | Regel |
 |---|---|
 | Arcane Mage, Shadow Priest | Kun shamans bevist i partyet (de står næsten altid sammen og sjældent med en Elemental) |
-| Destruction Warlock | Totem of Wrath, hvis der er en Elemental et sted i raidet |
+| Destruction og Affliction Warlock | Totem of Wrath, hvis der er en Elemental et sted i raidet |
+| Elemental og Enhancement Shaman | Ingen af de totems, simmen selv sætter, fra andre (`sim.excludeBuffs`) |
 | Øvrige | Partyets shamans, eller raidets hvis partyet ikke kan findes |
 
 En shadow priest i partyet giver desuden præstens DPS videre til simmen som Vampiric Touch-mana.

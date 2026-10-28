@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import { parseLogUrl } from '../api.ts';
 import { APP_NAME, EXAMPLES, GUILD_NAME, HEALERS, SUPPORTED, TANKS, specIcon } from '../brand.ts';
+import { specLabel } from '../format.ts';
 import { game } from '../game.ts';
 import { lastOpened, parseRoute } from '../route.ts';
 import { LogSearch } from './LogSearch.tsx';
@@ -99,9 +100,9 @@ export function Landing({ onAnalyze, onRaid, onGuild, loading }: Props) {
       <div className="supported">
         Supported:
         {SUPPORTED.map((s) => (
-          <span key={s.specName} className="spec-chip">
+          <span key={`${s.specName} ${s.className}`} className="spec-chip">
             <img src={specIcon(s.className, s.specName)} alt="" />
-            {s.specName} {s.className}
+            {specLabel(s.specName)} {s.className}
           </span>
         ))}
       </div>
@@ -110,7 +111,7 @@ export function Landing({ onAnalyze, onRaid, onGuild, loading }: Props) {
         {[...HEALERS, ...TANKS].map((s) => (
           <span key={`${s.specName} ${s.className}`} className="spec-chip">
             <img src={specIcon(s.className, s.specName)} alt="" />
-            {s.specName} {s.className}
+            {specLabel(s.specName)} {s.className}
           </span>
         ))}
       </div>

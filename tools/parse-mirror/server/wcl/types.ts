@@ -93,6 +93,9 @@ export interface WclCombatantInfo extends WclEvent {
   auras: { ability: number; name?: string; source?: number; icon?: string }[];
   hitSpell?: number;
   hitMelee?: number;
+  hitRanged?: number;
+  /** Expertise rating (not points), without talents or racial weapon skill. */
+  expertise?: number;
 }
 
 export interface WclRanking {

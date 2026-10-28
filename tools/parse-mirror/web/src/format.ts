@@ -9,6 +9,9 @@ export const fmtSigned = (n: number, digits = 0) => {
   return (shown === 0 ? '±' : n > 0 ? '+' : '−') + fmt(Math.abs(n), digits);
 };
 
+/** Spec names as Warcraft Logs writes them in icons ("BeastMastery"), spaced for reading. */
+export const specLabel = (specName: string) => specName.replace(/([a-z])([A-Z])/g, '$1 $2');
+
 export const fmtTime = (sec: number) => {
   const total = Math.round(sec);
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;

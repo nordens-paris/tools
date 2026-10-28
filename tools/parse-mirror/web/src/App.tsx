@@ -404,8 +404,10 @@ export function App() {
               <>
                 <MetricTable
                   title="Hit chance"
-                  subtitle={`Hit from gear rating, talents and party auras (Draenei, Totem of Wrath), against the ${a.you.hit?.capPct ?? ''}% cap for a raid boss.`}
-                  rows={a.metrics.summary.filter((m) => m.key === 'hit')}
+                  subtitle={`Hit from gear rating, talents and party auras (Draenei, Totem of Wrath), against the ${a.you.hit?.capPct ?? ''}% cap for a raid boss.${
+                    a.you.expertise ? ' Expertise from rating, talents and racial weapon skill: each point takes 0.25% off the boss’s dodge.' : ''
+                  }`}
+                  rows={a.metrics.summary.filter((m) => m.key === 'hit' || m.key === 'expertise')}
                   top={a.top}
                 />
                 <Gear analysis={a} />

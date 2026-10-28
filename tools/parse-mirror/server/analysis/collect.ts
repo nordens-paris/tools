@@ -1,5 +1,5 @@
 // Gathers everything we need about one player in one fight from Warcraft Logs.
-import type { AbilityCasts, AuraUptime, CooldownUse, GearItem, PlayerFight } from '../../shared/types.ts';
+import type { AbilityCasts, AuraUptime, CooldownUse, GearItem, PetSummary, PlayerFight } from '../../shared/types.ts';
 import { detectConsumes, tempEnchantName, type DetectedConsumes } from '../data/consumes.ts';
 import { armoryTalents } from '../armory/talents.ts';
 import { enchantInfo, gemInfo, itemInfo, spellName } from '../data/db.ts';
@@ -55,6 +55,13 @@ export interface PlayerFightRaw {
   executeProportion?: number;
   /** Whether the player had a pet out during the fight. */
   hasPet: boolean;
+  /** Icons of the player's permanent pets in the fight ("spell_shadow_summonfelhunter"), even ones that did no damage. */
+  petIcons: string[];
+  /**
+   * Auras the player gave themselves or the party (Trueshot Aura, Judgement of the Crusader...), by
+   * name: for spec.sim.selfProvided, so the sim doesn't get them from the raid and the class both.
+   */
+  ownAuras: string[];
   /** Per-ability hit/crit/miss counts and average damage, for the RNG analysis. */
   outcomes: AbilityOutcome[];
   encounterId: number;
@@ -62,7 +69,10 @@ export interface PlayerFightRaw {
 }
 
 export interface AbilityOutcome {
+  /** Pet and guardian abilities are "Pet: Bite", "Pet: Melee"... */
   name: string;
+  /** Done by a pet or guardian: its luck counts, but not towards the player's own crit and hit. */
+  pet?: boolean;
   total: number;
   /** Landed hits including crits and glancing blows. */
   landed: number;
@@ -81,7 +91,9 @@ interface WclHitDetail {
   total: number;
 }
 
-function outcomeOf(name: string, e: WclTableEntry & { hitdetails?: WclHitDetail[]; missdetails?: WclHitDetail[]; critHitCount?: number }): AbilityOutcome {
+type WclDamageEntry = WclTableEntry & { hitdetails?: WclHitDetail[]; missdetails?: WclHitDetail[]; critHitCount?: number };
+
+function outcomeOf(name: string, e: WclDamageEntry): AbilityOutcome {
   const detail = (type: string) => e.hitdetails?.find((h) => h.type === type);
   const normal = detail('Hit');
   const crit = detail('Critical Hit');
@@ -199,10 +211,12 @@ async function partyTotems(
   fight: WclFight,
   caster: boolean,
   party: Set<number>,
+  source: number,
   rule: SpecConfig['totems'],
 ): Promise<AuraUptime[]> {
   const { start_time: start, end_time: end } = fight;
-  const inRaid = fights.friendlies.filter((a) => a.icon.startsWith('Shaman') && a.fights.some((f) => f.id === fight.id));
+  // A shaman's own totems are part of their own rotation (the sim drops them), not a party buff.
+  const inRaid = fights.friendlies.filter((a) => a.id !== source && a.icon.startsWith('Shaman') && a.fights.some((f) => f.id === fight.id));
   // With no party-wide aura to go by, the party can't be worked out; any shaman in the raid could be
   // in it, so assume the usual totems (but not other totems their casts show, which may be elsewhere).
   const unknownParty = party.size === 1;
@@ -276,11 +290,42 @@ function hitChance(spec: SpecConfig, combatant: WclCombatantInfo | undefined, ta
     pct += 1;
     extras.push('Draenei aura +1%');
   }
-  if (spec.caster && has('Totem of Wrath')) {
+  if (spec.caster && has('Totem of Wrath') && !spec.hit.talents.some((t) => t.name === 'Totem of Wrath')) {
     pct += 3;
     extras.push('Totem of Wrath +3%');
   }
   return { pct, capPct: spec.hit.capPct, fromRating, extras };
+}
+
+// Expertise rating per point at level 70; each point takes 0.25% off the boss's 6.5% dodge chance.
+const EXPERTISE_RATING = 3.9423;
+const DODGE_CAP_POINTS = 26;
+// Racial weapon skill: +5 expertise with these weapon types (WoWSims WeaponType numbers in items.json).
+const RACIAL_EXPERTISE: Record<string, { types: number[]; label: string }> = {
+  RaceHuman: { types: [4, 9], label: 'Human maces/swords' },
+  RaceOrc: { types: [1], label: 'Orc axes' },
+};
+
+/** Expertise from the combatant info's rating plus talents and racial weapon skill (main hand). */
+function expertiseOf(spec: SpecConfig, combatant: WclCombatantInfo | undefined, talents: string, race: string): PlayerFight['expertise'] {
+  if (!spec.expertise || typeof combatant?.expertise !== 'number') return undefined;
+  const fromRating = combatant.expertise / EXPERTISE_RATING;
+  let points = Math.floor(fromRating);
+  const extras: string[] = [];
+  for (const t of spec.expertise.talents) {
+    const rank = talentRank(spec.className, talents, t.name);
+    if (rank) {
+      points += rank * t.perPoint;
+      extras.push(`${t.name} +${rank * t.perPoint}`);
+    }
+  }
+  const racial = RACIAL_EXPERTISE[race];
+  const weapon = combatant.gear[15]?.id ? itemInfo(combatant.gear[15].id)?.w : undefined;
+  if (racial && weapon !== undefined && racial.types.includes(weapon)) {
+    points += 5;
+    extras.push(`${racial.label} +5`);
+  }
+  return { points, capPoints: DODGE_CAP_POINTS, fromRating, extras };
 }
 
 /**
@@ -299,6 +344,87 @@ function powerInfusionGain(auras: WclAura[], events: WclEvent[], source: number,
     if (inside(e.timestamp, pi.bands) && !inside(e.timestamp, lust)) damage += e.amount;
   }
   return { uses: pi.totalUses || pi.bands.length, dps: durationSec ? damage / 6 / durationSec : 0 };
+}
+
+// Summon spells of permanent pets: a hunter's pet is "Call Pet" in the damage table, a warlock's
+// demon its summon. Anything else with an owner is a guardian (Fire Elemental, trinket summons) or a totem.
+const PET_SUMMONS = new Set([883, 688, 712, 691, 697, 30146, 31687]);
+// Guardians WoWSims summons too. Others (trinket summons, Snake Trap snakes) keep their own name in
+// the luck analysis ("Netherwing Ally: Melee"), so they aren't compared with the player's pet.
+const SIMMED_GUARDIANS = new Set(['Shadowfiend', 'Fire Elemental Totem', 'Earth Elemental Totem', 'Force of Nature']);
+
+/**
+ * A hunter pet's family (WoWSims' PetType name) from the abilities it used: each family's pair of
+ * abilities in WoWSims. Cats and raptors (same damage there) both come out as Cat.
+ */
+export function petFamily(abilities: string[]): string | undefined {
+  const has = (n: string) => abilities.includes(n);
+  if (has('Gore')) return 'Ravager';
+  if (has('Lightning Breath')) return 'WindSerpent';
+  if (has('Fire Breath')) return 'Dragonhawk';
+  if (has('Screech')) return has('Claw') ? 'Owl' : 'Bat';
+  if (has('Claw')) return has('Bite') ? 'Cat' : 'Crab';
+  if (has('Bite')) return 'Cat';
+  return undefined;
+}
+
+/**
+ * Pets, guardians and totems in a player's damage table: composite entries whose subentries are
+ * the pet's abilities. Pet and guardian abilities also go into the luck analysis as "Pet: <name>"
+ * (totems are left out: the sim casts those as the player's own spells).
+ */
+function petsOf(
+  entries: (WclDamageEntry & { composite?: boolean; subentries?: (WclDamageEntry & { actorName?: string; actor?: number })[] })[],
+  total: number,
+  owner: string,
+  unmodeled: string[] = [],
+) {
+  const pets: (PetSummary & { actor?: number })[] = [];
+  const outcomes: AbilityOutcome[] = [];
+  for (const e of entries) {
+    if (!e.composite || !e.subentries?.length) continue;
+    // Fire and Earth Elementals come from a "totem" too, but they're guardians the sim summons.
+    const summon = spellName(e.guid, e.name);
+    const kind: PetSummary['kind'] = PET_SUMMONS.has(e.guid) ? 'pet' : /totem/i.test(summon) && !/elemental/i.test(summon) ? 'totem' : 'guardian';
+    const abilities = e.subentries.map((s) => (s.guid === 1 || s.guid < 0 ? 'Melee' : spellName(s.guid, s.name)));
+    pets.push({
+      // A pet's own name (often localized; the entry itself is named after Call Pet), or the
+      // summon for guardians and totems.
+      name: kind === 'pet' ? (e.subentries[0].actorName ?? e.name) : spellName(e.guid, e.name),
+      kind,
+      ...(kind === 'pet' && owner === 'Hunter' ? { family: petFamily(abilities) } : {}),
+      summon: spellName(e.guid, e.name),
+      actor: e.subentries[0].actor,
+      damage: e.total,
+      sharePct: total ? (e.total / total) * 100 : 0,
+      abilities,
+    });
+    // Guardians the sim can't summon (an Infernal) are left out of real DPS anyway.
+    if (kind === 'totem' || unmodeled.includes(spellName(e.guid, e.name))) continue;
+    const prefix = kind === 'pet' || SIMMED_GUARDIANS.has(summon) ? 'Pet' : summon;
+    e.subentries.forEach((s, i) => outcomes.push({ ...outcomeOf(`${prefix}: ${abilities[i]}`, s), pet: true }));
+  }
+  return { pets: pets.sort((a, b) => b.damage - a.damage), outcomes };
+}
+
+/**
+ * How much of the fight a pet spent attacking, 0..100: from its first hit to its last, less any
+ * stretch of 8 s or more without a hit (dead, called back, or passive). The run in at the pull counts
+ * as not attacking, as it does in WoWSims.
+ */
+async function petUptimePct(client: WclClient, report: string, start: number, end: number, pet: number): Promise<number | undefined> {
+  const hits = (await client.events('damage-done', report, start, end, { sourceid: pet }, ['timestamp', 'type', 'sourceID']))
+    .filter((e) => e.type === 'damage' && e.sourceID === pet)
+    .map((e) => e.timestamp);
+  if (hits.length < 3) return undefined;
+  let active = 0;
+  for (let i = 1; i < hits.length; i++) {
+    const gap = hits[i] - hits[i - 1];
+    if (gap < 8000) active += gap;
+  }
+  // Up to the next hit after the last one, about a swing.
+  active += Math.min(2000, end - hits[hits.length - 1]);
+  return Math.min(100, (active / (end - start)) * 100);
 }
 
 export function findFight(fights: WclFightsResponse, fightId: number): WclFight {
@@ -335,7 +461,7 @@ export async function collectPlayerFight(
     spec.executeSpellId
       ? client.events('damage-done', report, start, end, { sourceid: source, abilityid: spec.executeSpellId })
       : Promise.resolve([]),
-    spec.debuffUptimes ? client.bossDebuffs(report, start, end, actor.name) : Promise.resolve(undefined),
+    spec.debuffUptimes || spec.sim.selfProvided ? client.bossDebuffs(report, start, end, actor.name) : Promise.resolve(undefined),
     // Casters: partial resists and which hits had Improved Shadow Bolt are only in the events.
     spec.caster ? client.events('damage-done', report, start, end, { sourceid: source }) : Promise.resolve([]),
     // The sim has one target; damage on adds doesn't count when comparing with it.
@@ -368,9 +494,8 @@ export async function collectPlayerFight(
   // still drop an Infernal.
   // Pet names are localized (a Korean log's Infernal is "지옥불정령"), so go by the summon icon.
   const TEMP_PET_ICON = /summon(infernal|doomguard)/i;
-  const hasPet = (fights.friendlyPets ?? []).some(
-    (p) => p.petOwner === source && !TEMP_PET_ICON.test(p.icon) && p.fights.some((f) => f.id === fightId),
-  );
+  const ownPets = (fights.friendlyPets ?? []).filter((p) => p.petOwner === source && !TEMP_PET_ICON.test(p.icon) && p.fights.some((f) => f.id === fightId));
+  const hasPet = ownPets.length > 0;
   // The first Execute marks when the boss dropped below 20% health.
   const firstExecute = executeHits.find((e) => e.type === 'damage')?.timestamp;
   const executeProportion = firstExecute ? Math.min(0.5, Math.max(0.05, (end - firstExecute) / durationMs)) : undefined;
@@ -379,8 +504,16 @@ export async function collectPlayerFight(
   for (const e of damage.entries) e.name = spellName(e.guid, e.name);
   for (const a of [...buffsTable.auras, ...bossDebuffsTable.auras, ...(ownDebuffsTable?.auras ?? [])]) a.name = spellName(a.guid, a.name);
   for (const e of castEvents) if (e.ability) e.ability.name = spellName(e.ability.guid, e.ability.name);
+  // Only the real cast of abilities that log more (Stormstrike's two weapon hits, Seal of Command's procs).
+  if (spec.castIds) {
+    const real = castEvents.filter((e) => !e.ability || spec.castIds![e.ability.name] === undefined || spec.castIds![e.ability.name] === e.ability.guid);
+    castEvents.splice(0, castEvents.length, ...real);
+  }
 
   const totalDamage = damage.entries.reduce((sum, e) => sum + e.total, 0);
+  const pets = petsOf(damage.entries, totalDamage, spec.className, spec.sim.unmodeledDamage);
+  const mainPet = pets.pets.find((p) => p.kind === 'pet');
+  if (spec.petUptime && mainPet?.actor !== undefined) mainPet.uptimePct = await petUptimePct(client, report, start, end, mainPet.actor);
   const unmodeled = damage.entries.filter((e) => spec.sim.unmodeledDamage?.includes(e.name)).reduce((sum, e) => sum + e.total, 0);
   const bossDamage = byTarget.entries.filter((e) => e.type === 'Boss').reduce((sum, e) => sum + e.total, 0) || totalDamage;
   // Rage from damage taken at level 70: 2.5 rage per 274.7 damage.
@@ -434,7 +567,7 @@ export async function collectPlayerFight(
     const t = await client.table<{ entries: { total: number }[] }>('damage-done', report, { start, end, sourceid: priest.id });
     partyShadowPriestDps = Math.max(partyShadowPriestDps ?? 0, t.entries.reduce((sum, e) => sum + e.total, 0) / durationSec);
   }
-  const buffs = [...buffsTable.auras.map((a) => toUptime(a, buffsTable.totalTime)), ...(await partyTotems(client, fights, report, fight, spec.caster, party, spec.totems))]
+  const buffs = [...buffsTable.auras.map((a) => toUptime(a, buffsTable.totalTime)), ...(await partyTotems(client, fights, report, fight, spec.caster, party, source, spec.totems))]
     .sort((a, b) => b.uptimePct - a.uptimePct);
   const bossDebuffs = bossDebuffsTable.auras
     .map((a) => toUptime(a, bossDebuffsTable.totalTime))
@@ -561,6 +694,7 @@ export async function collectPlayerFight(
   const talents = armory?.talents ?? closestTalentPreset(spec, talentSplit);
 
   const hit = hitChance(spec, combatant, talents, buffs);
+  const expertise = expertiseOf(spec, combatant, talents, raceProto);
   // Power Infusion is cast speed, so it only matters (and is only measured) for casters.
   const powerInfusion = spec.caster ? powerInfusionGain(buffsTable.auras, damageEvents, source, durationSec) : undefined;
 
@@ -569,15 +703,41 @@ export async function collectPlayerFight(
     .filter((a) => spec.debuffUptimes?.includes(a.name))
     .map((a) => toUptime(a, ownDebuffsTable!.totalTime));
 
+  // Party auras the player cast (in everyone's combatant info, with the caster) and debuffs they
+  // put on the boss.
+  const ownAuras = [
+    ...(combatant?.auras ?? []).filter((x) => x.source === source).map((x) => spellName(x.ability, x.name ?? '')),
+    // Buffs they cast on themselves during the fight (a druid's own Innervate).
+    ...castEvents
+      .filter((e) => e.type === 'cast' && e.sourceID === source && e.targetID === source && e.ability && buffs.some((b) => b.name === e.ability!.name))
+      .map((e) => e.ability!.name),
+    ...(ownDebuffsTable?.auras ?? []).filter((a) => a.totalUptime > 0).map((a) => a.name),
+  ];
+
   return {
     combatant,
     consumes,
     raceProto,
     executeProportion,
     hasPet,
-    outcomes: damage.entries
-      .map((e) => ({ ...outcomeOf(e.guid === 1 ? 'Melee' : e.name, e), ...(spec.caster ? { resists: resistsOf(e) } : {}) }))
-      .filter((o) => o.landed + o.avoided > 0),
+    petIcons: ownPets.map((p) => p.icon.replace(/^.*\//, '').replace(/\.jpg$/, '')),
+    ownAuras: [...new Set(ownAuras.filter(Boolean))],
+    outcomes: [
+      // A pet's own entry sums its abilities; those are in pets.outcomes one by one.
+      ...damage.entries
+        .filter((e) => !(e as { composite?: boolean }).composite)
+        .flatMap((e) => {
+          const name = e.guid === 1 ? 'Melee' : (spec.outcomeAliases?.[e.name] ?? e.name);
+          // An ability the player shares with pets (a hunter's and their Snake Trap snakes' Melee) is
+          // one entry split by actor: the player's part is theirs, the rest are pet hits.
+          const parts = (e as { subentries?: (WclDamageEntry & { actor?: number; actorName?: string })[] }).subentries;
+          if (!parts?.length) return [{ ...outcomeOf(name, e), ...(spec.caster ? { resists: resistsOf(e) } : {}) }];
+          return parts.map((p) =>
+            p.actor === source ? { ...outcomeOf(name, p), ...(spec.caster ? { resists: resistsOf(p) } : {}) } : { ...outcomeOf(`${p.actorName ?? 'Pet'}: ${name}`, p), pet: true },
+          );
+        }),
+      ...pets.outcomes,
+    ].filter((o) => o.landed + o.avoided > 0),
     encounterId: fight.boss,
     encounterName: fight.name,
     fight: {
@@ -610,6 +770,8 @@ export async function collectPlayerFight(
       idleSec,
       ...(isbHitPct !== undefined ? { isbHitPct } : {}),
       ...(hit ? { hit } : {}),
+      ...(expertise ? { expertise } : {}),
+      ...(pets.pets.length ? { pets: pets.pets.map(({ actor: _actor, ...p }) => p) } : {}),
       ...(partyShadowPriestDps ? { partyShadowPriestDps } : {}),
       ...(powerInfusion ? { powerInfusion } : {}),
       ...(taken && minutes ? { rageFromDamageTaken: { perMinute: ((takenTotal * 2.5) / 274.7) / minutes, mainSource: mainTaken && spellName(mainTaken.guid, mainTaken.name) } } : {}),

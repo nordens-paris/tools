@@ -1,5 +1,6 @@
 import { talentRank } from '../data/talents.ts';
 import type { SpecConfig } from './types.ts';
+import { curseOf } from './warlock-common.ts';
 
 export const warlockDestruction: SpecConfig = {
   key: 'warlock-destruction',
@@ -63,13 +64,6 @@ export const warlockDestruction: SpecConfig = {
     specField: 'warlock',
     specOptions: (raw, talents) => {
       const casts = new Map(raw.fight.casts.map((c) => [c.name, c.casts]));
-      const curse = casts.get('Curse of the Elements')
-        ? 'Elements'
-        : casts.get('Curse of Recklessness')
-          ? 'Recklessness'
-          : casts.get('Curse of Doom')
-            ? 'Doom'
-            : 'Agony';
       // Self-buffs like Fel Armor and Demonic Sacrifice aren't recorded in Anniversary logs, so
       // assume Fel Armor, and Demonic Sacrifice up all fight if talented (an Infernal doesn't end it).
       const fireMain = (casts.get('Incinerate') ?? 0) > (casts.get('Shadow Bolt') ?? 0);
@@ -80,7 +74,7 @@ export const warlockDestruction: SpecConfig = {
             summon: sacrifice || !raw.hasPet ? (fireMain ? 'Imp' : 'Succubus') : 'Imp',
             sacrificeSummon: sacrifice,
             armor: 'FelArmor',
-            curseOptions: curse,
+            curseOptions: curseOf(raw),
           },
         },
       };

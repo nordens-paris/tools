@@ -30,12 +30,19 @@ function simResistShare(r: SimRates): number {
 
 function simRatesByName(player: SimPlayerMetrics): Map<string, SimRates> {
   const rates = new Map<string, SimRates>();
-  for (const a of player.actions) {
+  // Pets' and guardians' abilities are "Pet: <name>", like the log side (see collect.ts).
+  const actions = [
+    ...player.actions.map((a) => ({ a, prefix: '' })),
+    ...(player.pets ?? []).flatMap((p) => p.actions.map((a) => ({ a, prefix: 'Pet: ' }))),
+  ];
+  for (const { a, prefix } of actions) {
     const isWhite = a.id.otherId === 'OtherActionAttack';
     // White MH/OH swings are "Melee" in the log; skip other attack tags (e.g. Windfury) here.
     if (isWhite && a.id.tag !== 1 && a.id.tag !== 2) continue;
-    const name = isWhite ? 'Melee' : spellName(a.id.spellId ?? a.id.itemId ?? -1, '');
-    if (!name) continue;
+    // The ranged auto attack (bow, gun) is "Auto Shot" in the log.
+    const base = isWhite ? 'Melee' : a.id.otherId === 'OtherActionShoot' ? 'Auto Shot' : spellName(a.id.spellId ?? a.id.itemId ?? -1, '');
+    if (!base) continue;
+    const name = prefix + base;
     const r = rates.get(name) ?? { landed: 0, crits: 0, avoided: 0, resistedDmg: 0, resistedHits: 0, unresistedDmg: 0, unresistedHits: 0 };
     for (const t of a.targets) {
       // WoWSims "hits" excludes crits and glancing blows; resisted hits are a subset of hits/crits.
@@ -74,6 +81,7 @@ function mergeByName(outcomes: AbilityOutcome[]): AbilityOutcome[] {
     m.avoided += o.avoided;
     if (o.resists) m.resists = { resisted: (m.resists?.resisted ?? 0) + o.resists.resisted, potential: (m.resists?.potential ?? 0) + o.resists.potential };
   }
+  // Several pets or guardians can share an ability name ("Pet: Melee"); the sim merges them too.
   return [...byName.values()];
 }
 
@@ -95,7 +103,7 @@ export function simRollRates(sim: SimPlayerMetrics, names: string[]): { critPct:
 
 export interface DirectLuck {
   summary: LuckSummary;
-  /** Abilities the comparison used, for measuring the sim's rates on the same set. */
+  /** The player's own abilities the comparison used (not pets'), for measuring the sim's rates on the same set. */
   names: string[];
   critDps: number;
   avoidDps: number;
@@ -143,6 +151,21 @@ export function computeLuck(raw: PlayerFightRaw, sim: SimPlayerMetrics): DirectL
     const expResisted = o.resists ? o.resists.potential * resistShare : 0;
     const dmgFromResists = o.resists ? expResisted - o.resists.resisted : 0;
     const dmgFromLuck = dmgFromCrits + dmgFromAvoid + dmgFromResists;
+    abilities.push({
+      name: o.name,
+      critPct: o.landed ? (o.crits / o.landed) * 100 : 0,
+      expectedCritPct: pCrit * 100,
+      avoidPct: attempts ? (o.avoided / attempts) * 100 : 0,
+      expectedAvoidPct: pAvoid * 100,
+      ...(o.resists?.potential
+        ? { resistPct: (o.resists.resisted / o.resists.potential) * 100, expectedResistPct: resistShare * 100 }
+        : {}),
+      luckDps: dmgFromLuck / raw.fight.durationSec,
+    });
+    luckDamage += dmgFromLuck;
+    // A pet's rolls come from its own stats, so they count as luck but not towards the player's crit
+    // and hit (which the knock-on sim re-rolls with the player's rating).
+    if (o.pet) continue;
 
     critExcess += o.crits - expCrits;
     critVariance += o.landed * pCrit * (1 - pCrit);
@@ -155,21 +178,9 @@ export function computeLuck(raw: PlayerFightRaw, sim: SimPlayerMetrics): DirectL
     resistedActual += o.resists?.resisted ?? 0;
     resistedExpected += expResisted;
     resistPotential += o.resists?.potential ?? 0;
-    luckDamage += dmgFromLuck;
     critDamage += dmgFromCrits;
     avoidDamage += dmgFromAvoid;
     names.push(o.name);
-    abilities.push({
-      name: o.name,
-      critPct: o.landed ? (o.crits / o.landed) * 100 : 0,
-      expectedCritPct: pCrit * 100,
-      avoidPct: attempts ? (o.avoided / attempts) * 100 : 0,
-      expectedAvoidPct: pAvoid * 100,
-      ...(o.resists?.potential
-        ? { resistPct: (o.resists.resisted / o.resists.potential) * 100, expectedResistPct: resistShare * 100 }
-        : {}),
-      luckDps: dmgFromLuck / raw.fight.durationSec,
-    });
   }
 
   const luckDps = luckDamage / raw.fight.durationSec;

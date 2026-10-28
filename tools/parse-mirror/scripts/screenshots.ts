@@ -24,6 +24,7 @@ const RAID = 'r=q1Jr4LdHVzycnGA9';
 const HEALER = 'r=nbfHKZ2Ax6JghkjD&f=64&s=13'; // Sanctalux, Holy Paladin, Gurtogg Bloodboil
 const TANK = 'r=nbfHKZ2Ax6JghkjD&f=64&s=30'; // Tinkywiinky, Protection Paladin, Gurtogg Bloodboil
 const BEAR = 'r=nbfHKZ2Ax6JghkjD&f=114&s=4'; // Storbøf, bear, Archimonde (main tank: the opener is judged)
+const HUNTER = 'r=nbfHKZ2Ax6JghkjD&f=101&s=9'; // Miracleprime, Beast Mastery, Kaz'rogal
 
 fs.mkdirSync(OUT, { recursive: true });
 const browser = await puppeteer.launch({
@@ -133,6 +134,13 @@ async function shots(page: Page) {
   await open(`${WARRIOR}&vs=peers`);
   await waitForSims();
   await view('15-peers.png', 700);
+
+  log('Hunter: pet in the header and in luck');
+  await open(HUNTER);
+  await waitForSims();
+  await view('32-hunter.png', 640);
+  await tab('Sim');
+  await panel('33-hunter-luck.png', 'Was it luck?');
 
   log('Healer: Holy Paladin on Bloodboil');
   await open(HEALER);

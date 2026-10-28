@@ -1,6 +1,7 @@
 // A spec module describes everything spec-specific: what to track in the logs,
 // which talent presets to assume, and how to build the WoWSims player.
 import type { PlayerFightRaw } from '../analysis/collect.ts';
+import type { WclGear } from '../wcl/types.ts';
 
 export interface TalentPreset {
   name: string;
@@ -37,6 +38,16 @@ export interface SpecConfig {
   finishers?: string[];
   /** Display names for casts with unclear names, e.g. "Haste" -> "Haste Potion". */
   castLabels: Record<string, string>;
+  /**
+   * Abilities whose name covers more than the cast (by cast name -> the spell ID that is the cast):
+   * Stormstrike logs a cast for each weapon's hit, Seal of Command one for each proc.
+   */
+  castIds?: Record<string, number>;
+  /**
+   * Log damage names to read as the sim's for the luck analysis, when the game has two versions of
+   * one spell and WoWSims only one (Seal of the Martyr is the Alliance's Seal of Blood).
+   */
+  outcomeAliases?: Record<string, string>;
   /** Buffs whose uptime is compared (higher is better). */
   uptimes: string[];
   /** Debuffs the player applies to the boss whose uptime is compared. */
@@ -51,13 +62,27 @@ export interface SpecConfig {
    * an Elemental shaman is). Default: the party's, or the raid's when the party can't be worked out.
    */
   totems?: 'party' | 'raid';
+  /** Measure how long the pet was attacking (one more request per player); WoWSims takes it as pet uptime. */
+  petUptime?: boolean;
   /** Rage class: track rage gained from damage taken (standing in boss AoE is a real strategy). */
   rageFromDamageTaken?: boolean;
   /**
    * Hit chance check: the combatant info's hit rating, rating per 1%, the cap against a raid boss,
    * and talents that add hit (per point).
    */
-  hit: { stat: 'hitSpell' | 'hitMelee'; perPct: number; capPct: number; talents: { name: string; pctPerPoint: number }[] };
+  hit: {
+    stat: 'hitSpell' | 'hitMelee' | 'hitRanged';
+    perPct: number;
+    capPct: number;
+    talents: { name: string; pctPerPoint: number }[];
+    /** Dual wielders: white hits keep gaining from hit up to this (27% against a raid boss), so "over the cap" only counts past it. */
+    whiteCapPct?: number;
+  };
+  /**
+   * Melee specs: show expertise against the boss's dodge (26 points to remove it), with talents that
+   * add expertise (per point). Racial weapon skill is added from the main-hand weapon.
+   */
+  expertise?: { talents: { name: string; perPoint: number }[] };
 
   /** Fallback talents when the armory has nothing, picked by closest tree split. */
   talentPresets: TalentPreset[];
@@ -73,6 +98,12 @@ export interface SpecConfig {
     unmodeledDamage?: string[];
     /** Spec-specific notes shown with sim results. */
     notes: string[];
+    /**
+     * Buffs and boss debuffs (aura names) the sim's class code or rotation gives the player itself
+     * (Trueshot Aura from talents, Judgement of the Crusader from the rotation). When the player
+     * provided them in the log they're left out of the raid environment, so they aren't counted twice.
+     */
+    selfProvided?: string[];
     /** What crits and hits feed, for the luck panel's knock-on wording ("rage, Flurry"). */
     knockOn?: string;
     /**
@@ -81,10 +112,33 @@ export interface SpecConfig {
      */
     aplGroups?: { enable?: string[]; disable?: string[] };
     /**
+     * Rotation spells the sim only casts when the player cast them in the log (by cast name): e.g.
+     * Immolate or Siphon Life for warlocks who skip them. The APL's actions for them are switched off.
+     */
+    onlyIfCast?: { spellId: number; name: string }[];
+    /**
+     * APL value variables to set (by variable name, as APL values): from the simmed gear (which
+     * branch of a rotation fits the weapons; follows gear swaps in what-ifs) or from what the player
+     * did (`used`: cast names and pet summons; `ownAuras`: see PlayerFightRaw), e.g. "Use Faerie Fire".
+     */
+    aplVariables?: (gear: (WclGear | undefined)[], player: { used: string[]; ownAuras: string[] }) => Record<string, unknown>;
+    /**
+     * Buffs the sim's rotation always gives the player itself (an Elemental's own totems): left out
+     * of the raid environment whoever gave them in the log, because WoWSims would stack the two.
+     */
+    excludeBuffs?: string[];
+    /**
      * Cooldowns the sim uses at the time the player first used them in the log (or never, if they
      * didn't), instead of the APL's own timing. Bloodlust is always timed from the log.
      */
-    timedCooldowns?: { spellId: number; name: string; /** Keep the APL's own condition too (e.g. don't recast while active). */ keepCondition?: boolean }[];
+    timedCooldowns?: {
+      spellId: number;
+      name: string;
+      /** Keep the APL's own condition too (e.g. don't recast while active). */
+      keepCondition?: boolean;
+      /** A pet summon that shows it was used before the pull (Fire Elemental Totem): then it goes at 0 s. */
+      pet?: string;
+    }[];
     distanceFromTarget: number;
     defaultRace: { horde: string; alliance: string };
   };

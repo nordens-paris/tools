@@ -6,9 +6,20 @@ export const specIcon = (className: string, specName: string) => `/icons/${class
 
 export const SUPPORTED = [
   { className: 'Warrior', specName: 'Fury' },
+  { className: 'Warrior', specName: 'Arms' },
   { className: 'Warlock', specName: 'Destruction' },
+  { className: 'Warlock', specName: 'Affliction' },
   { className: 'Mage', specName: 'Arcane' },
   { className: 'Priest', specName: 'Shadow' },
+  { className: 'Shaman', specName: 'Elemental' },
+  { className: 'Druid', specName: 'Balance' },
+  { className: 'Paladin', specName: 'Retribution' },
+  { className: 'Shaman', specName: 'Enhancement' },
+  { className: 'Rogue', specName: 'Combat' },
+  { className: 'Druid', specName: 'Feral' },
+  { className: 'Hunter', specName: 'BeastMastery' },
+  { className: 'Hunter', specName: 'Marksmanship' },
+  { className: 'Hunter', specName: 'Survival' },
 ];
 
 /** Tank specs: compared with tanks from well-run raids, no sims yet. */
@@ -47,6 +58,21 @@ export const EXAMPLES = [
     label: 'Moonianlie · Shadow · Rage Winterchill',
     url: 'https://fresh.warcraftlogs.com/reports/nbfHKZ2Ax6JghkjD?fight=79&type=damage-done&source=5',
     icon: specIcon('Priest', 'Shadow'),
+  },
+  {
+    label: 'Laalaaqq · Combat · Kaz’rogal',
+    url: 'https://fresh.warcraftlogs.com/reports/nbfHKZ2Ax6JghkjD?fight=101&type=damage-done&source=15',
+    icon: specIcon('Rogue', 'Combat'),
+  },
+  {
+    label: 'Miracleprime · Beast Mastery · Kaz’rogal',
+    url: 'https://fresh.warcraftlogs.com/reports/nbfHKZ2Ax6JghkjD?fight=101&type=damage-done&source=9',
+    icon: specIcon('Hunter', 'BeastMastery'),
+  },
+  {
+    label: 'Ghorzach · Elemental · Kaz’rogal',
+    url: 'https://fresh.warcraftlogs.com/reports/nbfHKZ2Ax6JghkjD?fight=101&type=damage-done&source=8',
+    icon: specIcon('Shaman', 'Elemental'),
   },
   {
     label: 'Sanctalux · Holy Paladin · Bloodboil',

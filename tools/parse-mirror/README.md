@@ -9,7 +9,9 @@ kill-tid, spil og held, og hvad du skal rette først.
 Lavet af Nordens Paris som proof of concept til **WoW Forever**. I dag kører det på TBC
 Anniversary (fresh.warcraftlogs.com), fordi det er der, logs og sim findes.
 
-**Understøttede specs:** Fury Warrior, Destruction Warlock, Arcane Mage, Shadow Priest.
+**Understøttede specs:** Fury og Arms Warrior, Destruction og Affliction Warlock, Arcane Mage,
+Shadow Priest, Elemental og Enhancement Shaman, Balance og Feral Druid, Retribution Paladin,
+Combat Rogue, Beast Mastery, Marksmanship og Survival Hunter.
 **Healere:** Holy og Discipline Priest, Holy Paladin, Restoration Shaman og Restoration Druid,
 sammenlignet med healere fra velspillede raids ([afsnit 9](#9-healere)).
 **Tanks:** Protection Warrior, Protection Paladin og bear, sammenlignet med tanks fra velspillede
@@ -343,6 +345,40 @@ og items, WoWSims ikke kender (nyere Anniversary-items), udelades og nævnes und
   nøgle, hvis serverens er brugt op. Din nøgle gemmes kun i din browser og sendes kun med dine egne
   forespørgsler; serveren gemmer eller logger den aldrig.
 - Solen/månen skifter mellem lyst og mørkt tema.
+
+### 12. Hvad hver klasse tjekkes for
+
+Alle DPS-specs får det samme: casts pr. minut, cast-effektivitet på kerne-abilities, cooldowns og
+deres timing, buffs og egne debuffs på bossen, consumables, gear og hit, held og sims. Det, der er
+særligt for hver klasse, og hvad simmen antager:
+
+| Klasse | Specs | Særligt |
+|---|---|---|
+| Warrior | Fury, Arms | Rage fra skade taget (at stå i boss-AoE er en strategi). Recklessness simmes, når du brugte den. Arms simmes som top-spillerne: to sværd og Heroic Strike, eller tohånds-våben og Slam, efter dine våben. Expertise vises (Weapon Mastery og race-våbenfærdighed tæller med). |
+| Warlock | Destruction, Affliction | Curse og dæmon fra loggen; Fel Armor antages, Demonic Sacrifice er oppe, når den er talentet. Affliction-simmen bruger kun de DoTs, du brugte (top-spillerne kører Shadow Bolt med Corruption). Improved Shadow Bolt måles på dine egne hits. Infernal-skade tælles ikke med. |
+| Mage | Arcane | Mana fra andre (Innervate, Mana Tide, en shadow priest i partyet) går ind i simmen. |
+| Priest | Shadow | Shadowfiend simmes, hvis du brugte den. Din Vampiric Touch-mana gives videre til partyets casters' sims. |
+| Shaman | Elemental, Enhancement | Dine egne totems sætter simmen selv, så andre shamans' totems af samme slags tæller ikke oven i. Fire Elemental og Bloodlust bruges, når du brugte dem. Enhancement twister Windfury og Grace of Air; imbues kommer fra dine våben. |
+| Druid | Balance, Feral | Balance: Faerie Fire, Insect Swarm, Force of Nature og Innervate på dig selv simmes kun, hvis du brugte dem. Feral: simmen powershifter og bruger kun Mangle og Faerie Fire, når bossen ikke har dem fra andre. En bjørn med kun "Druid" i loggen får tank-siden. |
+| Paladin | Retribution | Seal-twisting (Seal of Command ind i Seal of Blood eller Seal of the Martyr) som top-spillerne. Exorcism og Consecration simmes kun, hvis du brugte dem. Expertise vises. |
+| Rogue | Combat | Gifte kommer fra dine våben (med Windfury Totem på main hand er der ingen gift der). Din egen Expose Armor simmes kun, hvis du brugte den. Adrenaline Rush og Blade Flurry bruges, når du brugte dem. |
+| Hunter | Beast Mastery, Marksmanship, Survival | Pettens familie kommer fra dens abilities, og hvor længe den slog, går ind i simmen. Melee-weaving, Multi-Shot og Arcane Shot simmes kun, hvis du brugte dem. Pile og quiver står ikke i loggen: Mysterious Arrow og 15 % quiver antages. |
+
+![En hunter med pet](docs/billeder/32-hunter.png)
+
+Pettens evner har deres egen linje i held-tabellen ("Pet: Kill Command"); trinket-væsner og Snake
+Trap tælles med i din skade, men sammenlignes ikke med simmen.
+
+![Held med pet](docs/billeder/33-hunter-luck.png)
+
+Står der kun klassen ved spilleren i loggen ("Shaman", "Druid"), afgør talenterne spec'en. Hit
+over cap'en kaldes kun spild for dual wield (Fury, Combat, Enhancement) over 27 %, fordi de hvide
+slag bruger det.
+
+Simmen rammer ikke alle specs lige præcist; se [sim-noejagtighed.md](docs/sim-noejagtighed.md).
+Retribution og Enhancement simmes 8–10 % for lavt for alle (de hvide slag rammer hårdere i loggen end
+i simmen, ikke forklaret endnu), så deres execution-procent er for høj, mens sammenligningen med top
+10 holder. Marksmanship-hunteres top 10 er almindelige spillere, fordi specen er sjælden.
 
 ### Godt at vide
 

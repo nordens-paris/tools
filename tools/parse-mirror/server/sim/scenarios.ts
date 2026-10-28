@@ -7,7 +7,7 @@ import { WCL_SLOTS, type PlayerFightRaw } from '../analysis/collect.ts';
 import { itemInfo } from '../data/db.ts';
 import { median, mostCommon } from '../analysis/stats.ts';
 
-import { bossArmor, buildRequest, encounterOf, environmentOf, setupFromRaw, type SimPlayerSetup } from './request.ts';
+import { bossArmor, buildRequest, encounterOf, environmentOf, raidAurasOf, setupFromRaw, type SimPlayerSetup } from './request.ts';
 import { buildEnvironment, withConsumablesFrom, withTopRaidBuffs, type SimEnvironment } from './environment.ts';
 import { computeLuck, simRollRates } from './luck.ts';
 import { procLuck } from './procs.ts';
@@ -71,7 +71,11 @@ export async function runScenarios(
   // Top players' raid buffs with your own consumable buffs (Power Core...), so only raid setup differs.
   const raidBuffs = withTopRaidBuffs(
     yourEnv,
-    top.map((t) => buildEnvironment(t.fight.buffs, t.fight.bossDebuffs, undefined, { consumableBuffs: you.fight.buffs, isbHitPct: t.fight.isbHitPct, shadowPriestDps: t.fight.partyShadowPriestDps })),
+    // Their own class buffs (Trueshot Aura...) are left out, as for you: your sim gives you yours.
+    top.map((t) => {
+      const auras = raidAurasOf(t, spec);
+      return buildEnvironment(auras.buffs, auras.bossDebuffs, undefined, { consumableBuffs: you.fight.buffs, isbHitPct: t.fight.isbHitPct, shadowPriestDps: t.fight.partyShadowPriestDps });
+    }),
   );
 
   // Every sim shares one limit, and all of them are queued as soon as they can run: the scenarios
