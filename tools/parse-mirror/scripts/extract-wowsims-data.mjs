@@ -22,9 +22,11 @@ const db = JSON.parse(fs.readFileSync(path.join(src, 'assets/database/db.json'),
 const items = {};
 for (const it of db.items) {
   items[it.id] = { n: it.name, i: it.icon, q: it.quality ?? 0 };
-  // Gem sockets, for the raid's gear check; o: held in off-hand (can't be enchanted).
+  // Gem sockets, for the raid's gear check; o: held in off-hand (can't be enchanted); w: weapon type
+  // (proto WeaponType: 1 axe, 4 mace, 9 sword...), for racial expertise.
   if (it.gemSockets?.length) items[it.id].s = it.gemSockets.length;
   if (it.type === 13 && it.weaponType === 5) items[it.id].o = 1;
+  if (it.type === 13 && it.weaponType && it.weaponType !== 5) items[it.id].w = it.weaponType;
 }
 const enchants = {};
 for (const e of db.enchants) {
@@ -96,6 +98,13 @@ copy('ui/specs/warlock/dps/apls/demonology.apl.json', 'warlock-demonology.apl.js
 copy('ui/specs/warrior/protection/apls/default.apl.json', 'warrior-protection.apl.json');
 copy('ui/specs/paladin/protection/apls/default.apl.json', 'paladin-protection.apl.json');
 copy('ui/specs/druid/feralbear/apls/default.apl.json', 'druid-bear.apl.json');
+copy('ui/specs/shaman/elemental/apls/default.apl.json', 'shaman-elemental.apl.json');
+copy('ui/specs/druid/balance/apls/default.apl.json', 'druid-balance.apl.json');
+copy('ui/specs/paladin/retribution/apls/default.apl.json', 'paladin-retribution.apl.json');
+copy('ui/specs/shaman/enhancement/apls/default.apl.json', 'shaman-enhancement.apl.json');
+copy('ui/specs/rogue/dps/apls/swords.apl.json', 'rogue-combat.apl.json');
+copy('ui/specs/druid/feralcat/apls/default.apl.json', 'druid-feral.apl.json');
+copy('ui/specs/hunter/dps/apls/default.apl.json', 'hunter.apl.json');
 
 // Talent trees (talent order and rank spell IDs), to turn armory talents into talent strings.
 fs.mkdirSync(path.join(out, 'talents'), { recursive: true });

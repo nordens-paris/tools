@@ -4,7 +4,7 @@ import path from 'node:path';
 import express from 'express';
 
 import type { SimResult, TankSimResult } from '../shared/types.ts';
-import { analyze, type StoredAnalysis } from './analysis/analyze.ts';
+import { analyze, dpsSpecFor, specNameOf, type StoredAnalysis } from './analysis/analyze.ts';
 import { guildSummary } from './analysis/guild.ts';
 import { analyzeHealer } from './analysis/healer/compare.ts';
 import { healerRaidSummary } from './analysis/healer/raid.ts';
@@ -20,7 +20,7 @@ import { CLI_PARALLEL, runScenarios, type SimRun } from './sim/scenarios.ts';
 import { runTankSims } from './sim/tank.ts';
 import { mayHeal } from './specs/healers.ts';
 import { mayTank } from './specs/tanks.ts';
-import { specForIcon } from './specs/index.ts';
+import { mayBeDps, specForIcon } from './specs/index.ts';
 import { WclClient } from './wcl/client.ts';
 
 // Locally the Vite dev server proxies to API_PORT (from .env); hosts like Render give the port in
@@ -172,7 +172,7 @@ app.get('/api/report/:code', async (req, res) => {
       fights: bosses.map((f) => ({ id: f.id, name: f.name, kill: !!f.kill, durationSec: (f.end_time - f.start_time) / 1000 })),
       players: fights.friendlies
         .filter((a) => a.type !== 'Pet' && a.type !== 'NPC')
-        .map((a) => ({ id: a.id, name: a.name, icon: a.icon, supported: !!specForIcon(a.icon) || mayHeal(a.icon) || mayTank(a.icon), fights: a.fights.map((f) => f.id) })),
+        .map((a) => ({ id: a.id, name: a.name, icon: a.icon, supported: !!specForIcon(a.icon) || mayBeDps(a.icon) || mayHeal(a.icon) || mayTank(a.icon), fights: a.fights.map((f) => f.id) })),
     });
   } catch (err) {
     fail(res, 'Report', err);
@@ -230,6 +230,8 @@ app.get('/api/progress/:code/:source', async (req, res) => {
   }
 });
 
+const HEAL_OR_TANK_TREES = /^(Holy|Discipline|Restoration|Protection|Justicar|Guardian|Dreamstate)$/;
+
 app.post('/api/analyze', async (req, res) => {
   try {
     const { report, fight, source, mode = 'top' } = req.body ?? {};
@@ -242,10 +244,17 @@ app.post('/api/analyze', async (req, res) => {
     // the player wasn't tanking or healing).
     const fights = await client.fights(code);
     const actor = fights.friendlies.find((a) => a.id === source);
-    if (actor && !specForIcon(actor.icon)) {
+    const theFight = fights.fights.find((f) => f.id === fight);
+    // A bare class icon ("Druid") may be a tank with DPS talents (feral), so tanking is checked first.
+    const tanking = !!actor && !specForIcon(actor.icon) && mayTank(actor.icon) && (await isTanking(client, code, fight, source, fights));
+    const spec = actor && theFight && !tanking ? await dpsSpecFor(client, code, theFight, actor) : undefined;
+    // Players in a DPS tree we don't support yet (and classes that can't heal or tank) go on to the
+    // DPS analysis, which says so.
+    const dpsTree = !!actor && !!theFight && !spec && !tanking && !HEAL_OR_TANK_TREES.test((await specNameOf(client, code, theFight, actor)) ?? 'Restoration');
+    if (actor && !spec && !dpsTree && (tanking || mayHeal(actor.icon) || mayTank(actor.icon))) {
       requireRoleKey(req);
       limitVisitor(req, 2);
-      if (await isTanking(client, code, fight, source, fights)) {
+      if (tanking || (await isTanking(client, code, fight, source, fights))) {
         const stored = await analyzeTank(client, code, fight, source, log);
         remember(stored.analysis.id, async (run, parallel, simClient) => runTankSims(stored, simClient(), run, iterations, log, parallel));
         res.json(stored.analysis);
@@ -254,7 +263,7 @@ app.post('/api/analyze', async (req, res) => {
       }
       return;
     }
-    const stored = await analyze(client, code, fight, source, log, mode);
+    const stored = await analyze(client, code, fight, source, log, mode, spec);
     rememberDps(stored);
     res.json(stored.result);
   } catch (err) {

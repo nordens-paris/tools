@@ -25,6 +25,7 @@ Scripts, der arbejder på tværs af mange spillere (`sim-vs-log`, `crit-unbiased
 | `full-run.ts <rapport> <fight> <source> [top\|peers] [iterationer]` | Hele analysen og alle sims: fund, what-ifs med ændringer og execution delt i gear, kill-tid, spil og held |
 | `try-analysis.ts <rapport> <fight> <source> [--sim] [--dump fil.json]` | Analysen som tekst; `--dump` skriver sim-forespørgslen |
 | `log-probe.ts <rapport> <fight> <source>` | Alt om én spiller i én kamp; startpunktet for en ny spec |
+| `top-probe.ts <encounterId> <klasse-id> <spec-id> [antal]` | Hvad top-spillerne af en klasse/spec gør på en boss: våben med våbentype, temp-enchants, hit- og expertise-rating, pets, talentfordeling og casts pr. minut, plus de casts de fleste bruger. Kræver ingen spec-fil |
 | `exec-breakdown.ts <rapport> <fight> <source> [iterationer]` | Pr. ability, hvor rigtig og simmet DPS skilles, og auras med forskellig uptime |
 | `party-check.ts <rapport> <fight> <source>` | Shamans, totems, Moonkin Aura og shadow priest-mana for hver sammenlignet spiller |
 | `show-env.ts` / `show-detected.ts <rapport> <fight> <source>` | Buffs og debuffs, og hvad sim-miljøet får ud af dem |
@@ -42,6 +43,7 @@ Scripts, der arbejder på tværs af mange spillere (`sim-vs-log`, `crit-unbiased
 
 | Script | Hvad det gør |
 |---|---|
+| `validate-spec.ts <spec-key> <encounterId...> [--n=10] [--iterations=500]` | Godkendelsen af en specs sim-opsætning (`--ids` viser rapport, fight og source til `exec-breakdown.ts`): simmer top-spillerne på hver boss og viser execution før og efter held (median og den midterste halvdel), plus abilities i loggen som simmen aldrig brugte, gear WoWSims ikke har, og våben-enchants eller consumes der ikke er koblet. Top-spillere skal ligge omkring 90–105 % af deres sim efter held, med den midterste halvdel inden for cirka 12 point. Anniversary-bosser er 50601–50622 |
 | `sim-vs-log.ts boss <encounterId> [antal]` | Rigtig mod simmet DPS for top-spillere, med crit på hoved-abilityen |
 | `sim-vs-log.ts player <rapport> <fight> <source>` | Casts, crit og skade pr. ability, rigtig mod sim |
 | `sim-vs-log.ts crit <encounterIds...>` | Hvide/gule angrebstabeller uden for Recklessness over mange spillere |

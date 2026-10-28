@@ -16,6 +16,8 @@ export interface SimDps {
 }
 
 export interface SimPlayerMetrics {
+  /** The player's pets and guardians (hunter pet, Fire Elemental...); their damage is in the player's DPS. */
+  pets?: { name?: string; actions: SimPlayerMetrics['actions'] }[];
   actions: {
     id: { spellId?: number; itemId?: number; otherId?: string; tag?: number };
     targets: {

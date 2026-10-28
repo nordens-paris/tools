@@ -16,6 +16,42 @@ Målt oktober 2026:
 | Arcane Mage | Rage Winterchill | 94–107 % |
 | Fury Warrior | Rage Winterchill | 92–104 % |
 
+Med `scripts/validate-spec.ts` (8 top-spillere pr. boss, execution efter held, ikke skaleret til
+medianen; median og den midterste halvdel), oktober 2026:
+
+| Spec | Kills | Median | Midterste halvdel |
+|---|---|---|---|
+| Fury Warrior | Kaz'rogal, Archimonde | 100,7 % | 97–103 % |
+| Arms Warrior | Kaz'rogal, Archimonde | 101,3 % | 100–106 % |
+| Destruction Warlock | Kaz'rogal | 98,5 % | 98–100 % |
+| Affliction Warlock | Kaz'rogal, Archimonde | 97,8 % | 96–100 % |
+| Arcane Mage | Kaz'rogal | 101,4 % | 101–102 % |
+| Shadow Priest | Kaz'rogal | 101,1 % | 101–102 % |
+| Elemental Shaman | Kaz'rogal, Archimonde | 101,6 % | 95–106 % |
+| Balance Druid | Kaz'rogal, Archimonde | 94,8 % | 93–98 % |
+| Combat Rogue | Kaz'rogal, Archimonde | 104,1 % | 100–105 % |
+| Feral Druid | Kaz'rogal, Archimonde | 91,7 % | 91–95 % |
+| Retribution Paladin | Kaz'rogal, Archimonde | 108,4 % | 105–112 % |
+| Enhancement Shaman | Kaz'rogal, Archimonde | 110,4 % | 106–113 % |
+| Beast Mastery Hunter | Kaz'rogal, Archimonde | 100,1 % | 95–104 % |
+| Survival Hunter | Kaz'rogal, Archimonde | 89,6 % | 88–92 % |
+| Marksmanship Hunter | Kaz'rogal, Archimonde | 84,5 % | 73–88 % |
+
+Warriors lå 5–6 % over 100 %, til Windfury Totem-rettelsen nedenfor. `validate-spec` trækker kun
+det direkte held fra (ikke trinket-procs), så proc-tunge melee-specs ligger en smule højt.
+Retribution og Enhancement ligger 8–10 % over: deres hvide slag rammer cirka 10 % hårdere i loggen
+end i simmen (en Combat rogues 4 %), og for Retribution critter de hvide slag 54 % over 552 slag
+på 16 top-spillere mod simmens 46 % (karakterarket giver cirka 40 %). Ingen af delene er forklaret
+endnu; Two-Handed Weapon Specialization, Vengeance, Crusade og Weapon Mastery virker i simmen (uden
+dem falder den 3–12 %). Forskellen er ens for alle af specen, så den forsvinder i sammenligningen
+med top 10. Marksmanship er sjælden og svag i Anniversary: dens "top 10" er almindelige spillere
+(2,1–3,6k DPS mod 4,3–5k for Beast Mastery), som ikke når en perfekt sim. Survival-simmen melee-weaver
+mere end de rigtige (Raptor Strike 8,4 mod 5,8 pr. minut), så den ligger lidt over dem.
+Elementals spreder mere, mest på held (Lightning Bolt critter op til 76 % på et kort kill) og
+Fire Elemental (se nedenfor). Balance-druiders Starfire og Moonfire rammer 7–9 % hårdere i loggen
+end i WoWSims for alle (ikke forklaret endnu; Curse of the Elements på arcane og Moonfury er med),
+men de caster færre Starfires end simmen, så de ender lidt under 100 %.
+
 Det, der er tilbage, er mest ting simmen ikke kan: warriors, der står i boss-AoE for rage (to top
 Rage Winterchill-warriors tog 26–35k Death & Decay-skade, cirka 250 rage/min; vises som "Rage
 from damage taken" med et fund), og spillere, der slår WoWSims' standardrotation (større Executes
@@ -61,6 +97,10 @@ Bygges ind af `scripts/build-wowsims.mjs`:
 
 - **Recklessness rammer også hvide slag** i TBC; upstream gjaldt det kun special attacks (+6
   point hvid crit på et 100-sekunders kill).
+- **Windfury Totem procer på 32 % af slagene**, ikke 20 %: over 16 top-Retribution-kills fik
+  tohåndsslag et ekstra angreb (samme millisekund) på 133 af 419 slag. Med 20 % simmede top
+  warriors 4–6 % og Retribution 9 % under deres rigtige DPS; med 32 % ligger Fury og Arms på 100–101 %.
+  Gælder både raidets Windfury Totem og en Enhancement-shamans egen.
 - **Level-baserede partial resists:** mod en boss uden resistance sprang en kodevej 0-til-1-skaleringen
   over, så simmen resisterede 13,7 % af spells i stedet for ~18 %. Over 267 warlock-kills tog
   partial resists 5,8 % af den direkte skade i virkeligheden; den rettede sim forventer 6,0 %
@@ -71,6 +111,61 @@ Bygges ind af `scripts/build-wowsims.mjs`:
 - **Fury:** Recklessness slået til og Overpower-weaving slået fra i APL'en; alle execute-andele
   sat (ellers når simmen aldrig execute); potions og conjured items listet; Engineering sat for
   sappers. Warrior hit-cap er 8 % (WoWSims' miss mod en level 73-boss; top warriors stopper der).
+- **Arms:** top-spillerne i Anniversary kører dual-wield sværd med 33/28/0 ("Kebab"): Heroic
+  Strike-spam, Mortal Strike, Whirlwind og Hamstring, ingen Slam eller Overpower. WoWSims' Arms-APL
+  har en dual-wield- og en tohånds-gren, som den vælger efter Slams cast-tid; her vælger våbnene
+  (en tohåndsspiller uden Improved Slam fik ellers dual-wield-rotationen og slog aldrig Slam).
+  Recklessness og Overpower som for Fury. Blood Frenzy kommer fra spillerens egne Mortal Strikes i
+  simmen, ikke fra raidet.
+- **Affliction:** de fleste top-"Affliction"-warlocks kører 40/0/21 Shadow Bolt med Corruption, en
+  curse og en pet ude, ofte uden Siphon Life og aldrig Immolate eller Unstable Affliction.
+  WoWSims' Affliction-APL holder alle DoTs oppe, så DoTs spilleren ikke brugte, slås fra
+  (`sim.onlyIfCast`). Dæmonen er den, spilleren havde ude.
+- **Retribution:** WoWSims' APL twister Seal of Command og Seal of Blood som top-spillerne;
+  Exorcism og Consecration simmes kun, hvis spilleren brugte dem. Seal of Command logger sine
+  procs som casts, så kun selve seal'en tæller (`castIds`). Seal of the Martyr (Alliancens Seal of
+  Blood) læses som Seal of Blood i held. Judgement of the Crusader bliver i raid-miljøet, som
+  loggen havde den: mange holder den oppe selv, mens simmen kun dømmer den før pull. Egen Sanctity
+  Aura sætter simmen selv.
+- **Enhancement:** simmen twister selv Windfury og Grace of Air og sætter Strength of Earth og Mana
+  Spring, så de totems holdes ude af miljøet. "Windfury Attack" er også navnet på Windfury Weapons
+  procs, så den kan ikke vise en party-Windfury Totem for en Enhancement. Imbues tages fra våbnene
+  (Windfury Weapon, når loggen ikke viser noget). Stormstrike logger en cast pr. våben-slag, så kun
+  17364 tæller.
+- **Combat:** egen Expose Armor simmes kun, hvis spilleren brugte den (APL'en gør det ellers, når
+  Improved Expose Armor er talentet). Adrenaline Rush og Blade Flurry tidsættes fra loggen; APL'en
+  brugte Adrenaline Rush før pull. Gifte kommer fra våbnene; med Windfury Totem på main hand er der
+  ingen gift der, som i spillet.
+- **Feral:** WoWSims' cat-APL powershifter og caster kun Mangle og Faerie Fire, når bossen ikke har
+  dem, så spillerens egne holdes ude af miljøet. Leader of the Pack sætter simmens druid selv.
+- **Hunter:** WoWSims har én hunter-spec; Warcraft Logs ranker Beast Mastery, Marksmanship og
+  Survival hver for sig, så de er tre moduler med samme base. Melee-weaving, Multi-Shot og Arcane
+  Shot simmes kun, hvis spilleren brugte dem; Bestial Wrath og Rapid Fire tidsættes fra loggen
+  (APL'en brugte dem ved 5 s). Pettens familie kommer fra dens abilities (Gore → Ravager), og dens
+  uptime fra hvor længe den slog (første til sidste slag, minus pauser på 8 s eller mere; ét kald
+  mere pr. spiller). Loggen viser hverken pile eller quiver: top-hunteres Auto Shot ramte 6 %
+  hårdere end med WoWSims' Warden's Arrow (Steady Shot, der ikke bruger pile, kun 2 %), så den
+  bedste pil før Sunwell, Mysterious Arrow, antages, plus et 15 %-quiver. Survivals egen Expose
+  Weakness tages ud af miljøet; simmen lægger den selv. WoWSims har ingen Marksmanship-build, så
+  presets er top-spilleres builds fra armory. Snake Traps slanger og trinket-væsner (Netherwing
+  Ally) holdes uden for sammenligningen med spillerens pet: Warcraft Logs lægger en hunters og
+  slangernes Melee i én post delt pr. aktør, som nu skilles ad.
+- **Dual wield og hit:** for Fury, Combat og Enhancement tæller hit over 8 % stadig for de hvide
+  slag, så "over hit-cap" først vises over 27 %.
+- **Elemental:** WoWSims' Elemental-APL sætter selv shamanens totems før pull (Totem of Wrath,
+  Wrath of Air, Mana Spring, Strength of Earth), og dens egen Totem of Wrath stakker med en
+  raid-buff-Totem of Wrath i WoWSims (+6 % crit og hit). Derfor holdes totems helt ude af
+  raid-miljøet for Elementals (`sim.excludeBuffs`). Fire og Earth Elemental bruger WoWSims som
+  cooldowns ved pull uanset APL'en, så de tidsættes fra loggen (ved pull, hvis elementalen allerede
+  var ude), ellers aldrig; uden det fik spillere uden Fire Elemental ~500 DPS for meget i simmen.
+  Simmens Fire Elemental slår hele tiden (cirka 350 mod 190 DPS melee hos top-spillere, samme
+  skade pr. slag), hvilket er ens for alle, der bruger den. En shamans egen Bloodlust er en
+  cooldown for sig i WoWSims, som ellers bruges ved pull; den tidsættes også fra loggen. Hit:
+  Elemental Precision 2 % pr. point, Nature's Guidance 1 % og egen Totem of Wrath 3 %.
+- **Balance:** Faerie Fire, Insect Swarm, Force of Nature og Innervate på sig selv simmes kun,
+  hvis spilleren brugte dem; egen Faerie Fire og Innervate tages ud af raid-miljøet. Moonkin Aura
+  findes kun som party-buff i WoWSims, så druidens egen bliver i miljøet. Balance of Power giver
+  2 % hit pr. point; Improved Faerie Fire hjælper kun fysisk hit.
 - **Boss-armor** pr. boss (Hyjal/Teron/Shahraz 6200, det meste af BT 7700); Hyjals Rallying Cry
   som bonus-AP; strengere Windfury-detektion; rigtige talenter fra armory.
 - **Cooldown-timing fra loggen:** Bloodlust og spec'ens `timedCooldowns` bruges, når spilleren

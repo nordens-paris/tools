@@ -28,14 +28,32 @@ export interface SimPlayerSetup {
   aplFile: string;
   /** When Bloodlust and timed cooldowns happened in the log, in seconds (undefined = not used). */
   timing: { bloodlustSec?: number; cooldowns: { spellId: number; atSec?: number; keepCondition?: boolean }[] };
+  /** Rotation spells the player never cast, which the sim skips too (spec.sim.onlyIfCast). */
+  skipSpells?: number[];
+  /** What the player did, for spec.sim.aplVariables: cast names and pet summons, and their own auras. */
+  used?: { used: string[]; ownAuras: string[] };
+}
+
+/**
+ * A player's buffs and boss debuffs for the sim environment, without the ones they provided
+ * themselves that the sim's class code gives them anyway (spec.sim.selfProvided).
+ */
+export function raidAurasOf(raw: PlayerFightRaw, spec: SpecConfig) {
+  const own = new Set([...(spec.sim.selfProvided ?? []).filter((name) => raw.ownAuras.includes(name)), ...(spec.sim.excludeBuffs ?? [])]);
+  return {
+    buffs: own.size ? raw.fight.buffs.filter((b) => !own.has(b.name)) : raw.fight.buffs,
+    bossDebuffs: own.size ? raw.fight.bossDebuffs.filter((d) => !own.has(d.name)) : raw.fight.bossDebuffs,
+  };
 }
 
 /** The sim environment (raid buffs, boss debuffs) a player had in their fight. */
-export const environmentOf = (raw: PlayerFightRaw, _spec: SpecConfig) =>
-  buildEnvironment(raw.fight.buffs, raw.fight.bossDebuffs, raw.consumes.drums, {
+export function environmentOf(raw: PlayerFightRaw, spec: SpecConfig) {
+  const { buffs, bossDebuffs } = raidAurasOf(raw, spec);
+  return buildEnvironment(buffs, bossDebuffs, raw.consumes.drums, {
     isbHitPct: raw.fight.isbHitPct,
     shadowPriestDps: raw.fight.partyShadowPriestDps,
   });
+}
 
 export const encounterOf = (raw: PlayerFightRaw) => ({
   id: raw.encounterId,
@@ -54,11 +72,16 @@ export function setupFromRaw(raw: PlayerFightRaw, spec: SpecConfig): SimPlayerSe
     talents: raw.fight.talents,
     specOptions: spec.sim.specOptions(raw, raw.fight.talents),
     aplFile: typeof spec.sim.aplFile === 'string' ? spec.sim.aplFile : spec.sim.aplFile(raw),
+    skipSpells: (spec.sim.onlyIfCast ?? []).filter((s) => !raw.fight.casts.some((c) => c.name === s.name)).map((s) => s.spellId),
+    used: {
+      used: [...raw.fight.casts.map((c) => c.name), ...(raw.fight.pets ?? []).map((p) => p.summon ?? p.name)],
+      ownAuras: raw.ownAuras,
+    },
     timing: {
       bloodlustSec: raw.fight.buffs.find((b) => b.name === 'Bloodlust' || b.name === 'Heroism')?.starts?.[0],
       cooldowns: (spec.sim.timedCooldowns ?? []).map((c) => ({
         spellId: c.spellId,
-        atSec: raw.fight.cooldowns.find((u) => u.name === c.name)?.times[0],
+        atSec: raw.fight.cooldowns.find((u) => u.name === c.name)?.times[0] ?? (c.pet && raw.fight.pets?.some((p) => p.summon === c.pet) ? 0 : undefined),
         keepCondition: c.keepCondition,
       })),
     },
@@ -115,6 +138,10 @@ function consumablesSpec(player: SimPlayerSetup) {
 const usesEngineering = (player: SimPlayerSetup) =>
   !!(player.flags.superSapper || player.flags.goblinSapper || player.consumes.some((c) => c.category === 'Engineering' && c.simId));
 
+interface AplPrepull {
+  action: { castSpell?: { spellId: { spellId?: number } } };
+}
+
 interface AplItem {
   hide?: boolean;
   action: { condition?: unknown; groupReference?: { groupName: string }; castSpell?: { spellId: { spellId?: number; tag?: number } } };
@@ -123,13 +150,20 @@ interface AplItem {
 const BLOODLUST = { spellId: 2825, tag: -1 };
 const atOrAfter = (sec: number) => ({ cmp: { op: 'OpGe', lhs: { currentTime: {} }, rhs: { const: { val: `${sec.toFixed(1)}s` } } } });
 
-function loadRotation(spec: SpecConfig, aplFile: string, timing: SimPlayerSetup['timing']) {
-  const apl = structuredClone(loadJson<{ priorityList: AplItem[]; valueVariables?: { name: string; value: unknown }[] }>(aplFile));
+function loadRotation(spec: SpecConfig, player: SimPlayerSetup) {
+  const { aplFile, timing, skipSpells = [], gear } = player;
+  const apl = structuredClone(loadJson<{ priorityList: AplItem[]; prepullActions?: AplPrepull[]; valueVariables?: { name: string; value: unknown }[] }>(aplFile));
+  for (const [name, value] of Object.entries(spec.sim.aplVariables?.(gear, player.used ?? { used: [], ownAuras: [] }) ?? {})) {
+    const variable = apl.valueVariables?.find((v) => v.name === name);
+    if (variable) variable.value = value;
+  }
   const { enable = [], disable = [] } = spec.sim.aplGroups ?? {};
   for (const item of apl.priorityList) {
     const group = item.action.groupReference?.groupName;
     if (group && enable.includes(group)) item.hide = false;
     if (group && disable.includes(group)) item.hide = true;
+    const spellId = item.action.castSpell?.spellId.spellId;
+    if (spellId !== undefined && skipSpells.includes(spellId)) item.hide = true;
   }
 
   // Use cooldowns when the player did. Without an APL action for it, WoWSims would use it on pull.
@@ -144,9 +178,18 @@ function loadRotation(spec: SpecConfig, aplFile: string, timing: SimPlayerSetup[
     if (lustVar) lustVar.value = atOrAfter(timing.bloodlustSec).cmp.rhs;
     else timed.push({ spellId: BLOODLUST, atSec: timing.bloodlustSec });
   }
+  // A shaman's own Bloodlust is a cooldown of their own (tagged with their raid index, 0 here) that
+  // the sim would otherwise use on pull; it goes when the log's did (whichever goes first, the
+  // other finds everyone Sated), or never.
+  if (spec.className === 'Shaman') timed.push({ spellId: { spellId: BLOODLUST.spellId, tag: 0 }, atSec: timing.bloodlustSec });
   for (const t of timed) {
+    // A cooldown the APL uses before the pull (a rogue's Adrenaline Rush) goes when the log's did instead.
+    if (apl.prepullActions) apl.prepullActions = apl.prepullActions.filter((p) => p.action.castSpell?.spellId.spellId !== t.spellId.spellId);
     const condition = t.atSec === undefined ? { const: { val: 'false' } } : atOrAfter(t.atSec);
-    const actions = apl.priorityList.filter((i) => !i.hide && i.action.castSpell?.spellId.spellId === t.spellId.spellId);
+    // A tagged spell (one of the two Bloodlusts) only matches the same tag.
+    const actions = apl.priorityList.filter(
+      (i) => !i.hide && i.action.castSpell?.spellId.spellId === t.spellId.spellId && (t.spellId.tag === undefined || i.action.castSpell.spellId.tag === t.spellId.tag),
+    );
     for (const item of actions) {
       const own = item.action.condition;
       item.action.condition = t.keepCondition && own && t.atSec !== undefined ? { and: { vals: [condition, own] } } : condition;
@@ -211,7 +254,7 @@ export function buildRequest(opts: {
               talentsString: player.talents,
               // Sappers and grenades only work with Engineering; logs don't show professions.
               profession1: usesEngineering(player) ? 'Engineering' : undefined,
-              rotation: loadRotation(spec, player.aplFile, player.timing),
+              rotation: loadRotation(spec, player),
               [spec.sim.specField]: player.specOptions,
               distanceFromTarget: spec.sim.distanceFromTarget,
               ...(opts.tank ? { inFrontOfTarget: true } : {}),

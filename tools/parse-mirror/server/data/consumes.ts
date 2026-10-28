@@ -64,6 +64,10 @@ const IMBUES: Record<number, { name: string; simId?: number; icon: string }> = {
   2684: { name: 'Consecrated Sharpening Stone', simId: 28891, icon: 'inv_stone_sharpeningstone_02' },
   2628: { name: 'Brilliant Wizard Oil', simId: 25122, icon: 'inv_potion_105' },
   2677: { name: 'Superior Wizard Oil', simId: 28017, icon: 'inv_potion_141' },
+  // Rogue poisons: WoWSims takes the poison's spell ID as the imbue (sim/rogue/poisons.go).
+  2641: { name: 'Instant Poison VII', simId: 26891, icon: 'ability_poisons' },
+  2643: { name: 'Deadly Poison VII', simId: 27186, icon: 'ability_rogue_dualweild' },
+  2644: { name: 'Wound Poison V', simId: 27188, icon: 'inv_misc_herb_16' },
   // Not in WoWSims (healers' oils, older stones): only shown, not simmed.
   2629: { name: 'Brilliant Mana Oil', icon: 'inv_potion_100' },
   2678: { name: 'Superior Mana Oil', icon: 'inv_potion_101' },
@@ -75,6 +79,20 @@ const IMBUES: Record<number, { name: string; simId?: number; icon: string }> = {
 
 // Temporary enchants applied by a shaman's Windfury Totem rather than a consumable.
 const WINDFURY_TOTEM_ENCHANTS = new Set([2639]);
+
+/** WoWSims' ShamanImbue names. */
+export type ShamanImbue = 'WindfuryWeapon' | 'FlametongueWeapon' | 'FrostbrandWeapon' | 'RockbiterWeapon';
+// A shaman's own weapon imbues, every rank (enchant IDs from WoWSims' spell data). They're class
+// spells, not consumables: the shaman specs pass them to the sim as spec options.
+const SHAMAN_IMBUES: Record<number, { name: string; imbue: ShamanImbue }> = Object.fromEntries([
+  ...[283, 284, 525, 1669, 2636].map((id) => [id, { name: 'Windfury Weapon', imbue: 'WindfuryWeapon' }]),
+  ...[5, 4, 3, 523, 1665, 1666, 2634].map((id) => [id, { name: 'Flametongue Weapon', imbue: 'FlametongueWeapon' }]),
+  ...[2, 12, 524, 1667, 1668, 2635].map((id) => [id, { name: 'Frostbrand Weapon', imbue: 'FrostbrandWeapon' }]),
+  ...[3021].map((id) => [id, { name: 'Rockbiter Weapon', imbue: 'RockbiterWeapon' }]),
+]);
+
+/** The shaman imbue a weapon's temporary enchant is, if any. */
+export const shamanImbueOf = (effect?: number) => (effect ? SHAMAN_IMBUES[effect]?.imbue : undefined);
 
 // Elixirs WoWSims doesn't have (healers', tanks' and old ones), by buff name: only used to see that
 // an elixir slot was filled.
@@ -177,7 +195,7 @@ export function detectConsumes(input: ConsumeInput): DetectedConsumes {
     ['Weapon (MH)', input.mhTempEnchant],
     ['Weapon (OH)', input.ohTempEnchant],
   ] as const) {
-    if (!effect || WINDFURY_TOTEM_ENCHANTS.has(effect)) continue;
+    if (!effect || WINDFURY_TOTEM_ENCHANTS.has(effect) || SHAMAN_IMBUES[effect]) continue;
     const imbue = IMBUES[effect];
     icon = imbue?.icon;
     add(slot, imbue?.name ?? `Unknown (enchant ${effect})`, { simId: imbue?.simId });
@@ -187,4 +205,4 @@ export function detectConsumes(input: ConsumeInput): DetectedConsumes {
 }
 
 export const tempEnchantName = (effect: number) =>
-  WINDFURY_TOTEM_ENCHANTS.has(effect) ? 'Windfury Totem' : IMBUES[effect]?.name;
+  WINDFURY_TOTEM_ENCHANTS.has(effect) ? 'Windfury Totem' : (IMBUES[effect]?.name ?? SHAMAN_IMBUES[effect]?.name);

@@ -7,7 +7,9 @@ import type { RaidBoss, RaidSummary } from '../../shared/types.ts';
 import { mayHeal } from '../specs/healers.ts';
 import { mayTank } from '../specs/tanks.ts';
 import { specForIcon } from '../specs/index.ts';
+import type { SpecConfig } from '../specs/types.ts';
 import type { WclClient } from '../wcl/client.ts';
+import { dpsSpecFor } from './analyze.ts';
 import { parseOf, parsesFor } from './characters.ts';
 import { fetchHealerFight } from './healer/data.ts';
 import { healerMetrics } from './healer/metrics.ts';
@@ -25,10 +27,22 @@ export async function raidSummary(client: WclClient, report: string, source: num
   const fights = await client.fights(report);
   const actor = fights.friendlies.find((a) => a.id === source);
   if (!actor) throw new Error(`Player ${source} not found in report ${report}`);
-  const spec = specForIcon(actor.icon);
   const kills = fights.fights.filter((f) => f.boss && f.kill && actor.fights.some((af) => af.id === f.id));
+  // A bare class icon ("Shaman") gets the spec its talents give on most kills (players swap specs
+  // between bosses), unless they tanked the first kill. The combatant infos are needed per kill anyway.
+  const tankingFirst = !specForIcon(actor.icon) && !!kills[0] && mayTank(actor.icon) && (await isTanking(client, report, kills[0].id, source, fights));
+  let spec = specForIcon(actor.icon);
+  if (!spec && !tankingFirst && kills.length) {
+    const perKill = await Promise.all(kills.map((f) => dpsSpecFor(client, report, f, actor)));
+    const counts = new Map<SpecConfig, number>();
+    for (const s of perKill) if (s) counts.set(s, (counts.get(s) ?? 0) + 1);
+    const [best] = [...counts].sort((a, b) => b[1] - a[1]);
+    if (best && best[1] >= kills.length / 2) spec = best[0];
+  }
   const players = fights.friendlies.filter((a) => a.type !== 'Pet' && a.type !== 'NPC' && kills.some((k) => a.fights.some((f) => f.id === k.id)));
   const isDps = (icon: string) => !NOT_DPS.has(icon);
+  // A bare class icon ("Rogue") reads as the spec its talents give, for the spec-based checks.
+  const icon = spec ? `${spec.className}-${spec.specName}` : actor.icon;
   // Players who may be healing get their healing per kill (about 10 more requests per kill, shared
   // with the healer page and the raid's healer panel).
   const couldHeal = healers && !spec && mayHeal(actor.icon);
@@ -60,12 +74,12 @@ export async function raidSummary(client: WclClient, report: string, source: num
   const sameClass = players.filter((p) => p.id !== source && isDps(p.icon) && p.icon.split('-')[0] === actor.icon.split('-')[0]);
   const totalOf = (id: number) => perBoss.reduce((s, b) => s + (b.damage.entries.find((e) => e.id === id)?.total ?? 0), 0);
   const sameRole = players
-    .filter((p) => p.id !== source && isDps(p.icon) && MELEE_OR_HUNTER.test(p.icon) === MELEE_OR_HUNTER.test(actor.icon))
+    .filter((p) => p.id !== source && isDps(p.icon) && MELEE_OR_HUNTER.test(p.icon) === MELEE_OR_HUNTER.test(icon))
     .sort((a, b) => totalOf(b.id) - totalOf(a.id))
     .slice(0, 3);
   const peers = sameClass.length ? sameClass.slice(0, 4) : sameRole;
 
-  const wanted = debuffsFor(actor.icon);
+  const wanted = debuffsFor(icon);
   const allDebuffs = raidDebuffs(kills, new Map(perBoss.map((b) => [b.fight.id, b.debuffs])), players).filter((d) => wanted.includes(d.name));
   const pulledAt = (f: (typeof kills)[number]) => (fights.start ?? 0) + f.start_time;
 
@@ -116,6 +130,6 @@ export async function raidSummary(client: WclClient, report: string, source: num
     bosses,
     peers: { basis: sameClass.length ? 'class' : 'role', players: peers.map((p) => ({ source: p.id, name: p.name, icon: p.icon })) },
     people: Object.fromEntries(players.filter((p) => inParties.has(p.id)).map((p) => [p.id, { name: p.name, icon: p.icon }])),
-    gearIssues: latest && latestInfo ? gearIssues(actor.icon, latestInfo, hasTotemOfWrath(actor, players, latest.infos, latest.parties.groups)) : [],
+    gearIssues: latest && latestInfo ? gearIssues(icon, latestInfo, hasTotemOfWrath(actor, players, latest.infos, latest.parties.groups)) : [],
   };
 }

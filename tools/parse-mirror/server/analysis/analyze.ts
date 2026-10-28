@@ -2,7 +2,7 @@
 import crypto from 'node:crypto';
 
 import type { AnalysisResult, ComparisonGroup, MetricRow, PlayerFight } from '../../shared/types.ts';
-import { specForIcon, supportedSpecs } from '../specs/index.ts';
+import { mayBeDps, specForIcon, specNameFor, supportedSpecs } from '../specs/index.ts';
 import type { SpecConfig } from '../specs/types.ts';
 import type { WclClient } from '../wcl/client.ts';
 import type { WclActor, WclFight, WclFightsResponse, WclRanking } from '../wcl/types.ts';
@@ -20,6 +20,35 @@ export interface StoredAnalysis {
 
 const TOP_N = 10;
 
+/**
+ * The DPS spec module for a player: by icon, or for a bare class icon ("Druid") by the talent tree
+ * with the most points in the fight's combatant info. A bare icon may be a tank: check that first.
+ */
+export async function dpsSpecFor(client: WclClient, report: string, fight: WclFight, actor: WclActor): Promise<SpecConfig | undefined> {
+  const byIcon = specForIcon(actor.icon);
+  if (byIcon || !mayBeDps(actor.icon)) return byIcon;
+  const split = await talentSplitOf(client, report, fight, actor.id);
+  return split ? specForIcon(actor.icon, split) : undefined;
+}
+
+async function talentSplitOf(client: WclClient, report: string, fight: WclFight, source: number): Promise<[number, number, number] | undefined> {
+  const info = (await client.combatantInfos(report, fight.start_time, fight.end_time)).find((i) => i.sourceID === source);
+  const t = info?.talents ?? [];
+  return info ? [t[0]?.id ?? 0, t[1]?.id ?? 0, t[2]?.id ?? 0] : undefined;
+}
+
+/** The spec name ("Affliction") from the icon, or for a bare class icon from the talents. */
+export async function specNameOf(client: WclClient, report: string, fight: WclFight, actor: WclActor): Promise<string | undefined> {
+  return specNameFor(actor.icon, actor.icon.includes('-') ? undefined : await talentSplitOf(client, report, fight, actor.id));
+}
+
+/** "Affliction Warlock" for an icon, or for a bare class icon from the talents. */
+async function specLabelOf(client: WclClient, report: string, fight: WclFight, actor: WclActor): Promise<string> {
+  const [cls] = actor.icon.split('-');
+  const name = await specNameOf(client, report, fight, actor);
+  return name ? `${name.replace(/([a-z])([A-Z])/g, '$1 $2')} ${cls}` : cls;
+}
+
 export async function analyze(
   client: WclClient,
   report: string,
@@ -27,15 +56,17 @@ export async function analyze(
   source: number,
   log: (msg: string) => void = () => {},
   mode: ComparisonGroup['mode'] = 'top',
+  // The spec when the caller already worked it out (see dpsSpecFor).
+  knownSpec?: SpecConfig,
 ): Promise<StoredAnalysis> {
   const fights = await client.fights(report);
   const fight = findFight(fights, fightId);
   if (!fight.boss) throw new Error(`"${fight.name}" is trash, not a boss fight. Pick a boss kill.`);
   const actor = fights.friendlies.find((a) => a.id === source);
   if (!actor) throw new Error(`Player ${source} not found in this report`);
-  const spec = specForIcon(actor.icon);
+  const spec = knownSpec ?? (await dpsSpecFor(client, report, fight, actor));
   if (!spec) {
-    throw new Error(`${actor.name} is ${actor.icon.replace('-', ' ')}; supported so far: ${supportedSpecs.join(', ')}`);
+    throw new Error(`${actor.name} is ${await specLabelOf(client, report, fight, actor)}; supported so far: ${supportedSpecs.join(', ')}`);
   }
 
   log(`Collecting ${actor.name} on ${fight.name}`);
@@ -182,6 +213,9 @@ export async function collectTopPlayers(
   return top.sort((a, b) => (a.fight.rank ?? Infinity) - (b.fight.rank ?? Infinity));
 }
 
+/** The pet's share of a player's damage (a hunter's pet, a warlock's demon), 0..100. */
+const petShare = (p: PlayerFight) => (p.pets ?? []).filter((x) => x.kind === 'pet').reduce((s, x) => s + x.sharePct, 0);
+
 function row(
   key: string,
   label: string,
@@ -224,6 +258,12 @@ function buildMetrics(spec: SpecConfig, you: PlayerFight, top: PlayerFight[]): A
       row('duration', 'Kill time', you.durationSec, top.map((p) => p.durationSec), false, { unit: 's' }),
       row('ilvl', 'Avg item level', you.avgItemLevel, top.map((p) => (p.gear.length ? p.avgItemLevel : null)), true),
       row('hit', `Hit chance (cap ${spec.hit.capPct}%)`, you.hit?.pct ?? 0, top.map((p) => p.hit?.pct ?? null), null, { unit: '%', digits: 1 }),
+      ...(spec.expertise
+        ? [row('expertise', 'Expertise (26 takes away dodge)', you.expertise?.points ?? 0, top.map((p) => p.expertise?.points ?? null), null, { digits: 0 })]
+        : []),
+      ...([you, ...top].some((p) => p.pets?.some((x) => x.kind === 'pet'))
+        ? [row('petShare', 'Pet damage share', petShare(you), top.map(petShare), null, { unit: '%' })]
+        : []),
       row('active', spec.activityLabel, you.activePct, top.map((p) => p.activePct), true, { unit: '%' }),
       row('idle', 'Idle time', you.idleSec, top.map((p) => p.idleSec), false, { unit: 's' }),
       ...(spec.rageFromDamageTaken

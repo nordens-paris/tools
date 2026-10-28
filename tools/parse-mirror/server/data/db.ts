@@ -10,8 +10,8 @@ const load = <T>(file: string): T => {
   return loaded.get(file) as T;
 };
 
-// s: gem sockets; o: held in off-hand (can't be enchanted).
-const items = load<Record<string, { n: string; i: string; q: number; s?: number; o?: 1 }>>('items.json');
+// s: gem sockets; o: held in off-hand (can't be enchanted); w: weapon type (proto WeaponType).
+const items = load<Record<string, { n: string; i: string; q: number; s?: number; o?: 1; w?: number }>>('items.json');
 const enchants = load<Record<string, { n: string; i: string }>>('enchants.json');
 const gems = load<Record<string, { n: string; i: string; q: number }>>('gems.json');
 

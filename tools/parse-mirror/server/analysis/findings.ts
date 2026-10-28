@@ -277,12 +277,15 @@ export function buildFindings(
             ? `${capped} of ${withHit.length} ${G} were at the cap.`
             : `Only ${capped} of ${withHit.length} ${G} were at the cap (median ${median(withHit.map((p) => p.hit!.pct)).toFixed(1)}%), so they mostly chose other stats too.`),
       });
-    } else if (pct > capPct + 2) {
+    } else if (pct > (spec.hit.whiteCapPct ?? capPct) + 2) {
+      const cap = spec.hit.whiteCapPct ?? capPct;
       findings.push({
         severity: 'low',
         area: 'Gear',
-        title: `${(pct - capPct).toFixed(1)}% over the hit cap`,
-        detail: `You had ${pct.toFixed(1)}% hit${how} against a ${capPct}% cap. Hit over the cap does nothing${spec.caster ? '' : ' for special attacks (white hits still use it)'}; that rating could go into other stats.`,
+        title: `${(pct - cap).toFixed(1)}% over the hit cap`,
+        detail: spec.hit.whiteCapPct
+          ? `You had ${pct.toFixed(1)}% hit${how}: past the ${cap}% where dual-wield white hits stop missing, so the rest does nothing; that rating could go into other stats.`
+          : `You had ${pct.toFixed(1)}% hit${how} against a ${capPct}% cap. Hit over the cap does nothing${spec.caster ? '' : ' for special attacks (white hits still use it)'}; that rating could go into other stats.`,
       });
     }
   }

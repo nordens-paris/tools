@@ -89,6 +89,23 @@ export interface CooldownUse {
   times: number[];
 }
 
+/** A pet, guardian or totem that did damage for the player (its damage counts as theirs). */
+export interface PetSummary {
+  name: string;
+  /** pet: a hunter's or warlock's own pet; guardian: a temporary summon (Fire Elemental, trinkets...). */
+  kind: 'pet' | 'guardian' | 'totem';
+  /** Hunter pets: the WoWSims family worked out from its abilities (Gore -> Ravager). */
+  family?: string;
+  /** The spell that summoned it ("Summon Imp", "Call Pet", "Inferno"). */
+  summon?: string;
+  /** Share of the fight it was attacking, 0..100 (hunter pets; see collect.ts). */
+  uptimePct?: number;
+  damage: number;
+  /** Share of the player's damage, 0..100. */
+  sharePct: number;
+  abilities: string[];
+}
+
 export interface PlayerFight {
   name: string;
   server?: string;
@@ -128,6 +145,10 @@ export interface PlayerFight {
   partyShadowPriestDps?: number;
   /** Hit chance from rating, talents and party auras, against the cap for a raid boss. */
   hit?: { pct: number; capPct: number; fromRating: number; extras: string[] };
+  /** Melee specs: expertise (rating, talents, racial weapon skill) against the boss's dodge. */
+  expertise?: { points: number; capPoints: number; fromRating: number; extras: string[] };
+  /** Pets, guardians and totems that did damage, most damage first. */
+  pets?: PetSummary[];
   /**
    * Power Infusion from a priest: times received, and the DPS it's estimated to have added (20%
    * cast speed for 15 s, which doesn't stack with Bloodlust).

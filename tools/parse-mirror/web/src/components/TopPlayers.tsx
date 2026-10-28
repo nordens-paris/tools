@@ -1,5 +1,5 @@
 import type { AnalysisResult } from '../../../shared/types.ts';
-import { fmt, wclUrl } from '../format.ts';
+import { fmt, specLabel, wclUrl } from '../format.ts';
 
 export function TopPlayers({ analysis }: { analysis: AnalysisResult }) {
   const players = [analysis.you, ...analysis.top];
@@ -9,7 +9,7 @@ export function TopPlayers({ analysis }: { analysis: AnalysisResult }) {
         <div>
           <h2>Compared players</h2>
           <p className="sub">
-            {analysis.comparison.description} {analysis.top.length} {analysis.spec.specName} {analysis.spec.className} kills on {analysis.encounter.name}, from Warcraft Logs rankings.
+            {analysis.comparison.description} {analysis.top.length} {specLabel(analysis.spec.specName)} {analysis.spec.className} kills on {analysis.encounter.name}, from Warcraft Logs rankings.
           </p>
         </div>
       </div>

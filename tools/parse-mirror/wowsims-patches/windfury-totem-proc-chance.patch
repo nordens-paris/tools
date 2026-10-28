@@ -1,0 +1,30 @@
+diff --git a/sim/core/buffs.go b/sim/core/buffs.go
+index b43df66..4484193 100644
+--- a/sim/core/buffs.go
++++ b/sim/core/buffs.go
+@@ -1117,7 +1117,9 @@ func WindfuryTotemAura(char *Character, isImpoved bool) *Aura {
+ 		Name:               "Windfury Totem Trigger",
+ 		MetricsActionID:    ActionID{SpellID: 25580, Tag: -1},
+ 		IsWeaponProc:       true,
+-		ProcChance:         0.2,
++		// Anniversary logs: top two-handed Retribution paladins got an extra attack on 133 of 419
++		// swings (32%), not 20%; at 20% top warriors and paladins sim 4-9% below their real DPS.
++		ProcChance:         0.32,
+ 		Duration:           NeverExpires,
+ 		Outcome:            OutcomeLanded,
+ 		Callback:           CallbackOnSpellHitDealt,
+diff --git a/sim/shaman/totems.go b/sim/shaman/totems.go
+index c226397..ff7adbf 100644
+--- a/sim/shaman/totems.go
++++ b/sim/shaman/totems.go
+@@ -60,7 +60,9 @@ func (shaman *Shaman) registerWindfuryTotemSpell() {
+ 		Name:               "Windfury Totem Trigger (Self)",
+ 		MetricsActionID:    core.ActionID{SpellID: 25580},
+ 		IsWeaponProc:       true,
+-		ProcChance:         0.2,
++		// Anniversary logs: top two-handed Retribution paladins got an extra attack on 133 of 419
++		// swings (32%), not 20%; at 20% top warriors and paladins sim 4-9% below their real DPS.
++		ProcChance:         0.32,
+ 		Duration:           core.NeverExpires,
+ 		Outcome:            core.OutcomeLanded,
+ 		Callback:           core.CallbackOnSpellHitDealt,

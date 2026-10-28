@@ -12,12 +12,15 @@ self.wasmready = () => markReady();
 function slim(player) {
   const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
   const TARGET = ['casts', 'hits', 'crits', 'glances', 'misses', 'dodges', 'parries', 'damage', 'tickDamage', 'resistedHits', 'resistedCrits', 'resistedDamage', 'resistedTickDamage'];
+  const actionsOf = (unit) => (unit.actions ?? []).map((a) => ({ id: a.id, targets: (a.targets ?? []).map((t) => pick(t, TARGET)) }));
   return {
     dps: { avg: player.dps.avg, stdev: player.dps.stdev },
     // Tank sims: threat and damage taken per second.
     ...(player.threat ? { threat: { avg: player.threat.avg ?? 0, stdev: player.threat.stdev ?? 0 } } : {}),
     ...(player.dtps ? { dtps: { avg: player.dtps.avg ?? 0, stdev: player.dtps.stdev ?? 0 } } : {}),
-    actions: (player.actions ?? []).map((a) => ({ id: a.id, targets: (a.targets ?? []).map((t) => pick(t, TARGET)) })),
+    actions: actionsOf(player),
+    // Pets' actions, for the luck of pet abilities.
+    pets: (player.pets ?? []).map((p) => ({ name: p.name, actions: actionsOf(p) })),
     auras: (player.auras ?? []).map((a) => pick(a, ['id', 'uptimeSecondsAvg', 'procsAvg'])),
   };
 }

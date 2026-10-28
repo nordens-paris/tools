@@ -49,7 +49,9 @@ export const warriorFury: SpecConfig = {
   rageFromDamageTaken: true,
   // Special attacks miss 8% against a level 73 boss in WoWSims (no extra 1% hit suppression, which
   // matches where top warriors stop). White hits while dual wielding never cap.
-  hit: { stat: 'hitMelee', perPct: 15.77, capPct: 8, talents: [{ name: 'Precision', pctPerPoint: 1 }] },
+  hit: { stat: 'hitMelee', perPct: 15.77, capPct: 8, talents: [{ name: 'Precision', pctPerPoint: 1 }], whiteCapPct: 27 },
+  // Weapon Mastery takes 1% per point off the boss's dodge: 4 expertise.
+  expertise: { talents: [{ name: 'Weapon Mastery', perPoint: 4 }] },
 
   talentPresets: [
     // Top players (checked on the armory) run this with Booming Voice instead of Unbridled Wrath.

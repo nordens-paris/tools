@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 
 import type { AnalysisResult } from '../../../shared/types.ts';
 import { specIcon } from '../brand.ts';
-import { fmtTime, wclUrl } from '../format.ts';
+import { fmtTime, specLabel, wclUrl } from '../format.ts';
 
 export function ReportHeader({ analysis: a, picker, onRaid }: { analysis: AnalysisResult; picker?: ReactNode; onRaid?: () => void }) {
   const you = a.you;
@@ -11,7 +11,7 @@ export function ReportHeader({ analysis: a, picker, onRaid }: { analysis: Analys
       <img className="spec-icon" src={specIcon(a.spec.className, a.spec.specName)} alt="" />
       <div className="report-title">
         <div className="eyebrow">
-          {a.spec.specName} {a.spec.className} · {a.encounter.name}
+          {specLabel(a.spec.specName)} {a.spec.className} · {a.encounter.name}
         </div>
         <h1>
           {you.name}
@@ -27,6 +27,21 @@ export function ReportHeader({ analysis: a, picker, onRaid }: { analysis: Analys
             {you.talentSource === 'armory' ? ' · armory' : ' · standard build'}
           </span>
           <span className="pill">ilvl {you.avgItemLevel.toFixed(1)}</span>
+          {(you.pets ?? [])
+            .filter((p) => p.kind === 'pet' && p.sharePct >= 1)
+            .map((p) => (
+              <span
+                key={p.name}
+                className="pill"
+                title={`Pet abilities: ${p.abilities.join(', ')}. Its damage counts as yours, in the log and in the sim.${
+                  p.uptimePct !== undefined ? ` Attacking ${Math.round(p.uptimePct)}% of the fight (the sim uses the same).` : ''
+                }`}
+              >
+                Pet {p.name}
+                {p.family && p.family !== p.name ? ` (${p.family.replace(/([a-z])([A-Z])/g, '$1 $2')})` : ''} · {Math.round(p.sharePct)}% of damage
+                {p.uptimePct !== undefined ? ` · up ${Math.round(p.uptimePct)}%` : ''}
+              </span>
+            ))}
         </div>
       </div>
       <div className="head-actions report-actions">

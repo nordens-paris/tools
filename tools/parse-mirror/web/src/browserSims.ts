@@ -13,8 +13,9 @@ interface JobResult {
   error?: string;
 }
 
-// Built by scripts/build-wowsims.mjs: gzipped, so it's 7 MB to download instead of 42.
-const WASM_URL = '/sim/wowsim.wasm.gz';
+// Built by scripts/build-wowsims.mjs: gzipped, so it's 7 MB to download instead of 42. Browsers
+// cache it for a day, so bump the version after a rebuild.
+const WASM_URL = '/sim/wowsim.wasm.gz?v=2';
 
 let modulePromise: Promise<WebAssembly.Module> | undefined;
 /** Downloads and compiles WoWSims once; every worker shares the compiled module. */
@@ -35,7 +36,7 @@ function wasmModule() {
 }
 
 class SimWorker {
-  private worker = new Worker('/sim/worker.js?v=2');
+  private worker = new Worker('/sim/worker.js?v=3');
   private pending = new Map<string, (r: JobResult) => void>();
   readonly ready: Promise<void>;
 

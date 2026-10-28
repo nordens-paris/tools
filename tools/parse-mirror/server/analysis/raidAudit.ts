@@ -279,6 +279,7 @@ const RAID_DEBUFFS: { name: string; by: string[]; names?: string[]; ids?: number
   { name: "Winter's Chill", by: ['Mage-Frost'], ids: [12579], icon: 'spell_frost_chillingblast' },
   { name: "Hunter's Mark", by: ['Hunter'], icon: 'ability_hunter_snipershot' },
   { name: 'Expose Weakness', by: ['Hunter-Survival'], icon: 'ability_rogue_findweakness' },
+  { name: 'Mangle', by: ['Druid-Feral', 'Druid-Guardian'], names: ['Mangle (Cat)', 'Mangle (Bear)'], icon: 'ability_druid_mangle2' },
 ];
 
 export function raidDebuffs(
@@ -307,7 +308,8 @@ const PHYSICAL_DEBUFFS = ['Sunder or Expose Armor', 'Faerie Fire', 'Curse of Rec
 const SPELL_DEBUFFS = ['Curse of the Elements', 'Misery', 'Judgement of the Crusader'];
 export function debuffsFor(icon: string): string[] {
   if (NOT_DPS.has(icon)) return [];
-  if (PHYSICAL.test(icon)) return PHYSICAL_DEBUFFS;
+  // Mangle's 30% more bleed damage (and Shred) matters to ferals, rogues and Arms' Deep Wounds.
+  if (PHYSICAL.test(icon)) return /^(Druid-Feral|Rogue|Warrior-Arms)/.test(icon) ? [...PHYSICAL_DEBUFFS, 'Mangle'] : PHYSICAL_DEBUFFS;
   const extra = /^(Warlock|Priest-Shadow)/.test(icon) ? ['Shadow Weaving', 'Improved Shadow Bolt'] : icon === 'Mage-Fire' ? ['Improved Scorch'] : icon === 'Mage-Frost' ? ["Winter's Chill"] : [];
   return CASTER.test(icon) ? [...SPELL_DEBUFFS, ...extra] : [];
 }
@@ -343,10 +345,10 @@ export function gearIssues(icon: string, info: Info, totemOfWrath: boolean): Gea
  * guild.ts). Only flagged a full percent or more below the cap.
  */
 function hitShort(icon: string, info: Info, totemOfWrath: boolean): string | undefined {
-  const spec = specForIcon(icon);
+  const split: [number, number, number] = [info.talents?.[0]?.id ?? 0, info.talents?.[1]?.id ?? 0, info.talents?.[2]?.id ?? 0];
+  const spec = specForIcon(icon, split);
   const rating = spec ? info[spec.hit.stat] : undefined;
   if (!spec || typeof rating !== 'number') return undefined;
-  const split: [number, number, number] = [info.talents?.[0]?.id ?? 0, info.talents?.[1]?.id ?? 0, info.talents?.[2]?.id ?? 0];
   const talents = closestTalentPreset(spec, split);
   let pct = rating / spec.hit.perPct;
   for (const t of spec.hit.talents) pct += talentRank(spec.className, talents, t.name) * t.pctPerPoint;
