@@ -47,6 +47,15 @@ interface Quota {
 }
 const quotas = new Map<string, Quota>();
 
+/**
+ * Longest Retry-After worth waiting out inside a request. Warcraft Logs also rate limits single
+ * endpoints (character parses, after many lookups) for a quarter of an hour or more; waiting that
+ * out left pages stuck on "Fetching logs", so those fail fast until the time is up instead.
+ */
+const MAX_RETRY_WAIT_MS = 20_000;
+/** Per API key (hash) and endpoint kind ("parses/character"): rate limited until this time. */
+const blockedUntil = new Map<string, number>();
+
 export interface QuotaStatus {
   /** Short-window limit and what's left, as last reported by Warcraft Logs. */
   windowLimit?: number;
@@ -123,7 +132,13 @@ export class WclClient {
   private async fetchWithQuota(url: string, endpoint: string): Promise<unknown> {
     const q = quotas.get(this.keyId) ?? { updatedAt: 0, sent: [] };
     quotas.set(this.keyId, q);
+    const kind = endpoint.split('/').slice(0, 2).join('/');
+    const blockKey = `${this.keyId} ${kind}`;
+    const rateLimited = (until: number) =>
+      new Error(`Warcraft Logs is rate limiting ${kind} requests for another ${Math.ceil((until - Date.now()) / 60_000)} min.`);
     for (let attempt = 0; ; attempt++) {
+      const until = blockedUntil.get(blockKey) ?? 0;
+      if (until > Date.now()) throw rateLimited(until);
       // Nearly out of the short window: wait for it to refill instead of getting a 429.
       const sinceUpdate = Date.now() - q.updatedAt;
       if (q.remaining !== undefined && q.remaining < WINDOW_RESERVE && sinceUpdate < WINDOW_MS) await sleep(WINDOW_MS - sinceUpdate);
@@ -147,6 +162,11 @@ export class WclClient {
       // Rate limited: wait as long as the server asks, else back off 15s, 30s, 60s, 120s.
       if (res.status === 429 && attempt < 4) {
         const retryAfter = Number(res.headers.get('retry-after'));
+        if (retryAfter * 1000 > MAX_RETRY_WAIT_MS) {
+          blockedUntil.set(blockKey, Date.now() + retryAfter * 1000);
+          console.warn(`Warcraft Logs rate limited ${kind} for ${Math.round(retryAfter)} s`);
+          throw rateLimited(Date.now() + retryAfter * 1000);
+        }
         await sleep(retryAfter > 0 ? retryAfter * 1000 : 15_000 * 2 ** attempt);
         continue;
       }
