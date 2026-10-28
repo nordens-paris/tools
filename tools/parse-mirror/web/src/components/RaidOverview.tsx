@@ -255,7 +255,19 @@ export function RaidOverview({ raid, onOpen, onProgress, onGuild, loading }: Pro
                           </span>
                         </td>
                         <td className="num">
-                          <button disabled={!player.supported || loading} onClick={() => onOpen(b.fight)} title={player.supported ? '' : "This spec isn't supported yet"}>
+                          {/* A player who tanked or healed only some kills (a Protection paladin off-tanking)
+                              isn't a tank for the raid as a whole, but those kills have their analysis. */}
+                          <button
+                            disabled={!(player.supported || b.tanking || b.healing) || loading}
+                            onClick={() => onOpen(b.fight)}
+                            title={
+                              player.supported || b.tanking || b.healing
+                                ? ''
+                                : bosses.some((x) => x.tanking || x.healing)
+                                  ? "Not tanking or healing on this kill, and this spec's DPS isn't supported yet"
+                                  : "This spec isn't supported yet"
+                            }
+                          >
                             Analyze
                           </button>
                         </td>
