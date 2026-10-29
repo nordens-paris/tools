@@ -7,7 +7,7 @@
 // tank's spec icon and share of the boss's melee), and ~8 per peer for their fight.
 import type { TankPeer, TankPeerGroup, TankRole } from '../../../shared/types.ts';
 import { type TankSpec, tankSpecFor } from '../../specs/tanks.ts';
-import type { WclClient } from '../../wcl/client.ts';
+import type { WclReader } from '../../wcl/reader.ts';
 import type { WclRaidRanking } from '../../wcl/types.ts';
 import type { ActorTableEntry } from '../healer/data.ts';
 import { bossMeleeShare, fetchTankFightLite, type TankFightData } from './data.ts';
@@ -39,7 +39,7 @@ interface Candidate {
 const roleOf = (share: number): TankRole => (share >= 0.4 ? 'main' : 'off');
 
 /** Tanks of a spec in one raid, from its melee-taken table. */
-async function tanksIn(client: WclClient, raid: Raid, spec: TankSpec): Promise<Candidate[]> {
+async function tanksIn(client: WclReader, raid: Raid, spec: TankSpec): Promise<Candidate[]> {
   const start = raid.startTime - raid.reportStart;
   const t = await client.table<{ entries: (ActorTableEntry & { sources?: { name: string; total: number; type: string }[] })[] }>('damage-taken', raid.reportID, {
     start,
@@ -53,7 +53,7 @@ async function tanksIn(client: WclClient, raid: Raid, spec: TankSpec): Promise<C
 }
 
 export async function findTankPeers(
-  client: WclClient,
+  client: WclReader,
   q: TankPeerQuery,
   log: (msg: string) => void = () => {},
 ): Promise<{ group: TankPeerGroup; fights: Map<string, TankFightData> }> {

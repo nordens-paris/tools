@@ -1,7 +1,5 @@
 // A healer's kill next to their peers (see peers.ts), split into what's fair to judge whatever
 // the raid around them, and context that depends on that raid (HPS, total overheal...).
-import crypto from 'node:crypto';
-
 import type {
   HealerAnalysis,
   HealerFinding,
@@ -11,8 +9,7 @@ import type {
   HealerSpellCompare,
 } from '../../../shared/types.ts';
 import { scoreInputs } from '../../../shared/healerScore.ts';
-import { supportedSpecs } from '../../specs/index.ts';
-import type { WclClient } from '../../wcl/client.ts';
+import type { WclReader } from '../../wcl/reader.ts';
 import { median } from '../stats.ts';
 import { fetchHealerFight } from './data.ts';
 import { healerDeaths, healerMetrics, ownOverheal } from './metrics.ts';
@@ -29,7 +26,7 @@ const RUNES = ['Dark Rune', 'Demonic Rune'];
 
 /** Runs the healer analysis for one healer in one kill, peers included. */
 export async function analyzeHealer(
-  client: WclClient,
+  client: WclReader,
   report: string,
   fightId: number,
   source: number,
@@ -40,7 +37,8 @@ export async function analyzeHealer(
   const spec = model.healers.get(source);
   if (!spec) {
     const icon = model.icon(source).replace('-', ' ');
-    throw new Error(`${model.name(source)} (${icon}) isn't healing on this kill. Supported: ${supportedSpecs.join(', ')}, and healers.`);
+    // No list of supported DPS specs here: it would pull every spec into the browser (roleBrowser.ts).
+    throw new Error(`${model.name(source)} (${icon}) isn't healing on this kill.`);
   }
   const you = healerMetrics(model, source);
   const warnings: string[] = [];
@@ -66,7 +64,7 @@ export async function analyzeHealer(
   const deaths = healerDeaths(model);
   return {
     kind: 'healer',
-    id: crypto.randomUUID(),
+    id: globalThis.crypto.randomUUID(),
     generatedAt: new Date().toISOString(),
     report,
     fight: fightId,
@@ -89,7 +87,7 @@ export async function analyzeHealer(
   };
 }
 
-async function peerMetrics(client: WclClient, p: HealerPeer): Promise<PeerMetrics | undefined> {
+async function peerMetrics(client: WclReader, p: HealerPeer): Promise<PeerMetrics | undefined> {
   const m = new FightModel(await fetchHealerFight(client, p.report, p.fight));
   const id = [...m.players.values()].find((a) => a.name === p.name)?.id;
   if (id === undefined || !m.healers.has(id)) return undefined;

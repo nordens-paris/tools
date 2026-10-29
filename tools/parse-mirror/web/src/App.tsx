@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 
 import type { AnalysisResult, GuildSummary, HealerAnalysis, HealerTab, ProgressSummary, RaidSummary, SimResult, TankAnalysis, TankTab } from '../../shared/types.ts';
-import { ApiError, analyze, getGuild, getProgress, getRaid, runSim } from './api.ts';
+import { ApiError, analyze, getGuild, getProgress, runSim } from './api.ts';
+import { raidSummary, roleAnalysisHere } from './roles.ts';
 import { KEY_CHANGED, openKeyForm } from './apiKey.ts';
 import { runBrowserSims } from './browserSims.ts';
 import { game } from './game.ts';
@@ -154,7 +155,7 @@ export function App() {
         const g = await getGuild(r.report);
         if (token === latest.current) setGuild(g);
       } else if (r.view === 'raid') {
-        const x = await getRaid(r.report, r.source);
+        const x = await raidSummary(r.report, r.source);
         if (token === latest.current) {
           setRaid(x);
           keyRetry.current = !!x.player.healerLocked;
@@ -166,7 +167,8 @@ export function App() {
         setSim(undefined);
         setSimError(undefined);
         setSimLoading(false);
-        const result = await analyze(r.report, r.fight, r.source, r.peers ? 'peers' : 'top');
+        // Healer and tank analyses run in this browser on the visitor's own key; DPS on the server.
+        const result = (await roleAnalysisHere(r.report, r.fight, r.source)) ?? (await analyze(r.report, r.fight, r.source, r.peers ? 'peers' : 'top'));
         if (token !== latest.current) return;
         if (result.kind === 'healer' || result.kind === 'tank') {
           roleCache.current.set(roleKey(r), result);

@@ -97,8 +97,11 @@ Tjek de aktuelle vilkår hos hosten, før I opretter en konto; gratis-planer æn
 healer-kill tager cirka 0,1 s CPU på en almindelig pc og 2–3 s på Render, også når loggen allerede
 ligger i cachen; to forespørgsler ad gangen deler den samme kerne. Derfor føles alt, der henter
 mange logs (healer- og tank-sider med peers, raid-siderne), langsommere end lokalt, hvor cachen
-desuden er fyldt. Healer-scorens kills hentes derfor i browseren på besøgendes egen nøgle.
-Renders betalte Starter-plan (0,5 kerne) eller en altid-tændt maskine med flere kerner gør resten
+desuden er fyldt. Derfor kører healer- og tank-siderne (healer- og tank-analysen, healer scorens
+kills, **Show healers**/**Show tanks** og healer- og tank-rækkerne på en spillers raid-side) i
+browseren på besøgendes egen nøgle; serveren afgør kun, hvilken analyse en spiller får, og bygger
+tank-simmene. DPS-siderne regnes på serveren, ofte på dens egen nøgle, som ikke må ud i browseren.
+Renders betalte Starter-plan (0,5 kerne) eller en altid-tændt maskine med flere kerner gør dem
 hurtigere uden kodeændringer.
 
 Til en test i guilden er Render det oplagte valg. Hvis siden bliver brugt meget, eller dvalen

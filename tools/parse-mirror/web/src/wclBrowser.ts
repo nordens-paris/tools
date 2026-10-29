@@ -1,20 +1,26 @@
 // Warcraft Logs v1 straight from the browser, on the visitor's own key. The log site allows it
-// (CORS), so the healer score's kills skip the server: on the hosted site it has a tenth of a CPU
-// core, and unpacking and analysing one kill took it 2-3 s, against well under 0.1 s here.
-// Only what fetching a healer kill needs (server/analysis/healer/data.ts); responses are kept in
-// memory for this page load, and the analysed kills in IndexedDB (healerHistory.ts).
-import type { WclCombatantInfo, WclEvent, WclFightsResponse } from '../../server/wcl/types.ts';
+// (CORS), so healer and tank pages skip the server: on the hosted site it has a tenth of a CPU core,
+// and unpacking and analysing one kill took it 2-3 s, against well under 0.1 s here.
+// What the healer and tank analyses need (server/wcl/reader.ts). Fight lists and rankings are kept
+// in memory for this page load; report data isn't (the analysed kills of the healer score are kept
+// in IndexedDB, healerHistory.ts).
+import type { WclReader } from '../../server/wcl/reader.ts';
+import type { WclCombatantInfo, WclEvent, WclFightsResponse, WclParse, WclRaidRankingsResponse, WclRankingsResponse, WclTableAuras } from '../../server/wcl/types.ts';
 import { game } from './game.ts';
 
 /** Requests at once. The key's per-minute window (about 800) still applies. */
 const MAX_CONCURRENT = 6;
+/** Responses kept in memory (oldest go first): a tank page or raid page asks for some twice. */
+const KEPT_MAX = 400;
 /** Longest Retry-After worth waiting out; longer, and the fetch fails with a message. */
 const MAX_RETRY_WAIT_MS = 20_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export class BrowserWcl {
+export class BrowserWcl implements WclReader {
   private fightLists = new Map<string, Promise<WclFightsResponse>>();
+  /** Report data, rankings and parses: report data never changes, rankings rarely in a visit. */
+  private keptData = new Map<string, Promise<unknown>>();
   private active = 0;
   private waiting: (() => void)[] = [];
 
@@ -79,12 +85,56 @@ export class BrowserWcl {
     return this.fightLists.get(report)!;
   }
 
+  private remember<T>(key: string, fetch: () => Promise<T>): Promise<T> {
+    if (!this.keptData.has(key)) {
+      const p = fetch();
+      p.catch(() => this.keptData.delete(key));
+      this.keptData.set(key, p);
+      if (this.keptData.size > KEPT_MAX) this.keptData.delete(this.keptData.keys().next().value!);
+    }
+    return this.keptData.get(key) as Promise<T>;
+  }
+
+  private kept<T>(endpoint: string, params: Record<string, string | number>): Promise<T> {
+    const key = `${endpoint}?${new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]))}`;
+    return this.remember(key, () => this.get<T>(endpoint, params));
+  }
+
   table<T>(view: string, report: string, params: Record<string, string | number>) {
-    return this.get<T>(`report/tables/${view}/${report}`, params);
+    return this.kept<T>(`report/tables/${view}/${report}`, params);
+  }
+
+  buffs(report: string, start: number, end: number, sourceId: number) {
+    return this.table<WclTableAuras>('buffs', report, { start, end, sourceid: sourceId });
+  }
+
+  /** Debuffs on enemies; with sourceName, only those that player applied (as on the server). */
+  bossDebuffs(report: string, start: number, end: number, sourceName?: string) {
+    const params: Record<string, string | number> = { start, end, hostility: 1 };
+    if (sourceName) params.filter = `source.name="${sourceName.replace(/"/g, '\\"')}"`;
+    return this.table<WclTableAuras>('debuffs', report, params);
+  }
+
+  parses(name: string, server: string, region: string, zone?: number, metric: 'dps' | 'hps' = 'dps') {
+    return this.kept<WclParse[]>(`parses/character/${encodeURIComponent(name)}/${encodeURIComponent(server)}/${region}`, { metric, ...(zone ? { zone } : {}) });
+  }
+
+  rankings(encounterId: number, classId: number, specId: number, page = 1, metric: 'dps' | 'hps' = 'dps') {
+    return this.kept<WclRankingsResponse>(`rankings/encounter/${encounterId}`, { metric, class: classId, spec: specId, ...(page > 1 ? { page } : {}) });
+  }
+
+  raidRankings(encounterId: number, metric: 'speed' | 'execution', page = 1) {
+    return this.kept<WclRaidRankingsResponse>(`rankings/encounter/${encounterId}`, { metric, ...(page > 1 ? { page } : {}) });
   }
 
   /** All events of a view, following pagination; with `fields`, only those are kept. */
   async events(view: string, report: string, start: number, end: number, params: Record<string, string | number>, fields?: readonly string[]) {
+    const key = `events/${view}/${report}?${start}-${end}&${JSON.stringify(params)}&${fields?.join(',') ?? ''}`;
+    // A copy, so a caller sorting or filtering in place can't change what the next one gets.
+    return (await this.remember(key, () => this.allEvents(view, report, start, end, params, fields))).slice();
+  }
+
+  private async allEvents(view: string, report: string, start: number, end: number, params: Record<string, string | number>, fields?: readonly string[]) {
     const events: WclEvent[] = [];
     let from = start;
     for (let page = 0; page < 50; page++) {
@@ -100,4 +150,11 @@ export class BrowserWcl {
     const events = await this.events('summary', report, start, Math.min(end, start + 1000), { filter: 'type="combatantinfo"' });
     return events.filter((e) => e.type === 'combatantinfo') as (WclCombatantInfo & { sourceID: number })[];
   }
+}
+
+// One client per key for the page load, so pages share what's been fetched.
+let shared: { key: string; client: BrowserWcl } | undefined;
+export function browserClient(key: string): BrowserWcl {
+  if (shared?.key !== key) shared = { key, client: new BrowserWcl(key) };
+  return shared.client;
 }

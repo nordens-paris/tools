@@ -11,19 +11,19 @@ import type { SpecConfig } from '../specs/types.ts';
 import type { WclClient } from '../wcl/client.ts';
 import { dpsSpecFor } from './analyze.ts';
 import { parseOf, parsesFor } from './characters.ts';
-import { fetchHealerFight } from './healer/data.ts';
-import { healerMetrics } from './healer/metrics.ts';
-import { FightModel } from './healer/model.ts';
-import { raidRow } from './healer/raid.ts';
+import { applyRoleRows, roleRowsOn } from './raidRoles.ts';
 import { isTanking } from './tank/data.ts';
-import { tankRowOn } from './tank/raid.ts';
 import { NOT_DPS, consumesAt, debuffsFor, fetchRaidEvents, gearIssues, hasTotemOfWrath, partiesOf, potionsUsed, raidDebuffs } from './raidAudit.ts';
 import { median } from './stats.ts';
 
 const MELEE_OR_HUNTER = /^(Warrior-(Fury|Arms)|Rogue|Shaman-Enhancement|Druid-Feral|Paladin-Retribution|Hunter)/;
 
-/** `healers`: whether a healer's healing may be fetched (off on the server's key when the site requires an own key). */
-export async function raidSummary(client: WclClient, report: string, source: number, healers = true): Promise<RaidSummary> {
+/**
+ * `roles`: whether the player's healer and tank rows are made here ('server'), left to the browser
+ * on the visitor's own key ('browser', see raidRoles.ts), or not made at all ('locked': the server's
+ * key when the site requires an own key for them).
+ */
+export async function raidSummary(client: WclClient, report: string, source: number, roles: 'server' | 'browser' | 'locked' = 'server'): Promise<RaidSummary> {
   const fights = await client.fights(report);
   const actor = fights.friendlies.find((a) => a.id === source);
   if (!actor) throw new Error(`Player ${source} not found in report ${report}`);
@@ -45,26 +45,22 @@ export async function raidSummary(client: WclClient, report: string, source: num
   const icon = spec ? `${spec.className}-${spec.specName}` : actor.icon;
   // Players who may be healing get their healing per kill (about 10 more requests per kill, shared
   // with the healer page and the raid's healer panel).
-  const couldHeal = healers && !spec && mayHeal(actor.icon);
-  const couldTank = healers && !spec && mayTank(actor.icon);
+  const can = { heal: !spec && mayHeal(actor.icon), tank: !spec && mayTank(actor.icon) };
+  const here = roles === 'server' && (can.heal || can.tank);
 
   const [parses, perBoss] = await Promise.all([
     parsesFor(client, actor.name, actor.server, fights.zone).then((r) => r.parses),
     Promise.all(
       kills.map(async (f) => {
-        const [damage, infos, extra, rankings, healerData] = await Promise.all([
+        const [damage, infos, extra, rankings, roleRows] = await Promise.all([
           client.table('damage-done', report, { start: f.start_time, end: f.end_time }),
           client.combatantInfos(report, f.start_time, f.end_time),
           fetchRaidEvents(client, report, f),
           spec ? client.rankings(f.boss, spec.wcl.classId, spec.wcl.specId).catch(() => undefined) : undefined,
-          couldHeal || couldTank ? fetchHealerFight(client, report, f.id, fights) : undefined,
+          here ? roleRowsOn(client, report, f.id, source, fights, can) : undefined,
         ]);
         const inFight = players.filter((p) => p.fights.some((x) => x.id === f.id));
-        const tanked = couldTank && (await isTanking(client, report, f.id, source, fights));
-        const tanking = tanked ? await tankRowOn(client, report, f.id, source, fights) : undefined;
-        const model = !tanking && healerData ? new FightModel(healerData) : undefined;
-        const healing = model?.healers.has(source) ? raidRow(healerMetrics(model, source)) : undefined;
-        return { fight: f, damage, infos, ...extra, rankings, inFight, parties: partiesOf(inFight, infos, extra.events), healing, tanking };
+        return { fight: f, damage, infos, ...extra, rankings, inFight, parties: partiesOf(inFight, infos, extra.events), roleRows };
       }),
     ),
   ]);
@@ -112,24 +108,31 @@ export async function raidSummary(client: WclClient, report: string, source: num
       potions: potionsUsed(b.events, source),
       party: b.parties.groups.find((g) => g.members.includes(source)),
       debuffs: allDebuffs.map((d) => ({ name: d.name, icon: d.icon, uptime: d.uptime[f.id] ?? 0, target: d.target })),
-      healing: b.healing,
-      tanking: b.tanking,
     };
   });
 
-  const tank = bosses.filter((b) => b.tanking).length * 2 >= Math.max(1, bosses.length);
-  const healer = !tank && bosses.filter((b) => b.healing).length * 2 >= Math.max(1, bosses.length);
-  const healerLocked = !healers && !spec && (mayHeal(actor.icon) || mayTank(actor.icon));
+  const healerLocked = roles === 'locked' && (can.heal || can.tank);
   const latest = [...perBoss].reverse().find((b) => b.infos.some((i) => i.sourceID === source));
   const latestInfo = latest?.infos.find((i) => i.sourceID === source);
   const inParties = new Set(bosses.flatMap((b) => b.party?.members ?? []));
-  return {
+  const summary: RaidSummary = {
     report,
     title: fights.title,
-    player: { name: actor.name, server: actor.server, icon: actor.icon, source, supported: !!spec || healer || tank || healerLocked, dps: isDps(actor.icon) && !healer && !tank, healer, tank, healerLocked },
+    player: {
+      name: actor.name,
+      server: actor.server,
+      icon: actor.icon,
+      source,
+      supported: !!spec || healerLocked,
+      dps: isDps(actor.icon),
+      healerLocked,
+      rolesPending: roles === 'browser' && (can.heal || can.tank) ? can : undefined,
+    },
     bosses,
     peers: { basis: sameClass.length ? 'class' : 'role', players: peers.map((p) => ({ source: p.id, name: p.name, icon: p.icon })) },
     people: Object.fromEntries(players.filter((p) => inParties.has(p.id)).map((p) => [p.id, { name: p.name, icon: p.icon }])),
     gearIssues: latest && latestInfo ? gearIssues(icon, latestInfo, hasTotemOfWrath(actor, players, latest.infos, latest.parties.groups)) : [],
   };
+  // Left to the browser, or locked: the player stays as DPS until the rows are in.
+  return roles === 'server' ? applyRoleRows(summary, new Map(perBoss.flatMap((b) => (b.roleRows ? [[b.fight.id, b.roleRows] as const] : [])))) : summary;
 }

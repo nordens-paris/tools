@@ -176,6 +176,29 @@ En healer-analyse koster cirka 10 kald for eget kill, 10–60 for at finde peers
 deres kills første gang (omkring 10 sekunder kold, mod 47 før kaldene kørte parallelt); peers deles
 af alle healere med samme spec på samme boss.
 
+## Healer- og tank-sider i browseren
+
+Med besøgendes egen nøgle kører healer- og tank-analysen i browseren (`web/src/roleBrowser.ts`,
+hentet først når en sådan side åbnes) med den samme kode som serveren: `server/analysis/healer`,
+`server/analysis/tank` og `raidRoles.ts` tager en `WclReader` (`server/wcl/reader.ts`), som både
+serverens klient og `web/src/wclBrowser.ts` opfylder; Warcraft Logs' v1-API tillader kald fra
+browseren (CORS). Browser-klienten holder fight-lister, tabeller, events og rankings i hukommelsen
+(højst 400 svar) og kører 6 kald ad gangen. Koden må derfor ikke læse filer: tank-stats på gear
+kommer fra `server/data/gear.ts` som JSON-import, og fejlbeskederne nævner ikke de understøttede
+DPS-specs (det ville trække alle spec-filer med).
+
+- `/api/role/:code/:fight/:source` afgør, om spilleren får healer-, tank- eller DPS-analysen
+  (samme regler som `/api/analyze`); DPS går stadig til `/api/analyze`.
+- En tank-analyse fra browseren sendes til `/api/tank/sims` (`analysis` og `simInput`), så
+  serveren kan bygge tank-simmene som for sine egne; de kører i browseren som før.
+- `/api/raid/:code/:source?roles=browser` udelader healer- og tank-rækkerne (`player.rolesPending`
+  siger, hvad browseren skal se efter), og browseren lægger dem på med `applyRoleRows`.
+- **Show healers**/**Show tanks** og healer scorens kills regnes helt i browseren.
+
+Uden egen nøgle (en lokal server på sin egen nøgle) gør serveren det hele som før. Tjekket med
+begge klienter på samme raid: healer-siden, tank-siden, raid-siderne, Show healers og Show tanks
+gav de samme tal; kun rankings (rang ±1) var friskere end serverens cachede.
+
 ## Tanks (`server/analysis/tank/`)
 
 1. **`data.ts`** genbruger healer-analysens raid-wide data (hvem bossen slog, hvert slags udfald,

@@ -1,6 +1,6 @@
 // Finding a character's ranked kills. Logs don't say which region a character is from, so regions
 // are tried until one has the character.
-import type { WclClient } from '../wcl/client.ts';
+import type { WclReader } from '../wcl/reader.ts';
 import type { WclFight, WclFightsResponse, WclParse } from '../wcl/types.ts';
 
 const REGIONS = ['EU', 'US', 'KR', 'TW', 'CN'];
@@ -11,7 +11,7 @@ const serverRegion = new Map<string, string>();
 
 /** All ranked kills of a character in a raid tier (default: the current one), and their region. */
 export async function parsesFor(
-  client: WclClient,
+  client: WclReader,
   name: string,
   server: string | undefined,
   zone?: number,

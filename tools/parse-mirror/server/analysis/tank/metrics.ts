@@ -2,7 +2,7 @@
 // mitigation, cooldowns, threat (WoWSims' threat values, see specs/tanks.ts) and how well they held
 // the enemy they tanked. HP, deaths and tanks come from the healer FightModel.
 import type { TankBossMelee, TankFightSummary, TankGear, TankMetrics, TankOpener, TankOpenerAction, TankRole } from '../../../shared/types.ts';
-import { gearStats } from '../../data/db.ts';
+import { gearStats } from '../../data/gear.ts';
 import { CAT_FORM_MULT, type TankSpec, tankSpecFor } from '../../specs/tanks.ts';
 import type { WclAura } from '../../wcl/types.ts';
 import { FightModel, type LogEvent } from '../healer/model.ts';
