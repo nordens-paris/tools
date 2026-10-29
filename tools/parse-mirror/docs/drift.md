@@ -93,6 +93,14 @@ Kommandolinje-simmen (`bin/wowsimcli`) bruges af dev-scripts og hvis serveren sk
 
 Tjek de aktuelle vilkår hos hosten, før I opretter en konto; gratis-planer ændres.
 
+**Hastighed på Render free.** Planen har en tiendedel CPU-kerne. At pakke, parse og analysere ét
+healer-kill tager cirka 0,1 s CPU på en almindelig pc og 2–3 s på Render, også når loggen allerede
+ligger i cachen; to forespørgsler ad gangen deler den samme kerne. Derfor føles alt, der henter
+mange logs (healer- og tank-sider med peers, raid-siderne), langsommere end lokalt, hvor cachen
+desuden er fyldt. Healer-scorens kills hentes derfor i browseren på besøgendes egen nøgle.
+Renders betalte Starter-plan (0,5 kerne) eller en altid-tændt maskine med flere kerner gør resten
+hurtigere uden kodeændringer.
+
 Til en test i guilden er Render det oplagte valg. Hvis siden bliver brugt meget, eller dvalen
 generer, kan den flyttes til en altid-tændt maskine senere uden kodeændringer.
 

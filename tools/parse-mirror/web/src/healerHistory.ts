@@ -6,13 +6,18 @@ import { useEffect, useRef, useState } from 'react';
 import { healerScore, healingSplit, type HealerScore, type HealerScoreRef, type HealingSplit } from '../../shared/healerScore.ts';
 import ref from '../../shared/healerScoreRef.json';
 import type { HealerAnalysis, HealerHistory, HealerKillRef, HealerKillScores } from '../../shared/types.ts';
+import { healerKillScores } from '../../server/analysis/healer/history.ts';
 import { getHealerHistory, getHealerKill } from './api.ts';
+import { getApiKey } from './apiKey.ts';
+import { BrowserWcl } from './wclBrowser.ts';
 
 export const scoreRef = ref as HealerScoreRef;
 
 /** About this many requests per kill, for the button. */
 export const REQUESTS_PER_KILL = 10;
-const PARALLEL = 2;
+// Kills at once. With the visitor's key they're fetched and analysed here (wclBrowser.ts); without
+// one (a local server on its own key) the server does it.
+const PARALLEL = 3;
 
 const DB = 'parse-mirror';
 const STORE = 'healer-kills';
@@ -140,13 +145,15 @@ export function useRollingScore(a: HealerAnalysis): RollingScore {
     if (fetching) return;
     const queue = [...missing];
     const of = queue.length;
+    const key = getApiKey();
+    const wcl = key ? new BrowserWcl(key) : undefined;
     let done = 0;
     setError(undefined);
     setFetching({ done, of });
     const worker = async () => {
       for (let k = queue.shift(); k && !cancelled.current; k = queue.shift()) {
         try {
-          const scores = await getHealerKill(k.report, k.fight);
+          const scores = wcl ? await healerKillScores(wcl, k.report, k.fight) : await getHealerKill(k.report, k.fight);
           await save(scores);
           if (!cancelled.current) setStored((s) => [...s.filter((x) => !(x.report === scores.report && x.fight === scores.fight)), scores]);
         } catch (err) {

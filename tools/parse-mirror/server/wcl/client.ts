@@ -88,6 +88,14 @@ async function writeCache(base: string, data: unknown) {
   await fs.rename(tmp, `${base}.json.gz`);
 }
 
+/**
+ * Fight lists parsed in the last few minutes. Every report request checks the report's language
+ * in its fight list, so a kill read it from the disk cache a dozen times: about 30 ms of CPU here,
+ * and much more on the hosted site's tenth of a core.
+ */
+const fightLists = new Map<string, { at: number; list: Promise<WclFightsResponse> }>();
+const FIGHT_LISTS_KEPT = 200;
+
 /** Report data requests in flight, so identical concurrent requests share one fetch. */
 const inflight = new Map<string, Promise<unknown>>();
 
@@ -233,10 +241,19 @@ export class WclClient {
   }
 
   fights(report: string) {
+    const key = `${this.host}/${report}`;
+    const kept = fightLists.get(key);
+    if (kept && Date.now() - kept.at < LIVE_FIGHTS_TTL_MS) return kept.list;
     // A report that ended recently may still be logging, so its fight list is refreshed.
-    return this.get<WclFightsResponse>(`report/fights/${report}`, {}, (cached) =>
+    const list = this.get<WclFightsResponse>(`report/fights/${report}`, {}, (cached) =>
       cached.end && Date.now() - cached.end < LIVE_REPORT_MS ? LIVE_FIGHTS_TTL_MS : undefined,
     );
+    list.catch(() => fightLists.delete(key));
+    fightLists.delete(key);
+    fightLists.set(key, { at: Date.now(), list });
+    // Oldest first (Map keeps insertion order).
+    if (fightLists.size > FIGHT_LISTS_KEPT) fightLists.delete(fightLists.keys().next().value!);
+    return list;
   }
 
   table<T = WclTableEntries>(

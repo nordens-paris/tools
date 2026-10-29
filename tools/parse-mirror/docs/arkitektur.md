@@ -162,8 +162,12 @@ kommer fra loggen og en sammenligning med andre healere.
    står på samme skala), plus hver specs sædvanlige andel af healingen og pr. boss tærsklen for en
    ujævn healing-fordeling (`healingSplit`); scoren regnes i browseren ud fra en håndfuld tal pr. healer pr. kill (`HealerScoreInputs`).
    `/api/healer/history` finder healerens rangerede healing-kills i de fire uger op til rapporten
-   (ét `parses`-kald, zone 1060 dækker både Hyjal og BT), og `/api/healer/kill` giver alle healeres
-   tal på ét kill (kill-dataens ~10 kald). Browseren gemmer dem i IndexedDB (`parse-mirror` /
+   (ét `parses`-kald, zone 1060 dækker både Hyjal og BT). Med besøgendes egen nøgle henter og
+   analyserer browseren selv hvert kill direkte fra Warcraft Logs (`web/src/wclBrowser.ts`; v1-API'et
+   tillader det med CORS), med den samme kode som serveren (`healerKillScores`), 3 kills ad gangen.
+   På Render tog et kill 2–3 s af serverens tiendedel CPU-kerne, også fra cachen, og to ad gangen
+   delte den samme kerne; i browseren tager det 0,7–1,6 s, mest ventetid på netværket. Uden egen
+   nøgle (en lokal server) giver `/api/healer/kill` det samme fra serveren. Browseren gemmer dem i IndexedDB (`parse-mirror` /
    `healer-kills`), fordi Render free mister serverens cache ved hver genstart; uden IndexedDB
    holdes de kun i hukommelsen. Healer-analysen sender også alle healeres tal på sit eget kill med,
    så det ikke hentes igen.
