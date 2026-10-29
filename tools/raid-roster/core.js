@@ -32,17 +32,21 @@ const STATUS_LABEL = { yes: 'Signed up', late: 'Late', tentative: 'Tentative', b
 const AVAILABLE = new Set(['yes', 'late', 'tentative', 'bench']);
 
 const DEFAULT_SETTINGS = {
+  // The raid team's name, shown in the top bar and on the roster image.
+  teamName: '',
   buffs: [
     { id: 'b1', label: 'Kings / Salvation', cls: 'Paladin', specs: [], min: 1 },
     { id: 'b2', label: 'Windfury Totem', cls: 'Shaman', specs: [], min: 1 },
     { id: 'b3', label: 'Curse of the Elements', cls: 'Warlock', specs: [], min: 1 },
-    { id: 'b4', label: 'Fortitude', cls: 'Priest', specs: [], min: 1 },
     { id: 'b5', label: '2nd Paladin (Wisdom / Might)', cls: 'Paladin', specs: [], min: 2 },
+    { id: 'b4', label: 'Fortitude', cls: 'Priest', specs: [], min: 1 },
     { id: 'b6', label: 'Melee crit (Leader of the Pack)', cls: 'Druid', specs: ['Feral', 'Guardian'], min: 1 },
     { id: 'b7', label: 'Spell crit (Moonkin)', cls: 'Druid', specs: ['Balance'], min: 1 },
     { id: 'b8', label: 'Battle Shout', cls: 'Warrior', specs: [], min: 1 },
-    { id: 'b9', label: 'Arcane Intellect', cls: 'Mage', specs: [], min: 1 },
     { id: 'b10', label: '2nd Shaman (Agility & more totems)', cls: 'Shaman', specs: [], min: 2 },
+    // Party-wide 15% spirit; the groups put a Shadow Priest with the healers.
+    { id: 'b11', label: 'Spirit (Shadow Priest, healer group)', cls: 'Priest', specs: ['Shadow'], min: 1 },
+    { id: 'b9', label: 'Arcane Intellect', cls: 'Mage', specs: [], min: 1 },
   ],
   types: {
     '20': { size: 20, tanks: 2, healMin: 3, healMax: 4, healTarget: 3 },

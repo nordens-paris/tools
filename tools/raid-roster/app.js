@@ -13,6 +13,8 @@ const ST_TEXT = { yes: 'Signed up', tentative: 'Tentative', late: 'Late', bench:
 const ST_ORDER = ['yes', 'tentative', 'late', 'bench', 'absence', 'none'];
 
 const ICON = {
+  sun: '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5v1.5m0 10v1.5M1.5 8H3m10 0h1.5M3.4 3.4l1.1 1.1m7 7 1.1 1.1m0-9.2-1.1 1.1m-7 7-1.1 1.1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  moon: '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 9.6A5.6 5.6 0 0 1 6.4 2.5a5.6 5.6 0 1 0 7.1 7.1Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
   check: '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   x: '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4.5 4.5 7 7m0-7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   pin: '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1.5v4m0 0L4.5 9h7L8 5.5Zm0 3.5v5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -41,6 +43,28 @@ function toast(msg, action) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { t.hidden = true; }, action ? 7000 : 4500);
 }
+// Light or dark mode from the button in the top bar, remembered in this browser. Without a choice the
+// page follows the viewer's theme, or the system's.
+function effectiveTheme() {
+  const root = document.documentElement;
+  if (root.dataset.npTheme) return root.dataset.npTheme;
+  if (root.dataset.theme === 'light' || root.dataset.theme === 'dark') return root.dataset.theme;
+  return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+function applyTheme(t) {
+  const root = document.documentElement;
+  if (t === 'light' || t === 'dark') root.dataset.npTheme = t; else delete root.dataset.npTheme;
+  const b = document.getElementById('theme-btn');
+  if (!b) return;
+  const dark = effectiveTheme() === 'dark';
+  b.innerHTML = dark ? ICON.sun : ICON.moon;
+  b.title = dark ? 'Switch to light mode' : 'Switch to dark mode';
+  b.setAttribute('aria-label', b.title);
+}
+applyTheme(load('theme'));
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme(load('theme')));
+new MutationObserver(() => applyTheme(load('theme'))).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
 function setConn(state, text) {
   document.getElementById('conn').innerHTML = `<span class="dot ${state}"></span><span>${esc(text)}</span>`;
 }
@@ -201,6 +225,7 @@ function schedule() {
 }
 
 function render() {
+  document.getElementById('team-name').textContent = S.settings.teamName || '';
   const ae = document.activeElement;
   // Waiting only makes sense while the same tab stays open.
   const sameView = S.renderedView === S.view;
@@ -1037,7 +1062,7 @@ function renderChanges(w, def) {
 const IMG = { sig: null, url: null, blob: null, busy: false, wid: null };
 const CLASS_COLOR = { Warrior: '#C69B6D', Paladin: '#F48CBA', Hunter: '#AAD372', Rogue: '#FFF468', Priest: '#FFFFFF', Shaman: '#0070DD', Mage: '#3FC7EB', Warlock: '#8788EE', Druid: '#FF7C0A' };
 const PAL = { bg: '#101317', card: '#192029', line: '#28313c', fg: '#ecf1f6', muted: '#8b97a6', faint: '#5a6573', accent: '#6cc3ff', ok: '#5fd08a', warn: '#f0b44c' };
-const imageSig = w => w.id + '|' + exportDiscord(w, S.settings, S.players, { weeks: S.weeks });
+const imageSig = w => w.id + '|' + (S.settings.teamName || '') + '|' + exportDiscord(w, S.settings, S.players, { weeks: S.weeks });
 
 function plannedRaids(w) {
   return S.settings.raids.filter(d => w.raids && w.raids[d.id] && w.raids[d.id].dayId && w.days[w.raids[d.id].dayId] && (w.raids[d.id].roster || []).length)
@@ -1134,7 +1159,7 @@ function drawRoster(w) {
   const emblem = ICON_IMAGES.get(EMBLEM_URL);
   const tx = emblem ? PAD + 92 : PAD;
   if (emblem) c.drawImage(emblem, PAD, 14, 80, 80 * emblem.height / emblem.width);
-  text('HOLDET', tx, 40, font(600, 12), PAL.accent);
+  if (S.settings.teamName) text(S.settings.teamName.toUpperCase(), tx, 40, font(600, 12), PAL.accent);
   text('Raid roster', tx, 70, font(700, 28), PAL.fg);
   text(`${weekName(w.id)} · ${weekSpan(w.id)}`, W - PAD, 70, font(400, 15), PAL.muted, 'right');
   let y = 104;
@@ -2249,6 +2274,7 @@ function renderSettings() {
       </section>
       <section class="panel">
         ${panelHead('Raids each week', 'Raids of the same size share a lockout, so nobody is put in both 10-mans.')}
+        <label class="f">Team name<input id="team-name-in" data-act="s-text" data-f="teamName" maxlength="40" value="${esc(st.teamName || '')}" placeholder="e.g. Holdet" style="max-width:260px"></label>
         <div class="rules">${raids}</div>
         <div class="row"><button data-act="r-add">Add raid</button></div>
         <label class="f">Max raids per day<input id="max-per-day" data-act="s-field" data-f="maxRaidsPerDay" type="number" min="1" max="4" value="${st.maxRaidsPerDay}" style="width:90px"></label>
@@ -2338,6 +2364,7 @@ document.addEventListener('click', e => {
   const a = el.dataset.act;
   const w = week();
   switch (a) {
+    case 'theme': { const t = effectiveTheme() === 'dark' ? 'light' : 'dark'; store('theme', t); applyTheme(t); break; }
     case 'new-week': { const sel = document.getElementById('new-week-sel'); if (guard() && sel && sel.value) newWeek(sel.value); break; }
     case 'add-day': {
       if (!guard()) return;
@@ -2514,7 +2541,7 @@ document.addEventListener('click', e => {
       saveSettings(s, a === 'r-add' ? 'Added a raid' : `Removed the raid ${gone}`);
       break;
     }
-    case 's-reset': if (guard() && confirmTwice('s-reset')) saveSettings(clone(DEFAULT_SETTINGS), 'Restored the default settings'); break;
+    case 's-reset': if (guard() && confirmTwice('s-reset')) saveSettings({ ...clone(DEFAULT_SETTINGS), teamName: S.settings.teamName || '' }, 'Restored the default settings'); break;
     default: break;
   }
 });
@@ -2617,6 +2644,7 @@ document.addEventListener('change', e => {
     case 't-field': { const s = settingsCopy(); s.types[el.dataset.t][el.dataset.f] = Math.max(0, Number(el.value) || 0); saveSettings(s, `Set ${el.dataset.t}-man ${el.dataset.f} to ${s.types[el.dataset.t][el.dataset.f]}`); break; }
     case 'r-field': { const s = settingsCopy(); const r = s.raids[Number(el.dataset.i)]; const was = r.name; r[el.dataset.f] = el.value; saveSettings(s, el.dataset.f === 'name' ? `Renamed the raid ${was} to ${el.value}` : `Changed the raid ${r.name}`); break; }
     case 'w-field': { const s = settingsCopy(); s.weights[el.dataset.f] = Number(el.value) || 0; saveSettings(s, `Set the weight ${el.dataset.f} to ${s.weights[el.dataset.f]}`); break; }
+    case 's-text': { const s = settingsCopy(); s[el.dataset.f] = el.value.trim(); saveSettings(s, `Set the team name to ${s[el.dataset.f] || '(none)'}`); break; }
     case 's-field': { const s = settingsCopy(); s[el.dataset.f] = Math.max(1, Number(el.value) || 1); saveSettings(s, `Set ${el.dataset.f} to ${s[el.dataset.f]}`); break; }
     case 'dd': {
       const s = settingsCopy(); const d = Number(el.dataset.d);

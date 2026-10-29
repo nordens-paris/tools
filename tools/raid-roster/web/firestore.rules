@@ -1,0 +1,45 @@
+rules_version = '2';
+
+// NP Roster on Firebase.
+//   access/<e-mail>  teams: a map from team id to "officer" (read and change) or "viewer" (read only).
+//                    One document per person, the id is their Google e-mail in lower case.
+//   teams/<team>     name: the team's name. The team's data lives below it (weeks, players, settings, ...).
+// access and team documents are only edited in the Firebase console.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    function accessPath() {
+      return /databases/$(database)/documents/access/$(request.auth.token.email.lower());
+    }
+    function roleIn(t) {
+      return get(accessPath()).data.teams.get(t, '');
+    }
+    function isMember(t) {
+      return signedIn() && exists(accessPath()) && roleIn(t) in ['officer', 'viewer'];
+    }
+    function isOfficer(t) {
+      return signedIn() && exists(accessPath()) && roleIn(t) == 'officer';
+    }
+
+    match /access/{e} {
+      allow get: if signedIn() && request.auth.token.email.lower() == e;
+      allow list, write: if false;
+    }
+
+    match /teams/{t} {
+      allow get: if isMember(t);
+      allow list, write: if false;
+
+      match /{coll}/{rest=**} {
+        allow read: if isMember(t);
+        allow write: if isOfficer(t);
+      }
+      // Viewers also set the name the others see in the log, but only their own.
+      match /members/{uid} {
+        allow write: if isMember(t) && request.auth.uid == uid;
+      }
+    }
+  }
+}

@@ -1,8 +1,8 @@
 # NP Roster (web-værktøj)
 
-**Version 1.1**
+**Version 1.2**
 
-Planlægger Holdets raids ud fra Raid-Helper-tilmeldinger: et optimeret 20-mands roster med roterende bænk og to 10-mands rosters. Officererne arbejder i det samme roster på samme tid, og alt, hvad de ændrer, kan fortrydes.
+Planlægger et raidholds raids ud fra Raid-Helper-tilmeldinger: et optimeret 20-mands roster med roterende bænk og to 10-mands rosters. Officererne arbejder i det samme roster på samme tid, og alt, hvad de ændrer, kan fortrydes.
 
 Hører sammen med addon'et [NPRoster](../../addons/NPRoster), som raidlederen bruger i spillet.
 
@@ -12,7 +12,14 @@ Hører sammen med addon'et [NPRoster](../../addons/NPRoster), som raidlederen br
 
 ## Kom i gang
 
-Værktøjet kører som en Claude-artifact med en fælles database. Darkfade deler linket med officererne, som skal have en claude.ai-konto og Contributor- eller Editor-adgang for at kunne rette. Med Viewer-adgang kan man kigge, men ikke ændre noget.
+Værktøjet ligger på **https://nordens-paris.github.io/tools/raid-roster/**. Log ind med din Google-konto. Darkfade giver hver officer adgang til deres raidhold; uden adgang kan man ikke se noget. Hvert hold (fx Holdet, Frat-Boiz og Pejsen) har sine egne data, og hold kan ikke se hinandens.
+
+- **Officer:** kan se og rette alt i holdets værktøj.
+- **Viewer:** kan kigge, men ikke ændre noget. Øverst til højre står **Shared · view only**.
+- **Første login:** du vælger det navn, de andre officerer ser i loggen (fx dit Discord- eller karakternavn). Google-navnet bliver ikke brugt.
+- **Flere hold:** er du på flere hold, vælger du hold ved login, og **Switch team** øverst skifter. **Sign out** logger ud.
+
+Opsætningen af Firebase og adgangen står i [web/SETUP.md](web/SETUP.md).
 
 En typisk uge:
 
@@ -143,6 +150,10 @@ Under hvert raid (for 10-mændene: én for hele lockouten) kan officeren selv v�
 
 Alt gemmes med det samme. Øverst til højre står **Saving…** med en gul prik, mens en ændring er på vej til databasen, og derefter **Shared · live** igen. Lukker man siden, før alt er gemt, spørger browseren, om man vil blive.
 
+### Lyst eller mørkt tema
+
+Knappen med sol/måne øverst til højre skifter mellem lyst og mørkt tema. Valget huskes i din browser og gælder kun for dig. Har du ikke valgt noget, følger siden temaet i claude.ai eller på din computer. Roster-billedet til Discord er altid mørkt.
+
 ### Fortryd
 
 **Undo** øverst eller **Ctrl+Z** fortryder din seneste ændring i ugen, også efter en genindlæsning; tryk igen for at gå et skridt længere tilbage. Officerer kan rette i hver sit raid samtidig uden at overskrive hinanden. Se **Log** for at fortryde ældre ændringer eller andres.
@@ -241,6 +252,7 @@ Alle ændringer på tværs af uger (rosters, flyt, bænk, tilmeldinger, import, 
 
 - **Buff priority:** listen over buffs, øverst vigtigst. Hver linje har navn, klasse, specs (tom = alle specs) og **Need** (hvor mange af den klasse/spec der skal til, fx 2 for "2nd Paladin"). Pilene ændrer rækkefølgen, **Add buff** tilføjer en.
 - **Raid sizes and roles:** for 20- og 10-mand: størrelse, antal tanks (inkl. off-tank) og healere min/maks/mål.
+- **Team name:** holdets navn, som står i topbjælken og på roster-billedet.
 - **Raids each week:** raidene med navn og størrelse. Raids af samme størrelse deler lockout. **Max raids per day** og **Default raid days** for nye uger.
 - **Optimizer weights:** hvor meget hvert hensyn vejer, når DPS-pladserne fordeles (roller og buffs går altid forud):
 
@@ -274,10 +286,15 @@ Standardværdierne (Bench fairness 600, Player priority 300, Fixed teams 400, Ra
 - `app.js`: brugerflade, fælles database og historik
 - `icons/`: Blizzards klasse- og spec-ikoner (fra Wowheads ikonserver) og guildens emblem (`emblem.png`)
 - `images/`: skærmbillederne i denne README (et opdigtet hold med testdata)
+- `web/`: kørslen på Firebase og GitHub Pages: login og database (`firebase-backend.js`), sikkerhedsreglerne (`firestore.rules`), projektets konfiguration (`firebase-config.js`), byggescriptet (`build.py`) og en falsk Firebase til lokale tests (`fake-firebase.js`)
 
 ## Netværk og data
 
-Siden henter ikke selv noget fra nettet ud over skrifttyper. Raid-Helper-dataen kopierer du ind i hånden. Alt gemmes i artifact'ens database, som kun dem, linket er delt med, kan se. Der ligger ingen spillerdata i repoet.
+Siden henter skrifttyper fra Google Fonts og Firebase fra Google. Raid-Helper-dataen kopierer du ind i hånden. Alt gemmes i Firebase (Firestore), og sikkerhedsreglerne i `web/firestore.rules` sørger for, at kun holdets officerer og viewers kan læse holdets data. Der ligger ingen spillerdata i repoet.
+
+Værdierne i `web/firebase-config.js` er ikke hemmelige: de fortæller kun browseren, hvilket Firebase-projekt den skal tale med. Sikkerheden ligger i reglerne.
+
+Værktøjet kan stadig køre som en Claude-artifact: `app.js` bruger samme database-kald begge steder, og `web/firebase-backend.js` oversætter dem til Firestore.
 
 ## Vedligeholdes af
 
