@@ -7,6 +7,7 @@ import type { SimResult, TankSimResult } from '../shared/types.ts';
 import { analyze, dpsSpecFor, specNameOf, type StoredAnalysis } from './analysis/analyze.ts';
 import { guildSummary } from './analysis/guild.ts';
 import { analyzeHealer } from './analysis/healer/compare.ts';
+import { healerHistory, healerKillScores } from './analysis/healer/history.ts';
 import { healerRaidSummary } from './analysis/healer/raid.ts';
 import { analyzeTank } from './analysis/tank/compare.ts';
 import { isTanking } from './analysis/tank/data.ts';
@@ -206,6 +207,32 @@ app.get('/api/guild/:code/healers', async (req, res) => {
     res.json(await healerRaidSummary(clientFor(req), reportCode(req.params.code)));
   } catch (err) {
     fail(res, 'Raid healers', err);
+  }
+});
+
+// The rolling healer score: the healer's kills over four weeks, then each kill's score inputs
+// (the browser keeps them, so it asks only for kills it hasn't seen).
+app.get('/api/healer/history/:code/:source', async (req, res) => {
+  try {
+    const source = Number(req.params.source);
+    if (!Number.isInteger(source)) throw new BadRequest('Expected a player id.');
+    requireRoleKey(req);
+    limitVisitor(req);
+    res.json(await healerHistory(clientFor(req), reportCode(req.params.code), source));
+  } catch (err) {
+    fail(res, 'Healer history', err);
+  }
+});
+
+app.get('/api/healer/kill/:code/:fight', async (req, res) => {
+  try {
+    const fight = Number(req.params.fight);
+    if (!Number.isInteger(fight)) throw new BadRequest('Expected a fight id.');
+    requireRoleKey(req);
+    limitVisitor(req);
+    res.json(await healerKillScores(clientFor(req), reportCode(req.params.code), fight));
+  } catch (err) {
+    fail(res, 'Healer kill', err);
   }
 });
 

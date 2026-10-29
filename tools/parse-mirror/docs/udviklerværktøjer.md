@@ -33,6 +33,7 @@ Scripts, der arbejder på tværs af mange spillere (`sim-vs-log`, `crit-unbiased
 | `healer-check.ts <rapport>:<fight> [...] [--json fil]` | Healer-tallene for alle healere i et eller flere kills, én linje pr. healer, plus dødsfald |
 | `healer-peers.ts <rapport>:<fight> [navn ...]` | Hvilke peers hver healer får, fra hvilke raids, og hvad det kostede i kald |
 | `healer-analyze.ts <rapport>:<fight> <navn>` | Hele healer-analysen som tekst: bedømte tal, kontekst, spells og fund |
+| `healer-score-ref.ts` | Bygger healer-scorens referencepulje (`shared/healerScoreRef.json`) fra de indsamlede kills i `.cache/healer-score-samples*.json`, uden kald: tilpasning og percentiler pr. spec og en korrektion pr. boss. Tjekker at puljen ligger omkring 50 for hver spec og boss, og scorens stabilitet fra uge til uge med og uden boss-korrektionen. Køres igen ved en ny fase, efter nye kills er samlet med `healer-score.ts`, `healer-weeks.ts` og `healer-pool-bosses.ts` |
 | `tank-check.ts <rapport>:<fight>[:<navn>] [...]` | Tank-tallene for alle tanks (eller én) i et eller flere kills |
 | `tank-analyze.ts <rapport>:<fight> <navn>` | Hele tank-analysen som tekst: peers, bedømte tal, kontekst og fund |
 | `unknown-ids.ts` | Gear-items, gems og enchants i de cachede logs (alle spillere i alle analyser kørt på maskinen), som WoWSims eller vores data ikke kender, mest brugte først med Wowhead-link. Ukendte items udelades af sims; er et ID samme item under et andet ID, kan det skrives i `ITEM_ALIASES` i `server/data/db.ts` |
@@ -82,3 +83,4 @@ Brugt til at finde konkrete fejl; beholdt som eksempler og til at gentage tjekke
 | `party-probe.ts`, `totem-probe.ts` | Party-auras og shamans' totem-casts |
 | `ci-stats.ts`, `buff-list.ts`, `raw-hits.ts` | Combatant-stats, alle buffs og rå hit-detaljer |
 | `parse-probe.ts`, `temp-enchants.ts` | En karakters rå parses; våben-enchants ved pull |
+| `healer-score.ts`, `healer-outcomes.ts`, `healer-crossval.ts`, `healer-weeks.ts`, `healer-pool-bosses.ts` | Healer-scorens prototype og pulje (`healer-pool-bosses.ts` henter de bosser, prototypen sprang over, fra de samme rapporter): hvilke mål er et træk ved healeren og fair på tværs af raids ([healer-score.md](healer-score.md)) |

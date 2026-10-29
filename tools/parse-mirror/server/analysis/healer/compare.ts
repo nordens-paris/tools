@@ -10,6 +10,7 @@ import type {
   HealerRow,
   HealerSpellCompare,
 } from '../../../shared/types.ts';
+import { scoreInputs } from '../../../shared/healerScore.ts';
 import { supportedSpecs } from '../../specs/index.ts';
 import type { WclClient } from '../../wcl/client.ts';
 import { median } from '../stats.ts';
@@ -83,6 +84,8 @@ export async function analyzeHealer(
     tanks: model.tanks.map((t) => ({ name: model.name(t), icon: model.icon(t) })),
     raid: { hps: model.durationSec ? model.raidEffective / model.durationSec : 0, dtps: model.raidDtps, healers: model.healers.size },
     warnings,
+    startTime: (fights.start ?? 0) + model.data.fight.start_time,
+    scores: [...model.healers.keys()].map((id) => ({ name: model.name(id), inputs: scoreInputs(id === source ? you : healerMetrics(model, id)) })),
   };
 }
 

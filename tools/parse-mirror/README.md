@@ -225,9 +225,27 @@ længere end dit. HPS, andel af raidets healing, samlet overheal og mana tilbage
 de afhænger af raidet. Øverst står også raidets antal healere og skade pr. healer ved siden af
 dit.
 
+**Healer score.** Øverst på Overview: hvordan du healer i forhold til healere med samme spec i andre
+raids, efter at det er trukket fra, som raidet afgør for dig (skade pr. healer, antal healere,
+kill-tid og andel på tanks). 50 er midten. Scoren er gennemsnittet af fire vaner (healing per mana,
+overheal efter eget valg, tomgang mens nogen er lav, reaktionstid) og HPS for din situation, hver
+som percentil blandt cirka 2.400 healer-kills på alle bosser i Hyjal og Black Temple og rettet for
+bossen (Council er let at se godt ud på, Reliquary svær). Ét kill er et groft billede, så scoren
+vises også over **de sidste fire uger** frem til raidet: dine rangerede
+healing-kills findes med ét kald, og **Score N more kills** henter dem, du ikke har set før (cirka
+10 kald pr. kill på din nøgle). Browseren gemmer dem, så hvert kill hentes én gang, og et kill hentet
+for én healer gælder alle healere i det. Scoren måler, hvordan du healer, ikke hvem der reddede
+raidet; hvorfor står i [healer-score.md](docs/healer-score.md).
+
+**Ujævn healing-fordeling.** Skiftes healerne til at holde igen, så én får en høj healing-parse, er
+fordelingen langt skævere end i andre raids. Et kill, hvor den bedste healers andel (i forhold til
+hvad specen plejer) er større gange den laveste end i 95 % af puljens kills på samme boss, får en
+advarsel og tæller ikke med i nogen af healernes fire-ugers-score. På raid-siden viser **Healing
+split** under **Show healers** hver healers andel pr. boss og markerer de skæve kills.
+
 **Fanerne:**
 
-- **Overview:** Fix first, fund, hvem du sammenlignes med, og alle tal mod peers.
+- **Overview:** healer score, Fix first, fund, hvem du sammenlignes med, og alle tal mod peers.
 - **Mana:** mana-kurven mod peers (strakt til samme længde), hvornår du brugte cooldowns og potions
   og med hvor meget mana, og hvor manaen kom fra.
 - **Spells:** andel af din healing, healing per mana og overheal pr. spell, mod peers.

@@ -155,6 +155,18 @@ kommer fra loggen og en sammenligning med andre healere.
 5. **`compare.ts`** henter peers' kills, deler tallene i *bedømt* (rimeligt uanset raidet) og
    *kontekst* (HPS, andel af raidets healing, samlet overheal, mana tilbage) og laver fund.
 6. **`raid.ts`** laver healer-rækkerne til raid-siderne, uden peers.
+7. **`history.ts`** og **`shared/healerScore.ts`** er healer-scoren. `shared/healerScoreRef.json`
+   (cirka 11 KB, bygget af `scripts/healer-score-ref.ts` uden kald) har pr. spec og mål en
+   lineær tilpasning til raid-konteksten og puljens justerede værdier ved hver 2. percentil, og
+   pr. boss hvor langt puljens percentiler ligger fra 50 (trukket fra hver del, så alle bosser
+   står på samme skala), plus hver specs sædvanlige andel af healingen og pr. boss tærsklen for en
+   ujævn healing-fordeling (`healingSplit`); scoren regnes i browseren ud fra en håndfuld tal pr. healer pr. kill (`HealerScoreInputs`).
+   `/api/healer/history` finder healerens rangerede healing-kills i de fire uger op til rapporten
+   (ét `parses`-kald, zone 1060 dækker både Hyjal og BT), og `/api/healer/kill` giver alle healeres
+   tal på ét kill (kill-dataens ~10 kald). Browseren gemmer dem i IndexedDB (`parse-mirror` /
+   `healer-kills`), fordi Render free mister serverens cache ved hver genstart; uden IndexedDB
+   holdes de kun i hukommelsen. Healer-analysen sender også alle healeres tal på sit eget kill med,
+   så det ikke hentes igen.
 
 En healer-analyse koster cirka 10 kald for eget kill, 10–60 for at finde peers og cirka 50 for
 deres kills første gang (omkring 10 sekunder kold, mod 47 før kaldene kørte parallelt); peers deles

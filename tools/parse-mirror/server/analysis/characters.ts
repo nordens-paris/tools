@@ -15,13 +15,14 @@ export async function parsesFor(
   name: string,
   server: string | undefined,
   zone?: number,
+  metric: 'dps' | 'hps' = 'dps',
 ): Promise<{ parses: WclParse[]; region?: string }> {
   if (!server) return { parses: [] };
   const id = `${name}-${server}`;
   const known = regionOf.get(id) ?? serverRegion.get(server);
   for (const region of known ? [known] : REGIONS) {
     try {
-      const parses = await client.parses(name, server, region, zone);
+      const parses = await client.parses(name, server, region, zone, metric);
       if (parses.length) {
         regionOf.set(id, region);
         serverRegion.set(server, region);
