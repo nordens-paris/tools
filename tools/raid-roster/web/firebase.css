@@ -1,0 +1,10 @@
+/* Sign-in and team choice in front of the tool, in the tool's own colours. */
+html, body { margin: 0; }
+img { max-width: 100%; }
+.np-gate { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px 16px; background: var(--bg); }
+.np-card { width: min(100%, 380px); display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; padding: 28px 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-lg); }
+.np-card h1 { margin: 0; font-size: 20px; letter-spacing: -.01em; }
+.np-card p { margin: 0; color: var(--muted); line-height: 1.5; }
+.np-teams { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.np-name { display: flex; gap: 8px; width: 100%; }
+.np-name input { flex: 1; min-width: 0; }

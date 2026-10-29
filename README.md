@@ -12,7 +12,7 @@ Fælles samling af værktøjer og addons, som folk i guilden **Nordens Paris** h
 |---|---|---|---|
 | [WoW Queue Watcher](tools/wow-queue-watcher) | Overvåger login-køen og sender alarmer til din telefon | Windows, Python | [Releases](https://github.com/nordens-paris/tools/releases?q=queue-watcher&expanded=true) |
 | [UI-overførsel](tools/wow-ui-transfer) | Flytter addons, keybinds, macros, Edit Mode og chat fra Beta til din nye character på launch | Windows, PowerShell | [Releases](https://github.com/nordens-paris/tools/releases?q=ui-overfoersel&expanded=true) |
-| [NP Roster](tools/raid-roster) | Planlægger raid-rosters ud fra Raid-Helper: buffs, grupper, bænk-rotation og fremmøde | Web (Claude-artifact) | Link fra Darkfade (officerer) |
+| [NP Roster](tools/raid-roster) | Planlægger raid-rosters ud fra Raid-Helper: buffs, grupper, bænk-rotation og fremmøde | Web (Firebase) | [Åbn værktøjet](https://nordens-paris.github.io/tools/raid-roster/) (kræver adgang fra Darkfade) |
 | [NPRoster-addon](addons/NPRoster) | Importerer rosteret i spillet: invitér, sortér grupper, bænk-whispers og fremmøde | WoW-addon | [Releases](https://github.com/nordens-paris/tools/releases?q=np-roster&expanded=true) |
 | [Parse Mirror](tools/parse-mirror) | Sammenligner dit boss-kill fra Warcraft Logs med top 10 i din spec, og WoWSims viser hvad forskellen er værd. Preview på TBC Anniversary | Web (Node + browser) | [parse-mirror.onrender.com](https://parse-mirror.onrender.com) |
 | [Darkfade's Forever Warrior](addons/darkfade-forever-warrior) | Komplet WeakAura-UI til Warrior: cooldowns, procs, swing og Rage, Battle Shout-påmindelser og tank-announces | WeakAura (ForeverAuras) | [Import-streng](addons/darkfade-forever-warrior/Darkfade-Forever-Warrior.txt) |
