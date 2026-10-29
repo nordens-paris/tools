@@ -6,3 +6,4 @@ dist/
 bin/
 # Lokale værktøjsindstillinger (Claude Code preview)
 .claude/
+dist-windows/

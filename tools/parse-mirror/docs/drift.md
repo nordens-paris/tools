@@ -65,6 +65,24 @@ node scripts/build-wowsims.mjs ../tbc-new --wasm-only  # kun WebAssembly
 Kommandolinje-simmen (`bin/wowsimcli`) bruges af dev-scripts og hvis serveren skal simme selv
 (`SIM_MODE=cli`, det hurtigste lokalt: sæt også `WOWSIMS_CLI=bin/wowsimcli.exe`).
 
+### Windows-pakken til guilden
+
+Guildmates uden teknisk viden kører Parse Mirror lokalt med en færdig pakke: `parse-mirror-windows.zip`
+under en `parse-mirror-v*`-release i `nordens-paris/tools`. Den har to filer øverst, **Start Parse
+Mirror** og **Opdater Parse Mirror**, og selve værktøjet i `app/`, med `wowsim.wasm.gz` og
+kommandolinje-simmen `bin/wowsimcli.exe` (sims på pc'ens egne kerner).
+
+- `windows/start.ps1` installerer Node.js med winget, hvis det mangler, spørger efter Warcraft
+  Logs-nøglen (gemmes i `app/.env` og `%APPDATA%\ParseMirror\.env`, så den overlever en
+  opdatering), kører `npm ci` og `vite build`, når noget er ændret, starter serveren på port 5174
+  og åbner siden.
+- `windows/update.ps1` henter den nyeste pakke fra releases og skifter `app/` ud; `.env` og
+  `node_modules` flyttes med.
+- Byg pakken fra et committet træ med `node scripts/package-windows.mjs parse-mirror-vX.Y` (skriver
+  `dist-windows/parse-mirror-windows.zip`, cirka 23 MB) og læg den på releasen som asset.
+
+Skrifterne er gemt som UTF-8 med BOM, ellers viser Windows PowerShell æ, ø og å forkert.
+
 ## `.env`
 
 | Variabel | Betydning |
