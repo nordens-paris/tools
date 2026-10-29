@@ -9,7 +9,7 @@ import type { HealerAnalysis, HealerHistory, HealerKillRef, HealerKillScores } f
 import { healerKillScores } from '../../server/analysis/healer/history.ts';
 import { getHealerHistory, getHealerKill } from './api.ts';
 import { getApiKey } from './apiKey.ts';
-import { BrowserWcl } from './wclBrowser.ts';
+import { browserClient } from './wclBrowser.ts';
 
 export const scoreRef = ref as HealerScoreRef;
 
@@ -146,7 +146,7 @@ export function useRollingScore(a: HealerAnalysis): RollingScore {
     const queue = [...missing];
     const of = queue.length;
     const key = getApiKey();
-    const wcl = key ? new BrowserWcl(key) : undefined;
+    const wcl = key ? browserClient(key) : undefined;
     let done = 0;
     setError(undefined);
     setFetching({ done, of });

@@ -10,7 +10,7 @@
 // healers to choose from.
 import type { HealerPeer, HealerPeerGroup, HealerRole } from '../../../shared/types.ts';
 import { TANK_ICON, type HealerSpec, healerSpecFor } from '../../specs/healers.ts';
-import type { WclClient } from '../../wcl/client.ts';
+import type { WclReader } from '../../wcl/reader.ts';
 import type { WclRaidRanking } from '../../wcl/types.ts';
 import { median } from '../stats.ts';
 
@@ -59,7 +59,7 @@ function specOf(icon: string) {
 }
 
 /** Healers of a spec in one raid, with their tank share, from one healing-by-target table. */
-async function healersIn(client: WclClient, raid: Candidate['raid'], spec: HealerSpec): Promise<Candidate[]> {
+async function healersIn(client: WclReader, raid: Candidate['raid'], spec: HealerSpec): Promise<Candidate[]> {
   const start = raid.startTime - raid.reportStart;
   const t = await client.table<{
     entries: { name: string; icon: string; total: number; sources?: { name: string; total: number; type: string }[] }[];
@@ -81,13 +81,13 @@ async function healersIn(client: WclClient, raid: Candidate['raid'], spec: Heale
 }
 
 /** Median healing parse over the peer's kills this tier, for the same spec. */
-async function consistency(client: WclClient, name: string, server: string, region: string, zone: number | undefined, spec: HealerSpec) {
+async function consistency(client: WclReader, name: string, server: string, region: string, zone: number | undefined, spec: HealerSpec) {
   const specNames = spec.icon === 'Druid-Restoration' ? ['Restoration', 'Dreamstate'] : [spec.icon.split('-')[1]];
   const parses = (await client.parses(name, server, region, zone, 'hps')).filter((p) => specNames.includes(p.spec));
   return parses.length ? { median: median(parses.map((p) => p.percentile)), kills: parses.length } : undefined;
 }
 
-export async function findHealerPeers(client: WclClient, q: HealerPeerQuery, log: (msg: string) => void = () => {}): Promise<HealerPeerGroup> {
+export async function findHealerPeers(client: WclReader, q: HealerPeerQuery, log: (msg: string) => void = () => {}): Promise<HealerPeerGroup> {
   const role = roleOf(q.tankShareIcon);
   const you = { healers: q.healers, dtpsPerHealer: q.dtpsPerHealer, role, tankShareIcon: q.tankShareIcon };
 

@@ -1,12 +1,9 @@
 // A tank's kill next to their peers (see peers.ts), split into what's fair to judge (gear choices,
 // mitigation, threat, cooldowns) and context that depends on the raid and the boss (damage taken,
 // the size of the hits).
-import crypto from 'node:crypto';
-
 import type { HealerRow, TankAnalysis, TankBossMelee, TankFinding, TankMetrics, TankOpenerVerdict } from '../../../shared/types.ts';
 import { type TankSpec, tankSpecFor } from '../../specs/tanks.ts';
-import { supportedSpecs } from '../../specs/index.ts';
-import type { WclClient } from '../../wcl/client.ts';
+import type { WclReader } from '../../wcl/reader.ts';
 import { FightModel } from '../healer/model.ts';
 import { median } from '../stats.ts';
 import { fetchTankFight } from './data.ts';
@@ -242,12 +239,12 @@ export interface StoredTank {
   simInput: TankSimInput;
 }
 
-export async function analyzeTank(client: WclClient, report: string, fightId: number, source: number, log: (msg: string) => void = () => {}): Promise<StoredTank> {
+export async function analyzeTank(client: WclReader, report: string, fightId: number, source: number, log: (msg: string) => void = () => {}): Promise<StoredTank> {
   const fights = await client.fights(report);
   const data = await fetchTankFight(client, report, fightId, source, fights);
   const spec = tankSpecIn(data);
   if (!spec) {
-    throw new Error(`${data.tank.name} (${data.tank.icon.replace('-', ' ')}) isn't tanking on this kill. Supported: ${supportedSpecs.join(', ')}, healers and tanks.`);
+    throw new Error(`${data.tank.name} (${data.tank.icon.replace('-', ' ')}) isn't tanking on this kill.`);
   }
   const model = new FightModel(data.raid);
   const you = tankMetrics(data, model, spec);
@@ -293,7 +290,7 @@ export async function analyzeTank(client: WclClient, report: string, fightId: nu
 
   const analysis: TankAnalysis = {
     kind: 'tank',
-    id: crypto.randomUUID(),
+    id: globalThis.crypto.randomUUID(),
     generatedAt: new Date().toISOString(),
     report,
     fight: fightId,

@@ -9,7 +9,7 @@ import { guildSummary } from './analysis/guild.ts';
 import { analyzeHealer } from './analysis/healer/compare.ts';
 import { healerHistory, healerKillScores } from './analysis/healer/history.ts';
 import { healerRaidSummary } from './analysis/healer/raid.ts';
-import { analyzeTank } from './analysis/tank/compare.ts';
+import { analyzeTank, type StoredTank } from './analysis/tank/compare.ts';
 import { isTanking } from './analysis/tank/data.ts';
 import { tankRaidSummary } from './analysis/tank/raid.ts';
 import { progressSummary } from './analysis/progress.ts';
@@ -185,7 +185,9 @@ app.get('/api/raid/:code/:source', async (req, res) => {
     const source = Number(req.params.source);
     if (!Number.isInteger(source)) throw new BadRequest('Expected a player id.');
     limitVisitor(req);
-    res.json(await raidSummary(clientFor(req), reportCode(req.params.code), source, rolesAllowed(req)));
+    // ?roles=browser: the visitor's browser makes the healer and tank rows on their own key.
+    const roles = !rolesAllowed(req) ? 'locked' : req.query.roles === 'browser' && req.get('x-wcl-key') ? 'browser' : 'server';
+    res.json(await raidSummary(clientFor(req), reportCode(req.params.code), source, roles));
   } catch (err) {
     fail(res, 'Raid overview', err);
   }
@@ -259,6 +261,58 @@ app.get('/api/progress/:code/:source', async (req, res) => {
 
 const HEAL_OR_TANK_TREES = /^(Holy|Discipline|Restoration|Protection|Justicar|Guardian|Dreamstate)$/;
 
+/**
+ * Whether a player gets the healer, tank or DPS analysis on a kill. Players whose spec isn't a
+ * simmed DPS spec get the tank or healer analysis (each says so if the player wasn't tanking or
+ * healing); players in a DPS tree we don't support yet (and classes that can't heal or tank) go on
+ * to the DPS analysis, which says so.
+ */
+async function roleOf(client: WclClient, code: string, fight: number, source: number) {
+  const fights = await client.fights(code);
+  const actor = fights.friendlies.find((a) => a.id === source);
+  const theFight = fights.fights.find((f) => f.id === fight);
+  // A bare class icon ("Druid") may be a tank with DPS talents (feral), so tanking is checked first.
+  const tanking = !!actor && !specForIcon(actor.icon) && mayTank(actor.icon) && (await isTanking(client, code, fight, source, fights));
+  const spec = actor && theFight && !tanking ? await dpsSpecFor(client, code, theFight, actor) : undefined;
+  const dpsTree = !!actor && !!theFight && !spec && !tanking && !HEAL_OR_TANK_TREES.test((await specNameOf(client, code, theFight, actor)) ?? 'Restoration');
+  if (actor && !spec && !dpsTree && (tanking || mayHeal(actor.icon) || mayTank(actor.icon))) {
+    return { kind: tanking || (await isTanking(client, code, fight, source, fights)) ? ('tank' as const) : ('healer' as const) };
+  }
+  return { kind: 'dps' as const, spec };
+}
+
+// With the visitor's own key, the browser runs healer and tank analyses itself (web/src/roleBrowser.ts)
+// and only asks the server which one a player gets.
+app.get('/api/role/:code/:fight/:source', async (req, res) => {
+  try {
+    const fight = Number(req.params.fight);
+    const source = Number(req.params.source);
+    if (!Number.isInteger(fight) || !Number.isInteger(source)) throw new BadRequest('Expected a fight and a player id.');
+    limitVisitor(req);
+    res.json({ kind: (await roleOf(clientFor(req), reportCode(req.params.code), fight, source)).kind });
+  } catch (err) {
+    fail(res, 'Role', err);
+  }
+});
+
+const ANALYSIS_ID = /^[0-9a-f-]{36}$/;
+
+// A tank analysis made in the browser: the server keeps what its sims need, as for its own tank
+// analyses. The sims fetch each tank's gear with the visitor's key and run in their browser.
+app.post('/api/tank/sims', (req, res) => {
+  try {
+    requireRoleKey(req);
+    const stored = req.body as StoredTank;
+    if (typeof stored?.analysis?.id !== 'string' || !ANALYSIS_ID.test(stored.analysis.id) || !Array.isArray(stored.simInput?.players)) {
+      throw new BadRequest('Expected { analysis, simInput } from a tank analysis.');
+    }
+    remember(stored.analysis.id, async (run, parallel, simClient) => runTankSims(stored, simClient(), run, iterations, log, parallel));
+    res.json({ ok: true });
+  } catch (err) {
+    fail(res, 'Tank sims', err);
+  }
+});
+
 app.post('/api/analyze', async (req, res) => {
   try {
     const { report, fight, source, mode = 'top' } = req.body ?? {};
@@ -267,21 +321,11 @@ app.post('/api/analyze', async (req, res) => {
     limitVisitor(req);
     const client = clientFor(req);
     const code = reportCode(report);
-    // Players whose spec isn't a simmed DPS spec get the tank or healer analysis (each says so if
-    // the player wasn't tanking or healing).
-    const fights = await client.fights(code);
-    const actor = fights.friendlies.find((a) => a.id === source);
-    const theFight = fights.fights.find((f) => f.id === fight);
-    // A bare class icon ("Druid") may be a tank with DPS talents (feral), so tanking is checked first.
-    const tanking = !!actor && !specForIcon(actor.icon) && mayTank(actor.icon) && (await isTanking(client, code, fight, source, fights));
-    const spec = actor && theFight && !tanking ? await dpsSpecFor(client, code, theFight, actor) : undefined;
-    // Players in a DPS tree we don't support yet (and classes that can't heal or tank) go on to the
-    // DPS analysis, which says so.
-    const dpsTree = !!actor && !!theFight && !spec && !tanking && !HEAL_OR_TANK_TREES.test((await specNameOf(client, code, theFight, actor)) ?? 'Restoration');
-    if (actor && !spec && !dpsTree && (tanking || mayHeal(actor.icon) || mayTank(actor.icon))) {
+    const role = await roleOf(client, code, fight, source);
+    if (role.kind !== 'dps') {
       requireRoleKey(req);
       limitVisitor(req, 2);
-      if (tanking || (await isTanking(client, code, fight, source, fights))) {
+      if (role.kind === 'tank') {
         const stored = await analyzeTank(client, code, fight, source, log);
         remember(stored.analysis.id, async (run, parallel, simClient) => runTankSims(stored, simClient(), run, iterations, log, parallel));
         res.json(stored.analysis);
@@ -290,7 +334,7 @@ app.post('/api/analyze', async (req, res) => {
       }
       return;
     }
-    const stored = await analyze(client, code, fight, source, log, mode, spec);
+    const stored = await analyze(client, code, fight, source, log, mode, role.spec);
     rememberDps(stored);
     res.json(stored.result);
   } catch (err) {

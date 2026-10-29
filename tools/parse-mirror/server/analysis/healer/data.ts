@@ -2,11 +2,9 @@
 // healer in the raid. About 10 requests, more on long fights (each request returns up to 10,000
 // events, and the rest is fetched page by page). Report data is cached forever, so a second healer
 // from the same raid costs nothing.
-import type { WclClient } from '../../wcl/client.ts';
+import type { WclReader } from '../../wcl/reader.ts';
 import type { WclActor, WclCombatantInfo, WclEvent, WclFight, WclFightsResponse } from '../../wcl/types.ts';
 
-/** What fetching a fight needs from a client: the server's, or the browser's (web/src/wclBrowser.ts). */
-export type HealerDataClient = Pick<WclClient, 'fights' | 'events' | 'combatantInfos' | 'table'>;
 
 /** A table row split by actor (healing done, damage taken). Icons carry the spec. */
 export interface ActorTableEntry {
@@ -66,7 +64,7 @@ export const FIELDS = [
 ] as const;
 
 /** Raid-wide healer data for one fight. */
-export async function fetchHealerFight(client: HealerDataClient, report: string, fightId: number, fights?: WclFightsResponse): Promise<HealerFightData> {
+export async function fetchHealerFight(client: WclReader, report: string, fightId: number, fights?: WclFightsResponse): Promise<HealerFightData> {
   const fl = fights ?? (await client.fights(report));
   const fight = fl.fights.find((f) => f.id === fightId);
   if (!fight) throw new Error(`Fight ${fightId} not found in report ${report}`);

@@ -40,7 +40,12 @@ async function request<T>(url: string, body?: unknown): Promise<T> {
 
 export const getReport = (code: string) => request<ReportInfo>(`/api/report/${code}`);
 export const getQuota = () => request<Quota>('/api/quota');
-export const getRaid = (code: string, source: number) => request<RaidSummary>(`/api/raid/${code}/${source}`);
+/** browserRoles: leave the healer and tank rows to this browser (roles.ts). */
+export const getRaid = (code: string, source: number, browserRoles = false) => request<RaidSummary>(`/api/raid/${code}/${source}${browserRoles ? '?roles=browser' : ''}`);
+/** Whether a player gets the healer, tank or DPS analysis on a kill. */
+export const getRole = (code: string, fight: number, source: number) => request<{ kind: 'healer' | 'tank' | 'dps' }>(`/api/role/${code}/${fight}/${source}`);
+/** A tank analysis made in this browser: the server keeps what its sims need. */
+export const postTankSims = (stored: unknown) => request<{ ok: true }>('/api/tank/sims', stored);
 export const getGuild = (code: string) => request<GuildSummary>(`/api/guild/${code}`);
 export const getGuildHealers = (code: string) => request<HealerRaidSummary>(`/api/guild/${code}/healers`);
 export const getGuildTanks = (code: string) => request<TankRaidSummary>(`/api/guild/${code}/tanks`);

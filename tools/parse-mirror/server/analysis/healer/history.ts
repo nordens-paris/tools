@@ -3,16 +3,16 @@
 // healer in it). The browser keeps the inputs, so each kill is fetched once per visitor.
 import type { HealerHistory, HealerKillScores } from '../../../shared/types.ts';
 import { scoreInputs } from '../../../shared/healerScore.ts';
-import type { WclClient } from '../../wcl/client.ts';
+import type { WclReader } from '../../wcl/reader.ts';
 import { parsesFor } from '../characters.ts';
-import { fetchHealerFight, type HealerDataClient } from './data.ts';
+import { fetchHealerFight } from './data.ts';
 import { healerMetrics } from './metrics.ts';
 import { FightModel } from './model.ts';
 
 const WEEKS = 4;
 const HEALER_SPECS = ['Holy', 'Discipline', 'Restoration'];
 
-export async function healerHistory(client: WclClient, report: string, source: number): Promise<HealerHistory> {
+export async function healerHistory(client: WclReader, report: string, source: number): Promise<HealerHistory> {
   const fights = await client.fights(report);
   const actor = fights.friendlies.find((a) => a.id === source);
   if (!actor) throw new Error(`Player ${source} not found in report ${report}`);
@@ -32,7 +32,7 @@ export async function healerHistory(client: WclClient, report: string, source: n
 }
 
 /** Runs on the server, or in the browser on the visitor's key (web/src/wclBrowser.ts). */
-export async function healerKillScores(client: HealerDataClient, report: string, fightId: number): Promise<HealerKillScores> {
+export async function healerKillScores(client: WclReader, report: string, fightId: number): Promise<HealerKillScores> {
   const fights = await client.fights(report);
   const model = new FightModel(await fetchHealerFight(client, report, fightId, fights));
   const f = model.data.fight;

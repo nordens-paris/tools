@@ -397,7 +397,19 @@ export interface RaidSummary {
   /** healer: they healed on most kills; the boss table then shows healing instead of DPS. */
   /** healer / tank: they healed or tanked on most kills. healerLocked: may be a healer or tank, but
    * those views need the visitor's own key on this site. */
-  player: { name: string; server?: string; icon: string; source: number; supported: boolean; dps: boolean; healer?: boolean; tank?: boolean; healerLocked?: boolean };
+  player: {
+    name: string;
+    server?: string;
+    icon: string;
+    source: number;
+    supported: boolean;
+    dps: boolean;
+    healer?: boolean;
+    tank?: boolean;
+    healerLocked?: boolean;
+    /** The healer and tank rows are left to the browser (the visitor's own key): what to look for. */
+    rolesPending?: { heal: boolean; tank: boolean };
+  };
   bosses: RaidBoss[];
   /** Who the player is compared with in their own raid: the same class, or else the top DPS of the same role. */
   peers: { basis: 'class' | 'role'; players: { source: number; name: string; icon: string }[] };

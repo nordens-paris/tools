@@ -1,7 +1,7 @@
 // Healers on every boss kill of a report, for the raid pages. Own fights only (no peers): about
 // 10 requests per kill, shared by every healer and by the single-kill healer page.
 import type { HealerMetrics, HealerRaidRow, HealerRaidSummary } from '../../../shared/types.ts';
-import type { WclClient } from '../../wcl/client.ts';
+import type { WclReader } from '../../wcl/reader.ts';
 import type { WclFightsResponse } from '../../wcl/types.ts';
 import { fetchHealerFight } from './data.ts';
 import { healerDeaths, healerMetrics, ownOverheal } from './metrics.ts';
@@ -31,13 +31,13 @@ export function raidRow(h: HealerMetrics): HealerRaidRow {
 }
 
 /** The model of every boss kill in a report, built one kill at a time (the client limits requests). */
-export async function bossKillModels(client: WclClient, report: string, fights?: WclFightsResponse) {
+export async function bossKillModels(client: WclReader, report: string, fights?: WclFightsResponse) {
   const fl = fights ?? (await client.fights(report));
   const kills = fl.fights.filter((f) => f.boss && f.kill);
   return Promise.all(kills.map(async (f) => new FightModel(await fetchHealerFight(client, report, f.id, fl))));
 }
 
-export async function healerRaidSummary(client: WclClient, report: string): Promise<HealerRaidSummary> {
+export async function healerRaidSummary(client: WclReader, report: string): Promise<HealerRaidSummary> {
   const models = await bossKillModels(client, report);
   return {
     report,

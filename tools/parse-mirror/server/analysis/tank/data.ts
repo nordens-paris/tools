@@ -3,7 +3,7 @@
 // through the cache), plus three requests for the tank: their damage done (threat), their buffs
 // with up/down times (active mitigation) and the debuffs they kept on the boss.
 import { TANK_ICONS } from '../../specs/tanks.ts';
-import type { WclClient } from '../../wcl/client.ts';
+import type { WclReader } from '../../wcl/reader.ts';
 import type { WclActor, WclEvent, WclFightsResponse, WclTableAuras } from '../../wcl/types.ts';
 import { type ActorTableEntry, FIELDS, fetchHealerFight, type HealerFightData } from '../healer/data.ts';
 
@@ -25,7 +25,7 @@ export interface TankFightData {
   lite?: { swingShare: number };
 }
 
-export async function fetchTankFight(client: WclClient, report: string, fightId: number, source: number, fights?: WclFightsResponse): Promise<TankFightData> {
+export async function fetchTankFight(client: WclReader, report: string, fightId: number, source: number, fights?: WclFightsResponse): Promise<TankFightData> {
   const fl = fights ?? (await client.fights(report));
   const fight = fl.fights.find((f) => f.id === fightId);
   if (!fight) throw new Error(`Fight ${fightId} not found in report ${report}`);
@@ -49,7 +49,7 @@ export async function fetchTankFight(client: WclClient, report: string, fightId:
  * A peer tank's fight, about 8 requests: only their own damage taken, damage done, casts, buffs
  * and debuffs, plus deaths and combatant info (no raid-wide healing or buffs).
  */
-export async function fetchTankFightLite(client: WclClient, report: string, fightId: number, name: string): Promise<TankFightData> {
+export async function fetchTankFightLite(client: WclReader, report: string, fightId: number, name: string): Promise<TankFightData> {
   const fl = await client.fights(report);
   const fight = fl.fights.find((f) => f.id === fightId);
   if (!fight) throw new Error(`Fight ${fightId} not found in report ${report}`);
@@ -102,7 +102,7 @@ export function bossMeleeShare(entries: (ActorTableEntry & { sources?: { total: 
  * more often than the fight list), or a warrior, druid or paladin who took a fifth of the melee.
  * One request, shared with the healer and tank fetches.
  */
-export async function isTanking(client: WclClient, report: string, fightId: number, source: number, fights?: WclFightsResponse) {
+export async function isTanking(client: WclReader, report: string, fightId: number, source: number, fights?: WclFightsResponse) {
   const fl = fights ?? (await client.fights(report));
   const fight = fl.fights.find((f) => f.id === fightId);
   if (!fight) return false;

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import type { RaidSummary, TankRaidRow, TankRaidSummary } from '../../../../shared/types.ts';
-import { getGuildTanks } from '../../api.ts';
+import { raidTanks } from '../../roles.ts';
 import { fmt, fmtTime, wclUrl } from '../../format.ts';
 import { Hint } from '../Hint.tsx';
 import { HealerKeyNote, useRolesAllowed } from '../healer/HealerRaid.tsx';
@@ -147,7 +147,7 @@ export function TankRaidPanel({ report, onFight }: { report: string; onFight: (f
     setLoading(true);
     setError(undefined);
     try {
-      setData(await getGuildTanks(report));
+      setData(await raidTanks(report));
     } catch (err) {
       setError((err as Error).message);
     } finally {

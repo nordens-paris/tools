@@ -278,7 +278,9 @@ tomgang pr. boss. På **Everyone in this raid** henter **Show healers** alle hea
 bedømmes sikkert. WoWSims kan ikke simme healere, så der er ingen what-ifs. Første healer-analyse
 af et kill henter omkring 50–60 kald fra Warcraft Logs; derefter deles det meste gennem cachen. Derfor
 kræver healer- og tank-siderne på den hostede side din egen Warcraft Logs-nøgle (**API key** øverst
-til højre); den bliver i din browser.
+til højre); den bliver i din browser. Med nøglen henter og regner din browser selv healer- og
+tank-siderne direkte fra Warcraft Logs, hvilket er meget hurtigere end den hostede sides lille
+server; DPS-siderne regnes stadig på serveren.
 
 ### 10. Tanks
 

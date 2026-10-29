@@ -2,7 +2,7 @@
 // same the healer pages use; each tank adds 3 requests per kill.
 import type { TankMetrics, TankRaidRow, TankRaidSummary } from '../../../shared/types.ts';
 import { TANK_ICONS } from '../../specs/tanks.ts';
-import type { WclClient } from '../../wcl/client.ts';
+import type { WclReader } from '../../wcl/reader.ts';
 import type { WclFightsResponse } from '../../wcl/types.ts';
 import { FightModel } from '../healer/model.ts';
 import { fetchTankFight } from './data.ts';
@@ -31,7 +31,7 @@ export function tankRow(t: TankMetrics): TankRaidRow {
 }
 
 /** A tank's row on one kill, or undefined if they didn't tank it. */
-export async function tankRowOn(client: WclClient, report: string, fightId: number, source: number, fights: WclFightsResponse) {
+export async function tankRowOn(client: WclReader, report: string, fightId: number, source: number, fights: WclFightsResponse) {
   const data = await fetchTankFight(client, report, fightId, source, fights);
   const spec = tankSpecIn(data);
   if (!spec) return undefined;
@@ -39,7 +39,7 @@ export async function tankRowOn(client: WclClient, report: string, fightId: numb
   return t.swings.total ? tankRow(t) : undefined;
 }
 
-export async function tankRaidSummary(client: WclClient, report: string): Promise<TankRaidSummary> {
+export async function tankRaidSummary(client: WclReader, report: string): Promise<TankRaidSummary> {
   const fights = await client.fights(report);
   const kills = fights.fights.filter((f) => f.boss && f.kill);
   return {

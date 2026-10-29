@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react';
 
 import { healingSplit } from '../../../../shared/healerScore.ts';
 import type { HealerRaidBoss, HealerRaidRow, HealerRaidSummary, RaidSummary } from '../../../../shared/types.ts';
-import { getGuildHealers } from '../../api.ts';
 import { KEY_CHANGED, getApiKey, openKeyForm } from '../../apiKey.ts';
 import { game } from '../../game.ts';
 import { scoreRef } from '../../healerHistory.ts';
+import { raidHealers } from '../../roles.ts';
 import { fmt, fmtTime, wclUrl } from '../../format.ts';
 import { Hint } from '../Hint.tsx';
 import { iconOf, pct } from './HealerTables.tsx';
@@ -186,7 +186,7 @@ export function HealerRaidPanel({ report, onFight }: { report: string; onFight: 
     setLoading(true);
     setError(undefined);
     try {
-      setData(await getGuildHealers(report));
+      setData(await raidHealers(report));
     } catch (err) {
       setError((err as Error).message);
     } finally {
