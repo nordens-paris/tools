@@ -334,12 +334,9 @@ export function healerMetrics(m: FightModel, id: number): HealerMetrics {
   };
 }
 
-/** Overheal from the healer's own choices, as a share of all healing they put out. */
-export const ownOverheal = (h: HealerMetrics) => {
-  const direct = h.effective - h.absorbed;
-  const over = direct ? (h.overhealPct * direct) / (1 - h.overhealPct || 1) : 0;
-  return direct + over ? (h.overheal.ownChoice * over) / (direct + over) : 0;
-};
+// Overheal from the healer's own choices, as a share of all healing they put out (shared: the
+// healer score in the browser needs it too).
+export { ownOverheal } from '../../../shared/healerScore.ts';
 
 /** Share of the fight a healer's Lifebloom sat at 3 stacks on one target. */
 function stack3Uptime(m: FightModel, id: number, target: number) {

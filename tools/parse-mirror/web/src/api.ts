@@ -1,4 +1,4 @@
-import type { AnalysisResult, GuildSummary, HealerAnalysis, HealerRaidSummary, ProgressSummary, RaidSummary, SimResult, TankAnalysis, TankRaidSummary } from '../../shared/types.ts';
+import type { AnalysisResult, GuildSummary, HealerAnalysis, HealerHistory, HealerKillScores, HealerRaidSummary, ProgressSummary, RaidSummary, SimResult, TankAnalysis, TankRaidSummary } from '../../shared/types.ts';
 import { getApiKey } from './apiKey.ts';
 
 export interface Quota {
@@ -44,6 +44,8 @@ export const getRaid = (code: string, source: number) => request<RaidSummary>(`/
 export const getGuild = (code: string) => request<GuildSummary>(`/api/guild/${code}`);
 export const getGuildHealers = (code: string) => request<HealerRaidSummary>(`/api/guild/${code}/healers`);
 export const getGuildTanks = (code: string) => request<TankRaidSummary>(`/api/guild/${code}/tanks`);
+export const getHealerHistory = (code: string, source: number) => request<HealerHistory>(`/api/healer/history/${code}/${source}`);
+export const getHealerKill = (code: string, fight: number) => request<HealerKillScores>(`/api/healer/kill/${code}/${fight}`);
 export const getProgress = (code: string, source: number) => request<ProgressSummary>(`/api/progress/${code}/${source}`);
 /** A DPS analysis, or a healer or tank analysis when the player healed or tanked (kind: 'healer' / 'tank'). */
 export const analyze = (report: string, fight: number, source: number, mode: 'top' | 'peers' = 'top') =>

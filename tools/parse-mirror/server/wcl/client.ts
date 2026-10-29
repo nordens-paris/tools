@@ -299,6 +299,15 @@ export class WclClient {
     return events.filter((e) => e.type === 'combatantinfo') as (WclCombatantInfo & { sourceID: number })[];
   }
 
+  /** A guild's reports (newest first), with their start and end (epoch ms). Cached for an hour. */
+  guildReports(guild: string, server: string, region: string) {
+    return this.get<{ id: string; title: string; owner: string; start: number; end: number; zone: number }[]>(
+      `reports/guild/${encodeURIComponent(guild)}/${encodeURIComponent(server)}/${region}`,
+      {},
+      60 * 60 * 1000,
+    );
+  }
+
   /** A character's ranked kills; without a zone, Warcraft Logs uses the current raid tier. */
   parses(name: string, server: string, region: string, zone?: number, metric: 'dps' | 'hps' = 'dps') {
     return this.get<WclParse[]>(

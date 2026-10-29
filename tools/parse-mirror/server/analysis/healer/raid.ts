@@ -46,6 +46,7 @@ export async function healerRaidSummary(client: WclClient, report: string): Prom
       for (const d of healerDeaths(m)) deaths[d.kind]++;
       return {
         fight: m.data.fight.id,
+        encounterId: m.data.fight.boss,
         name: m.data.fight.name,
         durationSec: m.durationSec,
         healers: m.healers.size,

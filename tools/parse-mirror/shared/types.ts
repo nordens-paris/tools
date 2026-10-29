@@ -1,4 +1,5 @@
 // Types shared between the server and the web UI.
+import type { HealerScoreInputs } from './healerScore.ts';
 
 export interface FightRef {
   report: string;
@@ -615,6 +616,35 @@ export interface HealerAnalysis {
   tanks: { name: string; icon: string }[];
   raid: { hps: number; dtps: number; healers: number };
   warnings: string[];
+  /** Pull time, epoch ms: matches the kill to the healer's other logs of it. */
+  startTime: number;
+  /** Every healer on the kill, for the rolling healer score (kept in the browser). */
+  scores: HealerKillScores['healers'];
+}
+
+/** A boss kill, for the rolling healer score. */
+export interface HealerKillRef {
+  report: string;
+  fight: number;
+  encounterId: number;
+  name: string;
+  /** Pull time, epoch ms. */
+  startTime: number;
+}
+
+/** A healer's boss kills in the four weeks up to a report, from their ranked healing parses. */
+export interface HealerHistory {
+  name: string;
+  server?: string;
+  region?: string;
+  from: number;
+  until: number;
+  kills: HealerKillRef[];
+}
+
+/** What the healer score needs from every healer on one kill. */
+export interface HealerKillScores extends HealerKillRef {
+  healers: { name: string; inputs: HealerScoreInputs }[];
 }
 
 /** One healer on one kill, for the raid pages (no peers). */
@@ -641,6 +671,8 @@ export interface HealerRaidRow {
 
 export interface HealerRaidBoss {
   fight: number;
+  /** Encounter id, for the healing split check. */
+  encounterId: number;
   name: string;
   durationSec: number;
   healers: number;

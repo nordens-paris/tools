@@ -5,6 +5,7 @@ import { fmt, fmtTime, wclUrl } from '../../format.ts';
 import { Findings } from '../Findings.tsx';
 import { Kpi } from '../SummaryCards.tsx';
 import { CooldownList, ManaChart, ManaSources, OverhealBars } from './HealerCharts.tsx';
+import { HealerScorePanel } from './HealerScore.tsx';
 import { DeathList, PeerTable, RowTable, SpellTable, fmtRow, iconOf, pct, rowTone } from './HealerTables.tsx';
 
 export const HEALER_TABS: HealerTab[] = ['Overview', 'Mana', 'Spells', 'Overheal', 'Response', 'Deaths', 'Peers'];
@@ -211,6 +212,7 @@ export function HealerPage({
       <HealerKpis analysis={a} />
       {tab === 'Overview' && (
         <>
+          <HealerScorePanel analysis={a} />
           <HealerFixFirst analysis={a} onTab={onTab} />
           <div className="grid-2">
             <Findings findings={a.findings.map((f) => ({ ...f, area: f.tab }))} warnings={a.warnings} />

@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 
-import type { HealerRaidRow, HealerRaidSummary, RaidSummary } from '../../../../shared/types.ts';
+import { healingSplit } from '../../../../shared/healerScore.ts';
+import type { HealerRaidBoss, HealerRaidRow, HealerRaidSummary, RaidSummary } from '../../../../shared/types.ts';
 import { getGuildHealers } from '../../api.ts';
 import { KEY_CHANGED, getApiKey, openKeyForm } from '../../apiKey.ts';
 import { game } from '../../game.ts';
+import { scoreRef } from '../../healerHistory.ts';
 import { fmt, fmtTime, wclUrl } from '../../format.ts';
 import { Hint } from '../Hint.tsx';
 import { iconOf, pct } from './HealerTables.tsx';
@@ -166,7 +168,12 @@ const VIEWS = [
   { key: 'potions', label: 'Potions', get: (r: HealerRaidRow) => String(r.potions) },
   { key: 'role', label: 'Assignment', get: (r: HealerRaidRow) => `${ROLE[r.role]} ${pct(r.tankShare)}` },
   { key: 'hps', label: 'HPS', get: (r: HealerRaidRow) => fmt(r.hps) },
+  { key: 'split', label: 'Healing split', get: () => '' },
 ] as const;
+
+const splitOf = (b: HealerRaidBoss) => healingSplit(b.rows.map((r) => ({ name: r.name, spec: r.specLabel, hps: r.hps })), scoreRef, b.encounterId);
+/** In an uneven kill, a healer under this share of their spec's usual looks held back. */
+const HELD_BACK = 0.6;
 
 /** Every healer on every boss, loaded on request (about 10 requests per boss). */
 export function HealerRaidPanel({ report, onFight }: { report: string; onFight: (fight: number, source: number) => void }) {
@@ -189,6 +196,8 @@ export function HealerRaidPanel({ report, onFight }: { report: string; onFight: 
   const healers = new Map<number, HealerRaidRow>();
   for (const b of data?.bosses ?? []) for (const r of b.rows) if (!healers.has(r.source)) healers.set(r.source, r);
   const shown = VIEWS.find((v) => v.key === view)!;
+  const splits = new Map((data?.bosses ?? []).map((b) => [b.fight, splitOf(b)]));
+  const uneven = (data?.bosses ?? []).filter((b) => splits.get(b.fight)?.uneven);
   return (
     <section className="panel">
       <div className="panel-head">
@@ -216,6 +225,23 @@ export function HealerRaidPanel({ report, onFight }: { report: string; onFight: 
         </div>
       )}
       {error && <div className="banner error">{error}</div>}
+      {uneven.length > 0 && (
+        <div className="banner warn">
+          Uneven healing split on {uneven.map((b) => b.name).join(', ')}: the healing was split far more unevenly than in 95% of other raids' kills of the boss. Healers
+          taking turns holding back so one gets a high parse look like this. These kills are left out of the healer score.{' '}
+          {view !== 'split' && (
+            <button className="btn small" onClick={() => setView('split')}>
+              Show the split
+            </button>
+          )}
+        </div>
+      )}
+      {data && view === 'split' && (
+        <p className="sub">
+          Each healer's share of the healers' healing on the kill, against their spec's usual share (1.0× is usual). Marked: under {HELD_BACK}× on a kill with an uneven
+          split.
+        </p>
+      )}
       {data && (
         <div className="table-scroll">
           <table className="t guild compact">
@@ -223,8 +249,13 @@ export function HealerRaidPanel({ report, onFight }: { report: string; onFight: 
               <tr>
                 <th>Healer</th>
                 {data.bosses.map((b) => (
-                  <th key={b.fight} className="num" title={`${b.name}: ${b.healers} healers, ${fmt(b.dtpsPerHealer)} damage/s each; deaths: ${b.deaths.window} with time to save, ${b.deaths.fast} fast, ${b.deaths.burst} burst`}>
+                  <th
+                    key={b.fight}
+                    className={`num ${splits.get(b.fight)?.uneven ? 'tone-bad' : ''}`}
+                    title={`${b.name}: ${b.healers} healers, ${fmt(b.dtpsPerHealer)} damage/s each; deaths: ${b.deaths.window} with time to save, ${b.deaths.fast} fast, ${b.deaths.burst} burst${splits.get(b.fight)?.uneven ? `. Uneven healing split: top healer ${splits.get(b.fight)!.spread.toFixed(1)}× the lowest (other raids stay under ${splits.get(b.fight)!.threshold!.toFixed(1)}×)` : ''}`}
+                  >
                     {b.name.split(' ').at(-1)}
+                    {splits.get(b.fight)?.uneven ? ' !' : ''}
                   </th>
                 ))}
               </tr>
@@ -240,11 +271,14 @@ export function HealerRaidPanel({ report, onFight }: { report: string; onFight: 
                   </td>
                   {data.bosses.map((b) => {
                     const r = b.rows.find((x) => x.source === h.source);
+                    const split = splits.get(b.fight);
+                    const share = r && split?.shares.find((x) => x.name === r.name)?.share;
+                    const bad = (view === 'potions' && r && !r.potions) || (view === 'split' && split?.uneven && share !== undefined && share < HELD_BACK);
                     return (
-                      <td key={b.fight} className={`num mono ${view === 'potions' && r && !r.potions ? 'cell-bad' : ''}`}>
+                      <td key={b.fight} className={`num mono ${bad ? 'cell-bad' : ''}`}>
                         {r ? (
                           <button className="link cell" onClick={() => onFight(b.fight, h.source)} title={`${h.name} on ${b.name}`}>
-                            {shown.get(r)}
+                            {view === 'split' ? (share !== undefined ? `${share.toFixed(1)}×` : '–') : shown.get(r)}
                           </button>
                         ) : (
                           <span className="muted">·</span>
