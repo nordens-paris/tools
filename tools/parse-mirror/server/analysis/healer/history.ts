@@ -5,7 +5,7 @@ import type { HealerHistory, HealerKillScores } from '../../../shared/types.ts';
 import { scoreInputs } from '../../../shared/healerScore.ts';
 import type { WclClient } from '../../wcl/client.ts';
 import { parsesFor } from '../characters.ts';
-import { fetchHealerFight } from './data.ts';
+import { fetchHealerFight, type HealerDataClient } from './data.ts';
 import { healerMetrics } from './metrics.ts';
 import { FightModel } from './model.ts';
 
@@ -31,7 +31,8 @@ export async function healerHistory(client: WclClient, report: string, source: n
   return { name: actor.name, server: actor.server, region, from, until, kills };
 }
 
-export async function healerKillScores(client: WclClient, report: string, fightId: number): Promise<HealerKillScores> {
+/** Runs on the server, or in the browser on the visitor's key (web/src/wclBrowser.ts). */
+export async function healerKillScores(client: HealerDataClient, report: string, fightId: number): Promise<HealerKillScores> {
   const fights = await client.fights(report);
   const model = new FightModel(await fetchHealerFight(client, report, fightId, fights));
   const f = model.data.fight;
