@@ -50,11 +50,15 @@ export function Consumes({ analysis }: { analysis: AnalysisResult }) {
     // Your pick counts as "same" if a fair share of the top players use that exact item.
     const shared = mine.some((m) => (choices.get(m.name) ?? 0) >= Math.max(2, n * 0.4) || m.name === sorted[0]?.[0]);
     let status: Status = 'none';
-    if (!mine.length && common) status = label === 'Flask' && twoElixirs ? 'elixirs' : 'missing';
+    // A scroll on a pet that isn't in the log may still have been used, so it's never "missing".
+    const petScroll = label.startsWith('Pet: ');
+    if (!mine.length && common && !petScroll) status = label === 'Flask' && twoElixirs ? 'elixirs' : 'missing';
     else if (mine.length && shared) status = 'same';
     else if (mine.length && common) status = 'different';
     else if (mine.length) status = 'extra';
-    return { cat: label, mine, users, sorted, status };
+    // Everyone compared counts as using it: how many were actually seen on this boss.
+    const seen = petScroll ? users - top.flatMap((p) => p.consumes.filter(match)).filter((c) => c.assumed).length : undefined;
+    return { cat: label, mine, users, sorted, status, seen };
   })
     .filter((r) => r.mine.length || r.users)
     .sort((a, b) => ORDER.indexOf(a.status) - ORDER.indexOf(b.status));
@@ -87,10 +91,15 @@ export function Consumes({ analysis }: { analysis: AnalysisResult }) {
               <div className="chips">
                 {r.mine.length ? (
                   r.mine.map((m) => (
-                    <span key={m.name} className="chip mine" title={m.simulated ? 'Included in sims' : 'Not modelled by the sim'}>
+                    <span
+                      key={m.name}
+                      className="chip mine"
+                      title={m.assumed ? 'Seen elsewhere in this log, not on this boss. Assumed used, and included in sims' : m.simulated ? 'Included in sims' : 'Not modelled by the sim'}
+                    >
                       <ConsumeIcon icon={m.icon ?? iconOf.get(m.name)} />
                       {m.name}
                       {!m.simulated && <em>not simmed</em>}
+                      {m.assumed && <em>not seen here</em>}
                     </span>
                   ))
                 ) : (
@@ -115,6 +124,11 @@ export function Consumes({ analysis }: { analysis: AnalysisResult }) {
                 <span className="mono small">
                   {r.users}/{n}
                 </span>
+                {r.seen !== undefined && (
+                  <span className="adoption-note" title="Assumed for everyone compared: a scroll on a pet is often not in the log. This many were seen on this boss.">
+                    {r.seen} seen
+                  </span>
+                )}
               </div>
               <div>{r.status !== 'none' && <span className={`pill ${STATUS[r.status].pill}`}>{STATUS[r.status].label}</span>}</div>
             </div>
@@ -162,7 +176,7 @@ function Matrix({ analysis, categories }: { analysis: AnalysisResult; categories
                 {players.map((p) => {
                   const uses = usesOf(p);
                   return (
-                    <td key={`${p.report}-${p.source}`} className={p === analysis.you ? 'you-col' : ''} title={uses.map((u) => u.name).join(', ') || 'None'}>
+                    <td key={`${p.report}-${p.source}`} className={p === analysis.you ? 'you-col' : ''} title={uses.map((u) => `${u.name}${u.assumed ? ' (assumed)' : ''}`).join(', ') || 'None'}>
                       <div className="cm-cell">
                         {uses.length === 0 && <span className="cm-none" />}
                         {uses.slice(0, 2).map((u) => (u.icon ? <ConsumeIcon key={u.name} icon={u.icon} /> : <span key={u.name} className="cm-dot" />))}

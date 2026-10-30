@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 
 import type { AnalysisResult } from '../../../shared/types.ts';
 import { specIcon } from '../brand.ts';
-import { fmtTime, specLabel, wclUrl } from '../format.ts';
+import { fmtDate, fmtTime, specLabel, wclUrl } from '../format.ts';
 
 export function ReportHeader({ analysis: a, picker, onRaid }: { analysis: AnalysisResult; picker?: ReactNode; onRaid?: () => void }) {
   const you = a.you;
@@ -21,6 +21,7 @@ export function ReportHeader({ analysis: a, picker, onRaid }: { analysis: Analys
           <span className={`pill ${you.kill ? 'ok' : 'bad'}`}>
             {you.kill ? 'Kill' : 'Wipe'} · {fmtTime(you.durationSec)}
           </span>
+          {a.startTime ? <span className="pill">{fmtDate(a.startTime)}</span> : null}
           <span className="pill">{you.race}</span>
           <span className="pill" title={you.talents}>
             Talents {you.talentSplit.join('/')}

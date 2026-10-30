@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { healingSplit } from '../../../../shared/healerScore.ts';
+import type { HeldBack } from '../../../../shared/healerScore.ts';
 import type { HealerRaidBoss, HealerRaidRow, HealerRaidSummary, RaidSummary } from '../../../../shared/types.ts';
 import { KEY_CHANGED, getApiKey, openKeyForm } from '../../apiKey.ts';
 import { game } from '../../game.ts';
@@ -171,7 +172,15 @@ const VIEWS = [
   { key: 'split', label: 'Healing split', get: () => '' },
 ] as const;
 
-const splitOf = (b: HealerRaidBoss) => healingSplit(b.rows.map((r) => ({ name: r.name, spec: r.specLabel, hps: r.hps })), scoreRef, b.encounterId);
+// Kills only, and without minor healers (under 5% of the raid's healing), as in the pool.
+const splitOf = (b: HealerRaidBoss) =>
+  b.kill === false ? undefined : healingSplit(b.rows.filter((r) => !r.minor).map((r) => ({ name: r.name, spec: r.specLabel, hps: r.hps })), scoreRef, b.encounterId);
+const heldText = (h: HeldBack) =>
+  h.why === 'share'
+    ? `${Math.round((h.share / h.usual!) * 100)}% of their usual share of the healing`
+    : h.why === 'boost'
+      ? `${Math.round((h.share / h.usual!) * 100)}% of their usual share and idle ${Math.round(h.idleVs! * 100)} points more than usual, while ${h.boosted!.name} did ${h.boosted!.rel.toFixed(1)}× theirs`
+      : `idle ${Math.round(h.idleVs! * 100)} points more than the other healers`;
 /** In an uneven kill, a healer under this share of their spec's usual looks held back. */
 const HELD_BACK = 0.6;
 
@@ -198,6 +207,7 @@ export function HealerRaidPanel({ report, onFight }: { report: string; onFight: 
   const shown = VIEWS.find((v) => v.key === view)!;
   const splits = new Map((data?.bosses ?? []).map((b) => [b.fight, splitOf(b)]));
   const uneven = (data?.bosses ?? []).filter((b) => splits.get(b.fight)?.uneven);
+  const held = (data?.bosses ?? []).flatMap((b) => (b.heldBack ?? []).map((h) => ({ boss: b, h })));
   return (
     <section className="panel">
       <div className="panel-head">
@@ -225,6 +235,14 @@ export function HealerRaidPanel({ report, onFight }: { report: string; onFight: 
         </div>
       )}
       {error && <div className="banner error">{error}</div>}
+      {held.length > 0 && (
+        <div className="banner warn">
+          Looks like holding back:{' '}
+          {held.map(({ boss, h }) => `${h.name} on ${boss.name}${boss.kill ? '' : ' (wipe)'}`).join(', ')}. Each did far less than they usually do (or idled while the
+          others healed) and scored 35 or lower against healers in other raids. Healers taking turns holding back so one gets a high parse look like this; mechanics can
+          too (an assignment off the raid, an early death), so it's a hint, not proof. Marked in the table; those kills are left out of the healer score.
+        </div>
+      )}
       {uneven.length > 0 && (
         <div className="banner warn">
           Uneven healing split on {uneven.map((b) => b.name).join(', ')}: the healing was split far more unevenly than in 95% of other raids' kills of the boss. Healers
@@ -256,6 +274,7 @@ export function HealerRaidPanel({ report, onFight }: { report: string; onFight: 
                   >
                     {b.name.split(' ').at(-1)}
                     {splits.get(b.fight)?.uneven ? ' !' : ''}
+                    {b.kill === false && <div className="muted small">wipe</div>}
                   </th>
                 ))}
               </tr>
@@ -273,11 +292,16 @@ export function HealerRaidPanel({ report, onFight }: { report: string; onFight: 
                     const r = b.rows.find((x) => x.source === h.source);
                     const split = splits.get(b.fight);
                     const share = r && split?.shares.find((x) => x.name === r.name)?.share;
-                    const bad = (view === 'potions' && r && !r.potions) || (view === 'split' && split?.uneven && share !== undefined && share < HELD_BACK);
+                    const hb = r && b.heldBack?.find((x) => x.name === r.name);
+                    const bad = !!hb || (view === 'potions' && r && !r.potions) || (view === 'split' && split?.uneven && share !== undefined && share < HELD_BACK);
                     return (
                       <td key={b.fight} className={`num mono ${bad ? 'cell-bad' : ''}`}>
                         {r ? (
-                          <button className="link cell" onClick={() => onFight(b.fight, h.source)} title={`${h.name} on ${b.name}`}>
+                          <button
+                            className="link cell"
+                            onClick={() => onFight(b.fight, h.source)}
+                            title={`${h.name} on ${b.name}${r.minor ? ': under 5% of the raid’s healing' : ''}${hb ? `. Looks like holding back: ${heldText(hb)}` : ''}`}
+                          >
                             {view === 'split' ? (share !== undefined ? `${share.toFixed(1)}×` : '–') : shown.get(r)}
                           </button>
                         ) : (

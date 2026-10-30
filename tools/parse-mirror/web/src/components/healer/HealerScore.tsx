@@ -1,7 +1,7 @@
 import { SCORE_METRICS, healerScore, reliability, type HealerScore } from '../../../../shared/healerScore.ts';
 import type { HealerAnalysis } from '../../../../shared/types.ts';
 import { wclUrl } from '../../format.ts';
-import { REQUESTS_PER_KILL, scoreRef, splitOf, useRollingScore } from '../../healerHistory.ts';
+import { REQUESTS_PER_KILL, heldBackOn, scoreRef, splitOf, useRollingScore } from '../../healerHistory.ts';
 import { Hint } from '../Hint.tsx';
 
 const tone = (v: number) => (v >= 60 ? 'good' : v <= 40 ? 'bad' : 'neutral');
@@ -45,6 +45,20 @@ export function HealerScorePanel({ analysis: a }: { analysis: HealerAnalysis }) 
   };
   const weeks = n ? mean((s) => s.score) : undefined;
   const split = a.kill && a.scores?.length ? splitOf(a.scores, a.encounter.id) : undefined;
+  // Kills and wipes: against each healer's usual share on the kills this browser has.
+  const held = a.scores?.length ? heldBackOn({ report: a.report, fight: a.fight, encounterId: a.encounter.id, healers: a.scores }, rolling.stored) : [];
+  const youHeld = held.find((h) => h.name === a.you.name);
+  const othersHeld = held.filter((h) => h.name !== a.you.name);
+  const why = (h: (typeof held)[number]) => {
+    const you = h.name === a.you.name;
+    const pct = h.usual ? Math.round((h.share / h.usual) * 100) : 0;
+    if (h.why === 'share') return `${you ? 'you' : h.name} did ${pct}% of ${you ? 'your' : 'their'} usual share of the healing`;
+    if (h.why === 'boost')
+      return `${you ? 'you' : h.name} did ${pct}% of ${you ? 'your' : 'their'} usual share and ${you ? 'were' : 'was'} idle ${Math.round(h.idleVs! * 100)} points more than usual, while ${h.boosted!.name === a.you.name ? 'you' : h.boosted!.name} did ${h.boosted!.rel.toFixed(1)}× ${h.boosted!.name === a.you.name ? 'your' : 'their'} usual`;
+    return `${you ? 'you were' : `${h.name} was`} idle ${Math.round(h.idleVs! * 100)} points more than the other healers while someone was low`;
+  };
+  const outReason = (k: (typeof rolling.leftOut)[number]) =>
+    k.heldBack.length ? `Held back: ${k.heldBack.map((h) => h.name).join(', ')}` : k.split?.uneven ? `Uneven split ${times(k.split.spread)}` : '';
   const left = rolling.leftOut.length;
   const listed = [...rolling.kills, ...rolling.leftOut].sort((x, y) => y.startTime - x.startTime);
   const times = (v: number) => `${v.toFixed(1)}×`;
@@ -53,7 +67,9 @@ export function HealerScorePanel({ analysis: a }: { analysis: HealerAnalysis }) 
     ? 'Only kills are scored'
     : !spec
       ? `No ${a.you.specLabel}s in the reference pool yet`
-      : kill && split?.uneven
+      : kill && held.length
+        ? `${youHeld ? 'You' : 'A healer'} held back: not in the 4-week score`
+        : kill && split?.uneven
         ? 'Uneven healing split: not in the 4-week score'
         : kill
           ? 'One kill is a rough read'
@@ -112,7 +128,15 @@ export function HealerScorePanel({ analysis: a }: { analysis: HealerAnalysis }) 
         </div>
       </div>
       {rolling.error && <div className="notes small">Couldn't get all your kills: {rolling.error}</div>}
-      {split?.uneven && (
+      {held.length > 0 && (
+        <div className="banner warn">
+          {youHeld ? 'You look like you held back on this fight: ' : 'A healer looks like they held back on this fight: '}
+          {[...(youHeld ? [youHeld] : []), ...othersHeld].map(why).join('; ')}, with a healer score of 35 or lower here. Healers taking turns holding back so
+          one gets a high healing parse look like this{a.kill ? ", so the kill is left out of every healer's 4-week score" : ''}. Mechanics can do it too
+          (an assignment off the raid, an early death), so it's a hint, not proof.
+        </div>
+      )}
+      {split?.uneven && !held.length && (
         <div className="banner warn">
           The healing on this kill was split far more unevenly than in other raids on {a.encounter.name}. Each healer's share against their spec's usual:{' '}
           {split.shares.map((x) => `${x.name} ${times(x.share)}`).join(', ')}. The top healer did {times(split.spread)} the lowest's; 95% of
@@ -148,15 +172,15 @@ export function HealerScorePanel({ analysis: a }: { analysis: HealerAnalysis }) 
       {listed.length > 1 && (
         <details>
           <summary className="small muted">
-            The {listed.length} kills{left ? `, ${left} left out for an uneven healing split` : ''}
+            The {listed.length} kills{left ? `, ${left} left out (uneven healing split or a healer holding back)` : ''}
           </summary>
           <table className="t">
             <tbody>
               {listed.map((k) => (
                 <tr
                   key={`${k.report}:${k.fight}`}
-                  className={k.report === a.report && k.fight === a.fight ? 'you' : k.split?.uneven ? 'muted' : undefined}
-                  title={k.split?.uneven ? `Left out: the top healer did ${times(k.split.spread)} the lowest's share (other raids here stay under ${times(k.split.threshold!)})` : undefined}
+                  className={k.report === a.report && k.fight === a.fight ? 'you' : outReason(k) ? 'muted' : undefined}
+                  title={outReason(k) ? `Left out of the 4-week score: ${outReason(k)}` : undefined}
                 >
                   <td className="mono small">{day(k.startTime)}</td>
                   <td>
@@ -164,7 +188,7 @@ export function HealerScorePanel({ analysis: a }: { analysis: HealerAnalysis }) 
                       {k.name}
                     </a>
                   </td>
-                  <td className="small muted">{k.split?.uneven ? `Uneven split ${times(k.split.spread)}, left out` : ''}</td>
+                  <td className="small muted">{outReason(k) ? `${outReason(k)}, left out` : ''}</td>
                   <td className="num mono">{Math.round(k.score.score)}</td>
                 </tr>
               ))}

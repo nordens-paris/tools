@@ -1,5 +1,5 @@
 // Types shared between the server and the web UI.
-import type { HealerScoreInputs } from './healerScore.ts';
+import type { HealerScoreInputs, HeldBack } from './healerScore.ts';
 
 export interface FightRef {
   report: string;
@@ -54,6 +54,8 @@ export interface ConsumeUse {
   simulated: boolean;
   /** Icon of the buff, cast or item it was found from. */
   icon?: string;
+  /** Taken as used without being seen on this fight (scrolls on a pet, see collect.ts). */
+  assumed?: boolean;
 }
 
 export type ConsumeCategory =
@@ -207,6 +209,8 @@ export interface AnalysisResult {
   id: string;
   comparison: ComparisonGroup;
   generatedAt: string;
+  /** Pull time, epoch ms (shown as the raid's date). */
+  startTime?: number;
   encounter: { id: number; name: string };
   spec: { className: string; specName: string; caster: boolean; activityLabel: string };
   you: PlayerFight;
@@ -325,6 +329,8 @@ export interface RaidBoss {
 export interface GuildSummary {
   report: string;
   title: string;
+  /** Report start, epoch ms (shown as the raid's date). */
+  startTime?: number;
   bosses: { fight: number; encounterId: number; name: string; durationSec: number }[];
   players: {
     source: number;
@@ -394,6 +400,8 @@ export interface ProgressSummary {
 export interface RaidSummary {
   report: string;
   title: string;
+  /** Report start, epoch ms (shown as the raid's date). */
+  startTime?: number;
   /** healer: they healed on most kills; the boss table then shows healing instead of DPS. */
   /** healer / tank: they healed or tanked on most kills. healerLocked: may be a healer or tank, but
    * those views need the visitor's own key on this site. */
@@ -519,6 +527,8 @@ export interface HealerMetrics {
   saves: number;
   /** Share of the time alive spent casting (0-1). */
   activity: number;
+  /** Seconds as Teron's ghost after Shadow of Death (0 elsewhere). */
+  ghostSec?: number;
   /** Seconds not casting while someone they heal was below 70%. */
   idleWhileNeeded: { sec: number; ofSec: number };
   upkeep: HealerUpkeep[];
@@ -656,7 +666,8 @@ export interface HealerHistory {
 
 /** What the healer score needs from every healer on one kill. */
 export interface HealerKillScores extends HealerKillRef {
-  healers: { name: string; inputs: HealerScoreInputs }[];
+  /** minor: in a heal spec but under 5% of the raid's healing (left out of the split check). */
+  healers: { name: string; inputs: HealerScoreInputs; minor?: boolean }[];
 }
 
 /** One healer on one kill, for the raid pages (no peers). */
@@ -679,6 +690,8 @@ export interface HealerRaidRow {
   cooldowns: number;
   idleSec: number;
   saves: number;
+  /** In a heal spec but under 5% of the raid's healing: not counted as one of the raid's healers. */
+  minor?: boolean;
 }
 
 export interface HealerRaidBoss {
@@ -686,11 +699,15 @@ export interface HealerRaidBoss {
   /** Encounter id, for the healing split check. */
   encounterId: number;
   name: string;
+  /** Wipes of a minute or more are included, for the held-back check. */
+  kill: boolean;
   durationSec: number;
   healers: number;
   dtpsPerHealer: number;
   deaths: Record<HealerDeath['kind'], number>;
   rows: HealerRaidRow[];
+  /** Healers who held back on this fight (shared/healerScore.ts heldBack). */
+  heldBack: HeldBack[];
 }
 
 /** Every healer on every boss kill of a report. */
@@ -968,6 +985,8 @@ export interface TankAnalysis {
   kind: 'tank';
   id: string;
   generatedAt: string;
+  /** Pull time, epoch ms (shown as the raid's date). */
+  startTime?: number;
   report: string;
   fight: number;
   encounter: { id: number; name: string };

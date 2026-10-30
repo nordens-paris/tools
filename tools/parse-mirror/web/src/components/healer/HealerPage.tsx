@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import type { HealerAnalysis, HealerTab } from '../../../../shared/types.ts';
-import { fmt, fmtTime, wclUrl } from '../../format.ts';
+import { fmt, fmtDate, fmtTime, wclUrl } from '../../format.ts';
 import { Findings } from '../Findings.tsx';
 import { Kpi } from '../SummaryCards.tsx';
 import { CooldownList, ManaChart, ManaSources, OverhealBars } from './HealerCharts.tsx';
@@ -33,6 +33,7 @@ function HealerHeader({ analysis: a, picker, onRaid }: { analysis: HealerAnalysi
           <span className={`pill ${a.kill ? 'ok' : 'bad'}`}>
             {a.kill ? 'Kill' : 'Wipe'} · {fmtTime(a.durationSec)}
           </span>
+          {a.startTime ? <span className="pill">{fmtDate(a.startTime)}</span> : null}
           <span className="pill acc" title="Share of your effective healing that went to the players tanking the boss.">
             {ROLE[you.role]} · {pct(you.tankShare)} on tanks
           </span>

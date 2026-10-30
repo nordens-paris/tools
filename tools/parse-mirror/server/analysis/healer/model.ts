@@ -87,6 +87,12 @@ export class FightModel {
   /** Tank-spec players only (the definition peers are picked by). */
   readonly tankSpecs = new Set<number>();
   readonly healers = new Map<number, HealerSpec>();
+  /**
+   * Players in a heal spec who did under 5% of the raid's healing: not counted as the raid's
+   * healers (for context, peers and the reference pool), but analysed when asked about, and checked
+   * for holding back (shared/healerScore.ts heldBack).
+   */
+  readonly minorHealers = new Map<number, HealerSpec>();
   readonly effectiveBySource = new Map<number, number>();
   readonly raidEffective: number;
   readonly raidDtps: number;
@@ -147,6 +153,12 @@ export class FightModel {
     for (const [id, eff] of this.effectiveBySource) {
       const spec = healerSpecFor(this.icons.get(id) ?? '', spells.get(id));
       if (spec && eff > 0.05 * this.raidEffective) this.healers.set(id, spec);
+      else if (spec) this.minorHealers.set(id, spec);
+    }
+    // In a heal spec by icon but no healing at all.
+    for (const [id, icon] of this.icons) {
+      const spec = !this.effectiveBySource.has(id) && healerSpecFor(icon);
+      if (spec) this.minorHealers.set(id, spec);
     }
     const taken = this.damage.reduce((s, e) => s + (e.targetID !== undefined && this.players.has(e.targetID) ? (e.amount ?? 0) : 0), 0);
     this.raidDtps = this.durationSec ? taken / this.durationSec : 0;

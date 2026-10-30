@@ -241,7 +241,10 @@ raidet; hvorfor står i [healer-score.md](docs/healer-score.md).
 fordelingen langt skævere end i andre raids. Et kill, hvor den bedste healers andel (i forhold til
 hvad specen plejer) er større gange den laveste end i 95 % af puljens kills på samme boss, får en
 advarsel og tæller ikke med i nogen af healernes fire-ugers-score. På raid-siden viser **Healing
-split** under **Show healers** hver healers andel pr. boss og markerer de skæve kills.
+split** under **Show healers** hver healers andel pr. boss og markerer de skæve kills. Holder én
+healer igen (langt mindre end sin sædvanlige andel den aften, eller meget mere idle end de andre
+healere, og en lav score), markeres healeren på healer-siden og under **Show healers**, også på
+wipes, og killet tæller ikke med i scoren.
 
 **Fanerne:**
 
@@ -431,6 +434,7 @@ andre steder hen. Vedligeholdes af Darkfade.
 | Dokument | Indhold |
 |---|---|
 | [docs/drift.md](docs/drift.md) | Installation, opsætning og gratis hosting (Render trin for trin) |
+| [CHANGELOG.md](CHANGELOG.md) | Alt, hvad der er ændret, version for version |
 | [docs/arkitektur.md](docs/arkitektur.md) | Hvordan det hænger sammen: Warcraft Logs-klient, analyse, sim, web |
 | [docs/sim-noejagtighed.md](docs/sim-noejagtighed.md) | Hvor godt simmen passer, hvad der er rettet, kendte begrænsninger |
 | [docs/ny-spec.md](docs/ny-spec.md) | Sådan tilføjes en ny spec |

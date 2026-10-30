@@ -292,6 +292,7 @@ export async function analyzeTank(client: WclReader, report: string, fightId: nu
     kind: 'tank',
     id: globalThis.crypto.randomUUID(),
     generatedAt: new Date().toISOString(),
+    startTime: (fights.start ?? 0) + model.data.fight.start_time,
     report,
     fight: fightId,
     encounter: { id: model.data.fight.boss, name: model.data.fight.name },

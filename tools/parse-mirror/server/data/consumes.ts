@@ -23,7 +23,7 @@ const POTIONS: Record<number, { name: string; simId: number }> = {
   28499: { name: 'Super Mana Potion', simId: 22832 },
 };
 
-type Flag = 'superSapper' | 'goblinSapper' | 'scrollAgi' | 'scrollStr' | 'nightmareSeed' | 'boglingRoot';
+type Flag = 'superSapper' | 'goblinSapper' | 'scrollAgi' | 'scrollStr' | 'petScrollAgi' | 'petScrollStr' | 'nightmareSeed' | 'boglingRoot';
 
 // Engineering items, keyed by cast spell ID. A number is a WoWSims explosive ID.
 const ENGINEERING: Record<number, { name: string; sim?: Flag | number }> = {
@@ -50,6 +50,13 @@ const SCROLLS: Record<number, { name: string; sim: Flag }> = {
   33077: { name: 'Scroll of Agility V', sim: 'scrollAgi' },
   33082: { name: 'Scroll of Strength V', sim: 'scrollStr' },
 };
+
+/** The same scrolls on a pet: read from scroll events on it, see petScrollsOn in collect.ts. */
+const PET_SCROLLS: Record<number, { name: string; sim: Flag; icon: string }> = {
+  33077: { name: 'Pet: Scroll of Agility V', sim: 'petScrollAgi', icon: 'spell_holy_blessingofagility.jpg' },
+  33082: { name: 'Pet: Scroll of Strength V', sim: 'petScrollStr', icon: 'spell_nature_strength.jpg' },
+};
+export const PET_SCROLL_IDS = Object.keys(PET_SCROLLS).map(Number);
 
 const DRUMS: Record<number, { name: string; sim: string }> = {
   35476: { name: 'Drums of Battle', sim: 'LesserDrumsOfBattle' },
@@ -108,6 +115,10 @@ const OTHER_ELIXIRS: Record<string, 'Battle Elixir' | 'Guardian Elixir'> = {
   'Elixir of the Sages': 'Battle Elixir',
 };
 
+// Elixirs whose buff is named unlike the item: buff ID -> item ID. Major Mageblood's buff is
+// "Greater Versatility" in the log.
+const ELIXIR_BUFFS: Record<number, number> = { 28509: 22840 };
+
 // Elixir buff names don't always match item names ("Major Agility" vs "Elixir of Major Agility").
 function findByBuffName(buffName: string, types: number[]) {
   // Shattrath flasks ("Pure Death of Shattrath") have the same effect as the normal flask.
@@ -121,6 +132,8 @@ function findByBuffName(buffName: string, types: number[]) {
 export interface ConsumeInput {
   buffs: { id: number; name: string; icon?: string }[];
   casts: { id: number; name: string; icon?: string }[];
+  /** Scrolls on the player's pet (buff IDs); assumed: not seen on this fight. */
+  petScrolls?: { id: number; assumed: boolean }[];
   mhTempEnchant?: number;
   ohTempEnchant?: number;
 }
@@ -138,11 +151,11 @@ export function detectConsumes(input: ConsumeInput): DetectedConsumes {
   const seen = new Set<string>();
   // The icon of the buff or cast being looked at.
   let icon: string | undefined;
-  const add = (category: ConsumeUse['category'], name: string, sim: { simId?: number; simulated?: boolean } = {}) => {
+  const add = (category: ConsumeUse['category'], name: string, sim: { simId?: number; simulated?: boolean; assumed?: boolean } = {}) => {
     const key = `${category}:${name}`;
     if (seen.has(key)) return;
     seen.add(key);
-    out.list.push({ category, name, simId: sim.simId, simulated: sim.simulated ?? sim.simId !== undefined, ...(icon ? { icon } : {}) });
+    out.list.push({ category, name, simId: sim.simId, simulated: sim.simulated ?? sim.simId !== undefined, ...(icon ? { icon } : {}), ...(sim.assumed ? { assumed: true } : {}) });
   };
 
   for (const b of input.buffs) {
@@ -151,7 +164,7 @@ export function detectConsumes(input: ConsumeInput): DetectedConsumes {
     if (flask) add('Flask', flask.name, { simId: flask.id });
     const battle = findByBuffName(b.name, [ConsumableType.BattleElixir]);
     if (battle) add('Battle Elixir', battle.name, { simId: battle.id });
-    const guardian = findByBuffName(b.name, [ConsumableType.GuardianElixir]);
+    const guardian = consumables.find((c) => c.id === ELIXIR_BUFFS[b.id]) ?? findByBuffName(b.name, [ConsumableType.GuardianElixir]);
     if (guardian) add('Guardian Elixir', guardian.name, { simId: guardian.id });
     if (b.name === 'Scourgebane Draught' || b.name === 'Scourgebane Infusion') add('Battle Elixir', b.name);
     if (OTHER_ELIXIRS[b.name] && !battle && !guardian) add(OTHER_ELIXIRS[b.name], b.name);
@@ -170,6 +183,13 @@ export function detectConsumes(input: ConsumeInput): DetectedConsumes {
       out.drums = DRUMS[b.id].sim;
     }
     if (POTIONS[b.id]) add('Potion', POTIONS[b.id].name, { simId: POTIONS[b.id].simId });
+  }
+
+  // "Other": a log often doesn't show them (see collect.ts), so one missing isn't flagged.
+  for (const s of input.petScrolls ?? []) {
+    icon = PET_SCROLLS[s.id].icon;
+    add('Other', PET_SCROLLS[s.id].name, { simulated: true, assumed: s.assumed });
+    out.flags[PET_SCROLLS[s.id].sim] = true;
   }
 
   for (const c of input.casts) {

@@ -1,7 +1,7 @@
 import type { RaidBoss, RaidSummary } from '../../../shared/types.ts';
 import { specIcon } from '../brand.ts';
 import { downloadCsv } from '../csv.ts';
-import { fmt, fmtSigned, fmtTime, itemIcon, wclReportUrl, wclUrl } from '../format.ts';
+import { fmt, fmtDate, fmtSigned, fmtTime, itemIcon, wclReportUrl, wclUrl } from '../format.ts';
 import { Hint } from './Hint.tsx';
 import { GearChips, PlayerName, classIcon, upClass } from './RaidChecks.tsx';
 import { HealerBossTable, HealerKeyNote, HealerRaidKpis } from './healer/HealerRaid.tsx';
@@ -95,6 +95,7 @@ export function RaidOverview({ raid, onOpen, onProgress, onGuild, loading }: Pro
           </h1>
           <div className="report-meta">
             <span className="pill acc">Whole raid</span>
+            {raid.startTime ? <span className="pill">{fmtDate(raid.startTime)}</span> : null}
             <span className="pill">{bosses.length} boss kills</span>
             <span className="pill">{fmt(bosses.reduce((s, b) => s + b.durationSec, 0) / 60, 1)} min on bosses</span>
           </div>

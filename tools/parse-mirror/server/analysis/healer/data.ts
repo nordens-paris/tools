@@ -32,7 +32,12 @@ export interface HealerFightData {
   healingDone: ActorTableEntry[];
   /** The boss's melee taken per player: finds the tanks. */
   meleeTaken: ActorTableEntry[];
+  /** Teron Gorefiend's Shadow of Death debuffs (empty on other fights): a ghost can't heal. */
+  shadowOfDeath?: WclEvent[];
 }
+
+const TERON = new Set([601, 50604]);
+const SHADOW_OF_DEATH = 40251;
 
 /** The event fields the healer and tank metrics read; the rest is dropped before caching. */
 export const FIELDS = [
@@ -71,7 +76,7 @@ export async function fetchHealerFight(client: WclReader, report: string, fightI
   const players = fl.friendlies.filter((a) => a.type !== 'Pet' && a.type !== 'NPC' && a.fights.some((f) => f.id === fightId));
   const [s, e] = [fight.start_time, fight.end_time];
   const range = { start: s, end: e };
-  const [healing, damage, casts, buffs, deaths, resources, combatants, healingDone, meleeTaken] = await Promise.all([
+  const [healing, damage, casts, buffs, deaths, resources, combatants, healingDone, meleeTaken, shadowOfDeath] = await Promise.all([
     client.events('healing', report, s, e, {}, FIELDS),
     client.events('damage-taken', report, s, e, {}, FIELDS),
     client.events('casts', report, s, e, {}, FIELDS),
@@ -81,6 +86,7 @@ export async function fetchHealerFight(client: WclReader, report: string, fightI
     client.combatantInfos(report, s, e),
     client.table<{ entries: ActorTableEntry[] }>('healing', report, range),
     client.table<{ entries: ActorTableEntry[] }>('damage-taken', report, { ...range, abilityid: 1 }),
+    TERON.has(fight.boss) ? client.events('debuffs', report, s, e, { abilityid: SHADOW_OF_DEATH }, FIELDS) : Promise.resolve([]),
   ]);
   return {
     report,
@@ -95,5 +101,6 @@ export async function fetchHealerFight(client: WclReader, report: string, fightI
     combatants,
     healingDone: healingDone.entries,
     meleeTaken: meleeTaken.entries,
+    shadowOfDeath,
   };
 }

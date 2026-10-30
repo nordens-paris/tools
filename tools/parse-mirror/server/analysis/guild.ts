@@ -38,6 +38,7 @@ export async function guildSummary(client: WclClient, report: string): Promise<G
   return {
     report,
     title: fights.title,
+    startTime: fights.start,
     bosses: kills.map((f) => ({ fight: f.id, encounterId: f.boss, name: f.name, durationSec: (f.end_time - f.start_time) / 1000 })),
     parties: perBoss.map((b) => ({ fight: b.fight.id, ...b.parties })),
     debuffs: raidDebuffs(kills, new Map(perBoss.map((b) => [b.fight.id, b.debuffs])), players),

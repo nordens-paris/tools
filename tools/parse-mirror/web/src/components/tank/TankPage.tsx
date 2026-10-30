@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import type { TankAnalysis, TankMetrics, TankTab } from '../../../../shared/types.ts';
-import { abilityIcon, fmt, fmtTime, wclReportUrl, wclUrl } from '../../format.ts';
+import { abilityIcon, fmt, fmtDate, fmtTime, wclReportUrl, wclUrl } from '../../format.ts';
 import { Findings } from '../Findings.tsx';
 import { Hint } from '../Hint.tsx';
 import { Kpi } from '../SummaryCards.tsx';
@@ -37,6 +37,7 @@ function TankHeader({ analysis: a, picker, onRaid }: { analysis: TankAnalysis; p
           <span className={`pill ${a.kill ? 'ok' : 'bad'}`}>
             {a.kill ? 'Kill' : 'Wipe'} · {fmtTime(a.durationSec)}
           </span>
+          {a.startTime ? <span className="pill">{fmtDate(a.startTime)}</span> : null}
           <span className="pill acc" title="Share of the enemy's melee on players that you took.">
             {ROLE[you.role]} · {pct(you.swingShare)} of {you.tanked}
           </span>

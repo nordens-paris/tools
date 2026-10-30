@@ -12,6 +12,9 @@ export const fmtSigned = (n: number, digits = 0) => {
 /** Spec names as Warcraft Logs writes them in icons ("BeastMastery"), spaced for reading. */
 export const specLabel = (specName: string) => specName.replace(/([a-z])([A-Z])/g, '$1 $2');
 
+/** A raid's date in the visitor's own format, e.g. "Tue, 16 Sep 2026". */
+export const fmtDate = (epochMs: number) => new Date(epochMs).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+
 export const fmtTime = (sec: number) => {
   const total = Math.round(sec);
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;

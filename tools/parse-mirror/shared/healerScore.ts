@@ -25,6 +25,10 @@ export interface HealerScoreInputs {
   healers: number;
   durationSec: number;
   tankShare: number;
+  /** Share of the time alive spent casting (0-1), for the held-back check (missing on older kills). */
+  activity?: number;
+  /** Seconds as Teron's ghost, for the held-back check (missing on older kills). */
+  ghostSec?: number;
 }
 
 export interface HealerScoreRef {
@@ -47,7 +51,7 @@ export interface HealerScoreRef {
    * The context fit doesn't take out what's particular to a fight (Council is easy to look good
    * on, Reliquary hard), so each part is moved by this much to put every boss on the same scale.
    */
-  bosses: Record<string, { name: string; kills: number; offset: Partial<Record<ScoreMetric, number>>; split: number }>;
+  bosses: Record<string, { name: string; kills: number; offset: Partial<Record<ScoreMetric, number>>; split: number; heldBack?: number }>;
 }
 
 export interface HealerScore {
@@ -79,6 +83,8 @@ export function scoreInputs(m: HealerMetrics): HealerScoreInputs {
     healers: m.context.raidHealers,
     durationSec: m.durationSec,
     tankShare: m.tankShare,
+    activity: m.activity,
+    ...(m.ghostSec ? { ghostSec: m.ghostSec } : {}),
   };
 }
 
@@ -162,4 +168,97 @@ export function healingSplit(healers: { name: string; spec: string; hps: number 
   const spread = shares[0].share / shares[shares.length - 1].share;
   const threshold = encounterId !== undefined ? ref.bosses?.[encounterId]?.split : undefined;
   return { shares, spread, threshold, uneven: threshold !== undefined && spread > threshold };
+}
+
+/** Each healer's share of the fight's healing, times the healer count, over their spec's usual. */
+export function healingShares(healers: { name: string; inputs: HealerScoreInputs }[], ref: HealerScoreRef): Map<string, number> {
+  const known = healers.filter((h) => ref.specs[h.inputs.spec]);
+  const total = known.reduce((sum, h) => sum + (h.inputs.values.hps ?? 0), 0);
+  return new Map(known.map((h) => [h.name, total ? (((h.inputs.values.hps ?? 0) / total) * known.length) / ref.specs[h.inputs.spec].share : 0]));
+}
+
+/**
+ * A healer who held back on a fight (kills and wipes): healers taking turns doing less so another
+ * gets a high healing parse. Two ways, both on a fight of a minute or more where the healer's score
+ * (against the pool, corrected for the boss) is 35 or lower:
+ *   share: their share of the healing was at most 0.6 of their usual share that night (or the
+ *     pool's lowest 3% on the boss, if lower: Teron's ghosts and Reliquary's phases make low shares
+ *     normal there), or at most 0.7 with a score of 15 or lower.
+ *   idle: 25 points more idle while someone was low than the fight's other healers, and 20 points
+ *     less time casting.
+ *   boost: another healer did 1.6 times their usual share or more, while this one did at most 0.8
+ *     of theirs and was 15 points more idle than they usually are (a healer who is always idle, or
+ *     always low on the boss, isn't flagged by this).
+ * A healer who was Teron's ghost for a fifth of the fight or more isn't judged.
+ * Checked against the officers' list for two raids and against the pool's raids. See
+ * docs/healer-score.md.
+ */
+export interface HeldBack {
+  name: string;
+  why: 'share' | 'idle' | 'boost';
+  share: number;
+  usual?: number;
+  /** idle: against the fight's other healers; boost: against the healer's own usual idle. */
+  idleVs?: number;
+  activityVs?: number;
+  /** boost: the healer who got the healing, and their share over their usual. */
+  boosted?: { name: string; rel: number };
+}
+
+const middle = (xs: number[]) => {
+  const s = [...xs].sort((a, b) => a - b);
+  return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : undefined;
+};
+
+export function heldBack(
+  fight: { encounterId: number; healers: { name: string; inputs: HealerScoreInputs }[] },
+  usual: (name: string) => number | undefined,
+  ref: HealerScoreRef,
+  usualIdleOf: (name: string) => number | undefined = () => undefined,
+): HeldBack[] {
+  const shares = healingShares(fight.healers, ref);
+  const rels = fight.healers.map((h) => ({ name: h.name, rel: (shares.get(h.name) ?? 0) / (usual(h.name) ?? Infinity) }));
+  const out: HeldBack[] = [];
+  for (const h of fight.healers) {
+    const score = healerScore(h.inputs, ref, fight.encounterId)?.score;
+    const share = shares.get(h.name);
+    if (h.inputs.durationSec < 60 || score === undefined || score > 35 || share === undefined) continue;
+    if ((h.inputs.ghostSec ?? 0) >= 0.2 * h.inputs.durationSec) continue;
+    const u = usual(h.name);
+    const limit = Math.min(0.6, ref.bosses?.[fight.encounterId]?.heldBack ?? 0.6);
+    if (u && (share / u <= limit || (score <= 15 && share / u <= 0.7))) {
+      out.push({ name: h.name, why: 'share', share, usual: u });
+      continue;
+    }
+    const others = fight.healers.filter((o) => o.name !== h.name);
+    const idleMid = middle(others.map((o) => o.inputs.values.idle).filter((v): v is number => v !== undefined));
+    const actMid = middle(others.map((o) => o.inputs.activity).filter((v): v is number => v !== undefined));
+    const idle = h.inputs.values.idle, act = h.inputs.activity;
+    if (idle === undefined || act === undefined || idleMid === undefined || actMid === undefined) continue;
+    if (idle - idleMid >= 0.25 && act - actMid <= -0.2) {
+      out.push({ name: h.name, why: 'idle', share, idleVs: idle - idleMid, activityVs: act - actMid });
+      continue;
+    }
+    const boosted = rels.filter((o) => o.name !== h.name).sort((a, b) => b.rel - a.rel)[0];
+    const ownIdle = usualIdleOf(h.name);
+    if (u && boosted && boosted.rel >= 1.6 && share / u <= 0.8 && ownIdle !== undefined && idle - ownIdle >= 0.15) {
+      out.push({ name: h.name, why: 'boost', share, usual: u, idleVs: idle - ownIdle, boosted });
+    }
+  }
+  return out;
+}
+
+/**
+ * A healer's usual share: the middle of their shares on other kills (at least 3), or undefined.
+ * Kills where they did under 5% of the healing (minor) don't count: they weren't healing there.
+ */
+export function usualShare(kills: { name: string; minor?: boolean; inputs: HealerScoreInputs }[][], name: string, ref: HealerScoreRef): number | undefined {
+  const xs = kills.map((k) => (k.some((h) => h.name === name && !h.minor) ? healingShares(k, ref).get(name) : undefined)).filter((v): v is number => v !== undefined);
+  return xs.length >= 3 ? middle(xs) : undefined;
+}
+
+/** A healer's usual idle while someone was low: the middle over other kills (at least 3), as for usualShare. */
+export function usualIdle(kills: { name: string; minor?: boolean; inputs: HealerScoreInputs }[][], name: string): number | undefined {
+  const xs = kills.map((k) => k.find((h) => h.name === name && !h.minor)?.inputs.values.idle).filter((v): v is number => v !== undefined);
+  return xs.length >= 3 ? middle(xs) : undefined;
 }
