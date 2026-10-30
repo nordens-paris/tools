@@ -145,6 +145,10 @@ async function shots(page: Page) {
   log('Healer: Holy Paladin on Bloodboil');
   await open(HEALER);
   await page.waitForSelector('.kpis', { timeout: 300_000 });
+  // The healer score's 4-week column: find the kills and score them.
+  await page.waitForFunction(() => !document.body.innerText.includes('Finding your kills') && !document.body.innerText.includes('Looking up your ranked kills'), { timeout: 120_000 });
+  await click('more kill');
+  await page.waitForFunction(() => !document.body.innerText.includes('Fetching kills') && !/Score \d+ more kill/.test(document.body.innerText), { timeout: 300_000 });
   await view('21-healer.png', 1400);
   await tab('Mana');
   await panel('22-healer-mana.png', 'Mana over the kill');
