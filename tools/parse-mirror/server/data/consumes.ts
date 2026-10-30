@@ -38,12 +38,12 @@ const OTHER_CASTS: Record<string, { name: string; conjuredId?: number; flag?: Fl
   'Flame Cap': { name: 'Flame Cap', conjuredId: 22788 },
   'Nightmare Seed': { name: 'Nightmare Seed', flag: 'nightmareSeed' },
   'Fury of the Bogling': { name: 'Bogling Root', flag: 'boglingRoot' },
-  'Dire Drunkard': { name: 'Alcohol (Dire Drunkard)' },
   // Same mana and shared cooldown; WoWSims only has the Demonic Rune.
   'Dark Rune': { name: 'Dark Rune', conjuredId: 12662 },
   'Demonic Rune': { name: 'Demonic Rune', conjuredId: 12662 },
-  // Not here: "Dark Iron Pipeweed" and "Hopped Up" are the on-use buffs of the trinkets Dark Iron
-  // Smoking Pipe and Direbrew Hops, which WoWSims sims from the player's gear.
+  // Not here: "Dark Iron Pipeweed", "Hopped Up" and "Dire Drunkard" are the on-use buffs of the
+  // trinkets Dark Iron Smoking Pipe, Direbrew Hops and Empty Mug of Direbrew, which WoWSims sims
+  // from the player's gear.
 };
 
 const SCROLLS: Record<number, { name: string; sim: Flag }> = {
@@ -168,7 +168,7 @@ export function detectConsumes(input: ConsumeInput): DetectedConsumes {
     if (guardian) add('Guardian Elixir', guardian.name, { simId: guardian.id });
     if (b.name === 'Scourgebane Draught' || b.name === 'Scourgebane Infusion') add('Battle Elixir', b.name);
     if (OTHER_ELIXIRS[b.name] && !battle && !guardian) add(OTHER_ELIXIRS[b.name], b.name);
-    if (/Stout|Brew|Ale|Drunk/.test(b.name) && !/Drums/.test(b.name)) add('Other', `Alcohol (${b.name})`);
+    if (/Stout|Brew|Ale|Drunk/.test(b.name) && !/Drums/.test(b.name) && b.name !== 'Dire Drunkard') add('Other', `Alcohol (${b.name})`);
 
     if (b.name === 'Well Fed') {
       const food = WELL_FED[b.id];

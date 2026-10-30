@@ -20,7 +20,7 @@ const STATUS: Record<Status, { label: string; pill: string }> = {
   none: { label: '—', pill: '' },
 };
 const ORDER: Status[] = ['missing', 'elixirs', 'different', 'same', 'extra', 'none'];
-// Every alcohol (Kreeg's Stout Beatdown, Dire Drunkard...) shares one row.
+// Every alcohol (Kreeg's Stout Beatdown...) shares one row.
 const otherKey = (name: string) => (name.startsWith('Alcohol') ? 'Alcohol' : name);
 
 /** Consumables per category: yours vs what the group you're compared with used, differences first. */
@@ -168,7 +168,7 @@ function Matrix({ analysis, categories }: { analysis: AnalysisResult; categories
         </thead>
         <tbody>
           {categories.map((cat) => {
-            const usesOf = (p: (typeof players)[number]) => p.consumes.filter((c) => c.category === cat || (c.category === 'Other' && c.name === cat));
+            const usesOf = (p: (typeof players)[number]) => p.consumes.filter((c) => c.category === cat || (c.category === 'Other' && otherKey(c.name) === cat));
             const count = analysis.top.filter((p) => usesOf(p).length).length;
             return (
               <tr key={cat}>
