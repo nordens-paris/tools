@@ -9,6 +9,13 @@ version udgives under
 [Releases](https://github.com/nordens-paris/tools/releases?q=parse-mirror&expanded=true); de er
 markeret med **Windows-pakke** her.
 
+## v0.3.3 (30. oktober 2026)
+
+### Forbedret
+
+- **Skærmbillederne i README'en** er taget igen, så de viser raidets dato, healer score over fire
+  uger og wipes under **Show healers**.
+
 ## v0.3.2 (30. oktober 2026) · Windows-pakke
 
 ### Forbedret
