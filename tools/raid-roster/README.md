@@ -48,7 +48,7 @@ Under tjeklisten øverst er et felt til **officer-noter for ugen** (fx "vores of
 
 - **Add raid day** tilføjer en dato i ugen; **Remove** fjerner dagen og tømmer de raids, der lå på den (to klik).
 - Hver dag viser, hvor mange der er tilgængelige, fordelt på tanks, healere, melee og ranged. Tallet efter **+** er dem, der kan tage rollen som off-spec. Mærkerne viser, hvilke raids der ligger på dagen, og hvor mange der er tentative, late, bench eller absent.
-- **Import signups:** indsæt event-linket → **Open event data** → Ctrl+A, Ctrl+C på den side → indsæt i feltet → **Import signups**. Spillere oprettes automatisk ud fra Discord-tilmeldingen, med main- og off-spec. Ligger eventet på en anden dato end dagen, siger værktøjet til.
+- **Import signups:** indsæt event-linket → **Open event data** → Ctrl+A, Ctrl+C på den side → indsæt i feltet → **Import signups**. Spillere oprettes automatisk ud fra Discord-tilmeldingen, med main- og off-spec. Skabeloner, der kun viser Tank, Melee, Ranged og Healer (fx `wowforever`), virker også: klassen findes ud fra spec'en. Ligger eventet på en anden dato end dagen, siger værktøjet til.
 - **Import all days:** indsæt flere events efter hinanden. Hvert event lægges på dagen med samme dato; mangler dagen i ugen, oprettes den. Events uden for ugen springes over.
 - **Re-import signups** henter nye tilmeldinger. Ændrer det noget for et roster, der allerede er lavet, viser raidet det (se "Ændrede tilmeldinger" nedenfor).
 

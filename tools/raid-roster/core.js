@@ -18,8 +18,10 @@ const SPEC_SHORT = {
   Marksmanship: 'MM', Survival: 'Surv', Affliction: 'Affli', Demonology: 'Demo', Destruction: 'Destro', Assassination: 'Assa',
   Subtlety: 'Sub', Discipline: 'Disc', Balance: 'Boomkin', Guardian: 'Bear', Dreamstate: 'Dream',
 };
-// Raid-Helper puts all tanks under a "Tank" class and tells them apart by spec.
-const TANK_SPEC_CLASS = { Protection: 'Warrior', Protection1: 'Paladin', Guardian: 'Druid' };
+// Raid-Helper puts all tanks under a "Tank" class, and some templates (wowforever) replace every class
+// with Tank, Melee, Ranged or Healer, so the spec tells the class. A spec two classes share has a 1 on the second.
+const SPEC_CLASS = { Protection: 'Warrior', Protection1: 'Paladin', Holy: 'Priest', Holy1: 'Paladin', Restoration: 'Druid', Restoration1: 'Shaman' };
+for (const [c, specs] of Object.entries(CLASSES)) for (const s of Object.keys(specs)) if (!(s in SPEC_CLASS)) SPEC_CLASS[s] = c;
 const STATUS_ORDER = ['yes', 'late', 'tentative', 'bench', 'absence'];
 // Spec spread groups: every spec on its own, except these classes where all specs count as one.
 const ONE_GROUP_CLASSES = new Set(['Mage', 'Warlock', 'Hunter', 'Rogue']);
@@ -138,8 +140,8 @@ function parseRaidHelper(text) {
     const rawSpec2 = x.spec2 ?? '';
     let st = 'yes';
     const lc = String(cls).toLowerCase();
-    if (['late', 'bench', 'tentative', 'absence'].includes(lc)) { st = lc; cls = ''; }
-    if (cls === 'Tank') cls = TANK_SPEC_CLASS[rawSpec] || '';
+    if (['late', 'bench', 'tentative', 'absence'].includes(lc)) st = lc;
+    if (!CLASSES[cls]) cls = SPEC_CLASS[rawSpec] || '';
     const opts = [];
     if (cls && CLASSES[cls]) {
       const s = normSpec(rawSpec);
