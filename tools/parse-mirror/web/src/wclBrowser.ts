@@ -2,11 +2,12 @@
 // (CORS), so healer and tank pages skip the server: on the hosted site it has a tenth of a CPU core,
 // and unpacking and analysing one kill took it 2-3 s, against well under 0.1 s here.
 // What the healer and tank analyses need (server/wcl/reader.ts). Fight lists and rankings are kept
-// in memory for this page load; report data isn't (the analysed kills of the healer score are kept
-// in IndexedDB, healerHistory.ts).
+// in memory for this page load; report data is also kept between visits (wclStore.ts), as a report's
+// fights don't change, so reopening a kill doesn't spend the visitor's key again.
 import type { WclReader } from '../../server/wcl/reader.ts';
 import type { WclCombatantInfo, WclEvent, WclFightsResponse, WclParse, WclRaidRankingsResponse, WclRankingsResponse, WclTableAuras } from '../../server/wcl/types.ts';
 import { game } from './game.ts';
+import { readStored, writeStored } from './wclStore.ts';
 
 /** Requests at once. The key's per-minute window (about 800) still applies. */
 const MAX_CONCURRENT = 6;
@@ -14,6 +15,8 @@ const MAX_CONCURRENT = 6;
 const KEPT_MAX = 400;
 /** Longest Retry-After worth waiting out; longer, and the fetch fails with a message. */
 const MAX_RETRY_WAIT_MS = 20_000;
+/** A report this recent may still be logging (as on the server). */
+const LIVE_REPORT_MS = 12 * 60 * 60 * 1000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -78,11 +81,22 @@ export class BrowserWcl implements WclReader {
 
   fights(report: string) {
     if (!this.fightLists.has(report)) {
-      const list = this.get<WclFightsResponse>(`report/fights/${report}`);
+      const list = this.finishedFights(report);
       list.catch(() => this.fightLists.delete(report));
       this.fightLists.set(report, list);
     }
     return this.fightLists.get(report)!;
+  }
+
+  /** A fight list is kept between visits once the report is too old to still be logging. */
+  private async finishedFights(report: string) {
+    const key = `${this.host}/report/fights/${report}`;
+    const old = (list: WclFightsResponse) => !!list.end && Date.now() - list.end > LIVE_REPORT_MS;
+    const hit = await readStored<WclFightsResponse>(key);
+    if (hit && old(hit)) return hit;
+    const list = await this.get<WclFightsResponse>(`report/fights/${report}`);
+    if (old(list)) void writeStored(key, list);
+    return list;
   }
 
   private remember<T>(key: string, fetch: () => Promise<T>): Promise<T> {
@@ -95,13 +109,26 @@ export class BrowserWcl implements WclReader {
     return this.keptData.get(key) as Promise<T>;
   }
 
+  /** Report data: also kept between visits. */
+  private stored<T>(key: string, fetch: () => Promise<T>): Promise<T> {
+    return this.remember(key, async () => {
+      const full = `${this.host}/${key}`;
+      const hit = await readStored<T>(full);
+      if (hit !== undefined) return hit;
+      const value = await fetch();
+      void writeStored(full, value);
+      return value;
+    });
+  }
+
   private kept<T>(endpoint: string, params: Record<string, string | number>): Promise<T> {
     const key = `${endpoint}?${new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]))}`;
     return this.remember(key, () => this.get<T>(endpoint, params));
   }
 
   table<T>(view: string, report: string, params: Record<string, string | number>) {
-    return this.kept<T>(`report/tables/${view}/${report}`, params);
+    const endpoint = `report/tables/${view}/${report}`;
+    return this.stored<T>(`${endpoint}?${new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]))}`, () => this.get<T>(endpoint, params));
   }
 
   buffs(report: string, start: number, end: number, sourceId: number) {
@@ -131,7 +158,7 @@ export class BrowserWcl implements WclReader {
   async events(view: string, report: string, start: number, end: number, params: Record<string, string | number>, fields?: readonly string[]) {
     const key = `events/${view}/${report}?${start}-${end}&${JSON.stringify(params)}&${fields?.join(',') ?? ''}`;
     // A copy, so a caller sorting or filtering in place can't change what the next one gets.
-    return (await this.remember(key, () => this.allEvents(view, report, start, end, params, fields))).slice();
+    return (await this.stored(key, () => this.allEvents(view, report, start, end, params, fields))).slice();
   }
 
   private async allEvents(view: string, report: string, start: number, end: number, params: Record<string, string | number>, fields?: readonly string[]) {
@@ -139,7 +166,7 @@ export class BrowserWcl implements WclReader {
     let from = start;
     for (let page = 0; page < 50; page++) {
       const res = await this.get<{ events: WclEvent[]; nextPageTimestamp?: number }>(`report/events/${view}/${report}`, { start: from, end, ...params });
-      for (const e of res.events) events.push(fields ? (Object.fromEntries(fields.filter((f) => f in e).map((f) => [f, e[f]])) as WclEvent) : e);
+      for (const e of res.events) events.push(fields && e.type !== 'combatantinfo' ? (Object.fromEntries(fields.filter((f) => f in e).map((f) => [f, e[f]])) as WclEvent) : e);
       if (!res.nextPageTimestamp || res.nextPageTimestamp >= end) break;
       from = res.nextPageTimestamp;
     }

@@ -17,13 +17,12 @@ export async function guildSummary(client: WclClient, report: string): Promise<G
 
   const perBoss = await Promise.all(
     kills.map(async (f) => {
-      const [damage, infos, extra] = await Promise.all([
+      const [damage, extra] = await Promise.all([
         client.table('damage-done', report, { start: f.start_time, end: f.end_time }),
-        client.combatantInfos(report, f.start_time, f.end_time),
         fetchRaidEvents(client, report, f),
       ]);
       const inFight = players.filter((p) => p.fights.some((x) => x.id === f.id));
-      return { fight: f, damage, infos, ...extra, parties: partiesOf(inFight, infos, extra.events) };
+      return { fight: f, damage, ...extra, parties: partiesOf(inFight, extra.infos, extra.events) };
     }),
   );
   // Gear is checked on each player's latest kill.

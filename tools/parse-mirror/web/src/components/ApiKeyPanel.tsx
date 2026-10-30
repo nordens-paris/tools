@@ -88,7 +88,7 @@ export function ApiKeyPanel() {
             <span className="pill">{quota ? `${quota.requestsLastHour} requests in the last hour` : '…'}</span>
           </div>
           <p className="muted small">
-            {saved ? 'Using your own key.' : 'Using the guild’s shared key.'} Warcraft Logs allows each key about 3,600 points an hour. If the tool slows down or you want to look
+            {saved ? 'Using your own key.' : 'Using the guild’s shared key.'} Warcraft Logs allows each key 1,000 or 3,600 requests an hour (new keys get 1,000). If the tool slows down or you want to look
             through a lot of logs, use your own v1 client key from your{' '}
             <a href={profileUrl()} target="_blank" rel="noreferrer">
               Warcraft Logs profile

@@ -87,16 +87,17 @@ const RUNES = [27869, 16666];
 /** Two calls per kill: boss debuffs, and drums/Vampiric Touch mana/potion events. */
 export async function fetchRaidEvents(client: WclClient, report: string, f: WclFight) {
   const ids = (xs: number[]) => xs.join(', ');
-  const [debuffs, events] = await Promise.all([
+  const [debuffs, all] = await Promise.all([
     client.bossDebuffs(report, f.start_time, f.end_time),
     // Pre-pull potions are drunk a second or two before the pull.
     client.events('summary', report, f.start_time - 5000, f.end_time, {
       filter:
-        `(type = "cast" and ability.id in (${ids([...POTIONS, ...RUNES, ...DRUMS])})) or ` +
+        `type = "combatantinfo" or (type = "cast" and ability.id in (${ids([...POTIONS, ...RUNES, ...DRUMS])})) or ` +
         `(type in ("applybuff", "resourcechange") and ability.id in (${ids([...DRUMS, VAMPIRIC_TOUCH_MANA])}))`,
     }),
   ]);
-  return { debuffs, events };
+  const infos = all.filter((e) => e.type === 'combatantinfo' && e.timestamp >= f.start_time && e.timestamp <= f.start_time + 1000) as unknown as Info[];
+  return { debuffs, infos, events: all.filter((e) => e.type !== 'combatantinfo') };
 }
 
 /** Potions and runes each player used on the kill. */

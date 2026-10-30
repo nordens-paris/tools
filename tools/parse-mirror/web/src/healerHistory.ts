@@ -14,7 +14,7 @@ import { browserClient } from './wclBrowser.ts';
 export const scoreRef = ref as HealerScoreRef;
 
 /** About this many requests per kill, for the button. */
-export const REQUESTS_PER_KILL = 10;
+export const REQUESTS_PER_KILL = 8;
 // Kills at once. With the visitor's key they're fetched and analysed here (wclBrowser.ts); without
 // one (a local server on its own key) the server does it.
 const PARALLEL = 3;

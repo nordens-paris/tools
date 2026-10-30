@@ -6,6 +6,7 @@ import { raidSummary, roleAnalysisHere } from './roles.ts';
 import { KEY_CHANGED, openKeyForm } from './apiKey.ts';
 import { runBrowserSims } from './browserSims.ts';
 import { game } from './game.ts';
+import { version } from '../../package.json';
 import { APP_NAME, GUILD_NAME } from './brand.ts';
 import { ApiKeyPanel } from './components/ApiKeyPanel.tsx';
 import { BossPicker } from './components/BossPicker.tsx';
@@ -422,7 +423,7 @@ export function App() {
       </main>
 
       <footer className="foot">
-        {GUILD_NAME} · Data from Warcraft Logs · Talents from Classic Armory · Sims by WoWSims (MIT) · Tooltips by Wowhead
+        {GUILD_NAME} · Data from Warcraft Logs · Talents from Classic Armory · Sims by WoWSims (MIT) · Tooltips by Wowhead · v{version}
       </footer>
     </>
   );

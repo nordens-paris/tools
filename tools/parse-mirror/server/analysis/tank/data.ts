@@ -46,7 +46,7 @@ export async function fetchTankFight(client: WclReader, report: string, fightId:
 }
 
 /**
- * A peer tank's fight, about 8 requests: only their own damage taken, damage done, casts, buffs
+ * A peer tank's fight, about 7 requests: only their own damage taken, damage done, casts, buffs
  * and debuffs, plus deaths and combatant info (no raid-wide healing or buffs).
  */
 export async function fetchTankFightLite(client: WclReader, report: string, fightId: number, name: string): Promise<TankFightData> {
@@ -57,17 +57,19 @@ export async function fetchTankFightLite(client: WclReader, report: string, figh
   if (!tank) throw new Error(`${name} not found in report ${report}`);
   const [s, e] = [fight.start_time, fight.end_time];
   const range = { start: s, end: e };
-  const [taken, done, casts, deaths, combatants, buffs, bossDebuffs, melee] = await Promise.all([
+  const [taken, done, log, deaths, buffs, bossDebuffs, melee] = await Promise.all([
     client.events('damage-taken', report, s, e, { sourceid: tank.id }, FIELDS),
     client.events('damage-done', report, s, e, { sourceid: tank.id }, FIELDS),
-    client.events('casts', report, s, e, { sourceid: tank.id }, FIELDS),
+    // Casts and combatant info in one request; by name, as source.id doesn't work in a filter.
+    client.events('summary', report, s, e, { filter: `type="combatantinfo" or (source.name="${tank.name.replace(/"/g, '\\"')}" and type in ("cast", "begincast"))` }, FIELDS),
     client.events('deaths', report, s, e, {}, FIELDS),
-    client.combatantInfos(report, s, e),
     client.buffs(report, s, e, tank.id),
     client.bossDebuffs(report, s, e, tank.name),
     client.table<{ entries: (ActorTableEntry & { sources?: { name: string; total: number; type: string }[] })[] }>('damage-taken', report, { ...range, abilityid: 1 }),
   ]);
   const players = fl.friendlies.filter((a) => a.type !== 'Pet' && a.type !== 'NPC' && a.fights.some((f) => f.id === fightId));
+  const casts = log.filter((x) => (x.type === 'cast' || x.type === 'begincast') && x.sourceID === tank.id && x.ability?.guid !== 1);
+  const combatants = log.filter((x) => x.type === 'combatantinfo' && x.timestamp <= s + 1000) as unknown as HealerFightData['combatants'];
   const raid: HealerFightData = {
     report,
     fight,

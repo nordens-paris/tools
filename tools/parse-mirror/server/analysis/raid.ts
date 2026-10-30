@@ -52,15 +52,14 @@ export async function raidSummary(client: WclClient, report: string, source: num
     parsesFor(client, actor.name, actor.server, fights.zone).then((r) => r.parses),
     Promise.all(
       kills.map(async (f) => {
-        const [damage, infos, extra, rankings, roleRows] = await Promise.all([
+        const [damage, extra, rankings, roleRows] = await Promise.all([
           client.table('damage-done', report, { start: f.start_time, end: f.end_time }),
-          client.combatantInfos(report, f.start_time, f.end_time),
           fetchRaidEvents(client, report, f),
           spec ? client.rankings(f.boss, spec.wcl.classId, spec.wcl.specId).catch(() => undefined) : undefined,
           here ? roleRowsOn(client, report, f.id, source, fights, can) : undefined,
         ]);
         const inFight = players.filter((p) => p.fights.some((x) => x.id === f.id));
-        return { fight: f, damage, infos, ...extra, rankings, inFight, parties: partiesOf(inFight, infos, extra.events), roleRows };
+        return { fight: f, damage, ...extra, rankings, inFight, parties: partiesOf(inFight, extra.infos, extra.events), roleRows };
       }),
     ),
   ]);

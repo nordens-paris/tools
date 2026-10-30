@@ -7,7 +7,7 @@ import { talentRank } from '../data/talents.ts';
 import { closestTalentPreset } from '../sim/request.ts';
 import { castLabel, type SpecConfig } from '../specs/types.ts';
 import type { WclClient } from '../wcl/client.ts';
-import type { WclAura, WclCombatantInfo, WclEvent, WclFight, WclFightsResponse, WclTableEntry } from '../wcl/types.ts';
+import type { WclActor, WclAura, WclCombatantInfo, WclEvent, WclFight, WclFightsResponse, WclTableEntry } from '../wcl/types.ts';
 
 // Warcraft Logs gear array index -> slot name. Shirt (3) and tabard (18) are skipped.
 export const WCL_SLOTS: Record<number, string> = {
@@ -162,19 +162,18 @@ async function partyMembers(
   source: number,
   auras: WclAura[],
   infos: (WclCombatantInfo & { sourceID: number })[],
+  events: WclEvent[],
 ): Promise<Set<number>> {
   const members = new Set<number>([source]);
   // Drums and Vampiric Touch mana only reach the user's party, so who got the same drum (at the
-  // same moment) or mana from the same shadow priest shares the player's party. One call covers both.
-  const events = await client.events('summary', report, start, end, {
-    filter: `type in ("applybuff", "resourcechange") and ability.id in (${[...PARTY_EVENT_SPELLS].join(', ')})`,
-  });
+  // same moment) or mana from the same shadow priest shares the player's party.
   const groups: Set<number>[] = [];
   const vtGroups = new Map<number, Set<number>>();
   // Each drum use reaches its party within a few milliseconds; a gap starts the next use.
   const lastDrum = new Map<number, { at: number; group: Set<number> }>();
   for (const e of [...events].sort((a, b) => a.timestamp - b.timestamp)) {
-    if (e.sourceID === undefined || e.targetID === undefined || !e.ability || !PARTY_EVENT_SPELLS.has(e.ability.guid)) continue;
+    if (e.type !== 'applybuff' && e.type !== 'resourcechange') continue;
+    if (e.timestamp < start || e.sourceID === undefined || e.targetID === undefined || !e.ability || !PARTY_EVENT_SPELLS.has(e.ability.guid)) continue;
     let group: Set<number>;
     if (e.ability.guid === VAMPIRIC_TOUCH_MANA) {
       group = vtGroups.get(e.sourceID) ?? new Set([e.sourceID]);
@@ -204,17 +203,15 @@ async function partyMembers(
   return members;
 }
 
-async function partyTotems(
-  client: WclClient,
+function partyTotems(
   fights: WclFightsResponse,
-  report: string,
   fight: WclFight,
   caster: boolean,
   party: Set<number>,
   source: number,
   rule: SpecConfig['totems'],
-): Promise<AuraUptime[]> {
-  const { start_time: start, end_time: end } = fight;
+  events: WclEvent[],
+): AuraUptime[] {
   // A shaman's own totems are part of their own rotation (the sim drops them), not a party buff.
   const inRaid = fights.friendlies.filter((a) => a.id !== source && a.icon.startsWith('Shaman') && a.fights.some((f) => f.id === fight.id));
   // With no party-wide aura to go by, the party can't be worked out; any shaman in the raid could be
@@ -229,8 +226,7 @@ async function partyTotems(
       totems.set(t.name, { id: t.id, name: t.name, icon: t.icon, uptimePct: 100, uses: 0, fromPartyShaman: true, assumed: true });
     }
     if (unknownParty || !party.has(shaman.id)) continue;
-    const casts = await client.events('casts', report, start - 120_000, end, { sourceid: shaman.id });
-    for (const e of casts) {
+    for (const e of events) {
       const name = e.ability && e.type === 'cast' && e.sourceID === shaman.id ? TOTEM_BUFFS[spellName(e.ability.guid, e.ability.name)] : undefined;
       if (!name) continue;
       const t = totems.get(name);
@@ -413,6 +409,24 @@ function petsOf(
  * as not attacking, as it does in WoWSims.
  */
 const SCROLL_MS = 30 * 60_000;
+// Totems are dropped before the pull.
+const TOTEM_LEAD_MS = 120_000;
+
+/**
+ * One request for what would take several: everyone's combatant info, the player's casts, the raid's
+ * shaman totems and the drum and Vampiric Touch events that show the party. Filtered by name, as
+ * source.id doesn't work in a filter. Damage isn't in here: this view lacks some hits.
+ */
+function fightEventsFilter(name: string, givers: WclActor[]) {
+  const quoted = (n: string) => `"${n.replace(/"/g, '\\"')}"`;
+  const shamans = givers.filter((a) => a.icon.startsWith('Shaman')).map((a) => quoted(a.name));
+  return [
+    'type="combatantinfo"',
+    `(source.name=${quoted(name)} and type in ("cast", "begincast"))`,
+    ...(shamans.length ? [`(source.name in (${shamans.join(', ')}) and type="cast")`] : []),
+    ...(givers.length ? [`(type in ("applybuff", "resourcechange") and ability.id in (${[...PARTY_EVENT_SPELLS].join(', ')}))`] : []),
+  ].join(' or ');
+}
 
 /**
  * Scrolls on a hunter's pet at the pull. Pets have no combatant info, so a scroll only shows through
@@ -434,8 +448,8 @@ async function petScrollsOn(client: WclClient, report: string, fights: WclFights
   });
 }
 
-async function petUptimePct(client: WclClient, report: string, start: number, end: number, pet: number): Promise<number | undefined> {
-  const hits = (await client.events('damage-done', report, start, end, { sourceid: pet }, ['timestamp', 'type', 'sourceID']))
+function petUptimePct(damageEvents: WclEvent[], start: number, end: number, pet: number): number | undefined {
+  const hits = damageEvents
     .filter((e) => e.type === 'damage' && e.sourceID === pet)
     .map((e) => e.timestamp);
   if (hits.length < 3) return undefined;
@@ -474,23 +488,29 @@ export async function collectPlayerFight(
   const durationSec = durationMs / 1000;
   const minutes = durationSec / 60;
 
-  const [infos, damage, buffsTable, bossDebuffsTable, castEvents, executeHits, ownDebuffsTable, damageEvents, byTarget, taken] = await Promise.all([
-    client.combatantInfos(report, start, end),
+  // The player's party matters for totems and a shadow priest's Vampiric Touch mana; only worth
+  // working out when the raid has someone who gives those.
+  const givers = fights.friendlies.filter(
+    (a) => a.id !== source && (a.icon.startsWith('Shaman') || a.icon === 'Priest-Shadow') && a.fights.some((f) => f.id === fightId),
+  );
+  const [logEvents, damage, buffsTable, bossDebuffsTable, ownDebuffsTable, damageEvents, taken] = await Promise.all([
+    client.events('summary', report, start - TOTEM_LEAD_MS, end, { filter: fightEventsFilter(actor.name, givers) }),
     client.table('damage-done', report, { start, end, sourceid: source }),
     client.buffs(report, start, end, source),
     client.bossDebuffs(report, start, end),
-    client.events('casts', report, start, end, { sourceid: source }),
-    spec.executeSpellId
-      ? client.events('damage-done', report, start, end, { sourceid: source, abilityid: spec.executeSpellId })
-      : Promise.resolve([]),
     spec.debuffUptimes || spec.sim.selfProvided ? client.bossDebuffs(report, start, end, actor.name) : Promise.resolve(undefined),
-    // Casters: partial resists and which hits had Improved Shadow Bolt are only in the events.
-    spec.caster ? client.events('damage-done', report, start, end, { sourceid: source }) : Promise.resolve([]),
-    // The sim has one target; damage on adds doesn't count when comparing with it.
-    client.table<{ entries: { total: number; type?: string }[] }>('damage-done', report, { start, end, sourceid: source, by: 'target' }),
+    // The player's and their pets' hits: resists, Improved Shadow Bolt, execute range, pet uptime
+    // and damage on the boss are all read from these.
+    client.events('damage-done', report, start, end, { sourceid: source }),
     spec.rageFromDamageTaken ? client.table('damage-taken', report, { start, end, sourceid: source }) : Promise.resolve(undefined),
   ]);
+  const infos = logEvents.filter((e) => e.type === 'combatantinfo' && e.timestamp >= start && e.timestamp <= start + 1000) as unknown as (WclCombatantInfo & { sourceID: number })[];
+  // The combined request also has melee swings, which the casts view leaves out.
+  const castEvents = logEvents.filter((e) => e.sourceID === source && (e.type === 'cast' || e.type === 'begincast') && e.timestamp >= start && e.ability?.guid !== 1);
+  const executeHits = spec.executeSpellId ? damageEvents.filter((e) => e.ability?.guid === spec.executeSpellId) : [];
   const combatant = infos.find((i) => i.sourceID === source);
+  // Casters: partial resists and which hits had Improved Shadow Bolt are only in the events.
+  const casterHits = spec.caster ? damageEvents : [];
   const resistedBySpell = new Map<number, number>();
   for (const e of damageEvents) {
     if (e.sourceID !== source || !e.ability || e.tick || typeof e.amount !== 'number') continue;
@@ -511,7 +531,7 @@ export async function collectPlayerFight(
     const resisted = resistedBySpell.get(e.guid) ?? 0;
     return direct ? { resisted, potential: direct + resisted } : undefined;
   };
-  const isbHitPct = isbShareOfHits(damageEvents, source);
+  const isbHitPct = isbShareOfHits(casterHits, source);
   // Temporary summons (Infernal, Doomguard) don't count: a warlock can sacrifice their pet and
   // still drop an Infernal.
   // Pet names are localized (a Korean log's Infernal is "지옥불정령"), so go by the summon icon.
@@ -535,9 +555,11 @@ export async function collectPlayerFight(
   const totalDamage = damage.entries.reduce((sum, e) => sum + e.total, 0);
   const pets = petsOf(damage.entries, totalDamage, spec.className, spec.sim.unmodeledDamage);
   const mainPet = pets.pets.find((p) => p.kind === 'pet');
-  if (spec.petUptime && mainPet?.actor !== undefined) mainPet.uptimePct = await petUptimePct(client, report, start, end, mainPet.actor);
+  if (spec.petUptime && mainPet?.actor !== undefined) mainPet.uptimePct = petUptimePct(damageEvents, start, end, mainPet.actor);
   const unmodeled = damage.entries.filter((e) => spec.sim.unmodeledDamage?.includes(e.name)).reduce((sum, e) => sum + e.total, 0);
-  const bossDamage = byTarget.entries.filter((e) => e.type === 'Boss').reduce((sum, e) => sum + e.total, 0) || totalDamage;
+  // The sim has one target; damage on adds doesn't count when comparing with it.
+  const bosses = new Set((fights.enemies ?? []).filter((a) => a.type === 'Boss').map((a) => a.id));
+  const bossDamage = damageEvents.filter((e) => bosses.has(e.targetID!)).reduce((sum, e) => sum + Number(e.amount ?? 0) + Number(e.absorbed ?? 0), 0) || totalDamage;
   // Rage from damage taken at level 70: 2.5 rage per 274.7 damage.
   const takenTotal = taken?.entries.reduce((sum, e) => sum + e.total, 0) ?? 0;
   const mainTaken = taken?.entries.slice().sort((a, b) => b.total - a.total)[0];
@@ -577,19 +599,14 @@ export async function collectPlayerFight(
     uses: a.totalUses,
     starts: a.bands?.map((b) => Math.max(0, (b.startTime - start) / 1000)),
   });
-  // The player's party matters for totems and a shadow priest's Vampiric Touch mana; only worth
-  // working out when the raid has someone who gives those.
-  const givers = fights.friendlies.filter(
-    (a) => a.id !== source && (a.icon.startsWith('Shaman') || a.icon === 'Priest-Shadow') && a.fights.some((f) => f.id === fightId),
-  );
-  const party = givers.length ? await partyMembers(client, report, start, end, source, buffsTable.auras, infos) : new Set([source]);
+  const party = givers.length ? await partyMembers(client, report, start, end, source, buffsTable.auras, infos, logEvents) : new Set([source]);
   // Vampiric Touch gives the party mana from the priest's shadow damage; WoWSims wants their DPS.
   let partyShadowPriestDps: number | undefined;
   for (const priest of givers.filter((a) => a.icon === 'Priest-Shadow' && party.has(a.id))) {
     const t = await client.table<{ entries: { total: number }[] }>('damage-done', report, { start, end, sourceid: priest.id });
     partyShadowPriestDps = Math.max(partyShadowPriestDps ?? 0, t.entries.reduce((sum, e) => sum + e.total, 0) / durationSec);
   }
-  const buffs = [...buffsTable.auras.map((a) => toUptime(a, buffsTable.totalTime)), ...(await partyTotems(client, fights, report, fight, spec.caster, party, source, spec.totems))]
+  const buffs = [...buffsTable.auras.map((a) => toUptime(a, buffsTable.totalTime)), ...partyTotems(fights, fight, spec.caster, party, source, spec.totems, logEvents)]
     .sort((a, b) => b.uptimePct - a.uptimePct);
   const bossDebuffs = bossDebuffsTable.auras
     .map((a) => toUptime(a, bossDebuffsTable.totalTime))

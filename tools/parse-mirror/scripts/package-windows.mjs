@@ -4,13 +4,15 @@
 // (bin/wowsimcli.exe, so sims run on the pc's own cores). windows/start.ps1 does the rest on the
 // guildmate's pc: Node.js, the Warcraft Logs key, npm ci, build, start. See docs/lokal-installation.md.
 //
-//   node scripts/package-windows.mjs <release tag, e.g. parse-mirror-v0.3>
+//   node scripts/package-windows.mjs <release tag, parse-mirror-v<package.json version>>
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
 const tag = process.argv[2];
 if (!/^parse-mirror-v[\d.]+$/.test(tag ?? '')) throw new Error('Usage: node scripts/package-windows.mjs parse-mirror-vX.Y');
+const { version } = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+if (tag !== `parse-mirror-v${version}`) throw new Error(`package.json has ${version}: the tag should be parse-mirror-v${version}`);
 for (const file of ['bin/wowsimcli.exe', 'web/public/sim/wowsim.wasm.gz']) {
   if (!fs.existsSync(file)) throw new Error(`${file} is missing: build it with scripts/build-wowsims.mjs`);
 }
