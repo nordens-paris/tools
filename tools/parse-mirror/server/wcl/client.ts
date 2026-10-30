@@ -6,7 +6,7 @@
 //
 // Rate limits: each response carries x-ratelimit-limit/-remaining for a short (about a minute)
 // window; the client slows down before running out. Warcraft Logs also has an hourly points
-// budget per key (3,600 on the current plan) that v1 doesn't report, so requests per hour are
+// budget per key (1,000 on new keys, 3,600 on older ones) that v1 doesn't report, so requests per hour are
 // counted here as an estimate.
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -296,7 +296,8 @@ export class WclClient {
       key: `fields=${fields.join(',')}`,
       apply: (page: Page): Page => ({
         ...page,
-        events: page.events.map((e) => Object.fromEntries(fields.filter((f) => f in e).map((f) => [f, e[f]])) as WclEvent),
+        // Combatant info is all fields of its own: gear, talents and stats.
+        events: page.events.map((e) => (e.type === 'combatantinfo' ? e : (Object.fromEntries(fields.filter((f) => f in e).map((f) => [f, e[f]])) as WclEvent))),
       }),
     };
     const events: WclEvent[] = [];

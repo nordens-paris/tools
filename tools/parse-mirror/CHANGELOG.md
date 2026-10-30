@@ -1,12 +1,27 @@
 # Ændringer i Parse Mirror
 
-Alt, hvad der er ændret i værktøjet, nyeste først. Nyt skrives under **Ikke udgivet** i samme
-commit som ændringen, og når der laves en release, får det afsnit versionsnummer og dato.
-Hentes værktøjet som Windows-pakke, er det versionerne her, der kan hentes under
-[Releases](https://github.com/nordens-paris/tools/releases?q=parse-mirror&expanded=true).
-Hjemmesiden følger `main`, så den har også det, der står under Ikke udgivet.
+Alt, hvad der er ændret i værktøjet, nyeste først. Hver ændring, der kommer på `main`, får sit eget
+versionsnummer her og i `package.json`, så nummeret i bunden af siden viser, hvad du kører. Tredje
+tal er en lille opdatering, andet tal en større med nyt indhold.
 
-## Ikke udgivet
+Hjemmesiden følger `main` og har altid den nyeste version. Windows-pakken opdateres kun, når en
+version udgives under
+[Releases](https://github.com/nordens-paris/tools/releases?q=parse-mirror&expanded=true); de er
+markeret med **Windows-pakke** her.
+
+## v0.3.2 (30. oktober 2026)
+
+### Forbedret
+
+- **Færre kald til Warcraft Logs**, så nye nøgler med 1.000 kald i timen rækker længere. Flere
+  ting hentes nu i ét kald: en DPS-analyse koster cirka 78 kald mod 122 før, og en spillers hele raid
+  46 mod 57. Healer- og tank-sider sparer lidt mindre. Resultaterne er uændrede.
+- **Healer- og tank-data gemmes i browseren** med din egen nøgle, så det ikke koster kald at åbne
+  et kill igen.
+- Nøgle-panelet nævner nu grænsen på 1.000 kald for nye nøgler.
+- **Versionsnummer** i bunden af siden, så du kan se, hvad du kører.
+
+## v0.3.1 (30. oktober 2026)
 
 ### Nyt
 
@@ -31,7 +46,7 @@ Hjemmesiden følger `main`, så den har også det, der står under Ikke udgivet.
 - **Healere under 5 % af raidets healing** gav en fejl på healer-siden. Siden åbner nu med en
   note, og de vises under **Show healers**, men tæller stadig ikke som raidets healere.
 
-## v0.3 (29. oktober 2026)
+## v0.3 (29. oktober 2026) · Windows-pakke
 
 ### Nyt
 

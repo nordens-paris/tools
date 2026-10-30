@@ -81,7 +81,11 @@ kommandolinje-simmen `bin/wowsimcli.exe` (sims på pc'ens egne kerner).
 - Byg pakken fra et committet træ med `node scripts/package-windows.mjs parse-mirror-vX.Y` (skriver
   `dist-windows/parse-mirror-windows.zip`, cirka 23 MB) og læg den på releasen som asset.
 
-Før en release: giv afsnittet **Ikke udgivet** i [CHANGELOG.md](../CHANGELOG.md) versionsnummer og dato, og tag release-noterne derfra.
+Hver ændring på `main` får et nyt tredje tal i `package.json` (`0.3.1`, `0.3.2`) og sit eget afsnit i
+[CHANGELOG.md](../CHANGELOG.md), i samme commit. Pakken følger ikke med af sig selv: **Opdater Parse
+Mirror** henter kun den nyeste release, så guildmates får ændringer, når der laves en release med
+samme nummer (`parse-mirror-v0.3.2`). Marker versionen med **Windows-pakke** i changeloggen, og tag
+release-noterne derfra.
 
 Skrifterne er gemt som UTF-8 med BOM, ellers viser Windows PowerShell æ, ø og å forkert.
 
@@ -198,8 +202,8 @@ Sæt [Caddy](https://caddyserver.com) foran til HTTPS (`reverse_proxy localhost:
 
 ## Drift
 
-- **Kvote:** serverens Warcraft Logs-nøgle har et timebudget (3.600 point). En analyse koster
-  omkring 30 kald første gang, en healer- eller tank-analyse 30–110 (peers deles af alle med samme spec
+- **Kvote:** serverens Warcraft Logs-nøgle har et timebudget (1.000 kald på nye nøgler, 3.600 på ældre). En analyse koster
+  omkring 80 kald første gang, en healer- eller tank-analyse op til 100 (peers deles af alle med samme spec
   på samme boss), og en tank-analyses Sim-fane omkring 10 mere pr. tank; gentagne visninger kommer fra
   cachen. Grænsen pr. besøgende
   (`VISITOR_LOOKUPS_PER_HOUR`) beskytter budgettet. Klik ikke "Use New Limits" på Warcraft Logs;

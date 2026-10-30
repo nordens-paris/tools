@@ -45,7 +45,7 @@ web (React)  ──/api──▶  server (Express)  ──▶  Warcraft Logs v1 
   kvarter, selv om vinduet har 799 tilbage. Beder serveren om mere end 20 s, venter klienten ikke
   (det fik siderne til at hænge på "Fetching logs"), men fejler med det samme for den slags kald,
   til tiden er gået. Parses er valgfri på raid-siderne, så de vises bare uden percentiler imens.
-- **Timebudgettet** (3.600 point i timen pr. nøgle) kan ikke ses gennem v1, så kald i den seneste
+- **Timebudgettet** (1.000 kald i timen på nye nøgler, 3.600 på ældre) kan ikke ses gennem v1, så kald i den seneste
   time tælles som et skøn. Klik **ikke** "Use New Limits" på Warcraft Logs: det sænker budgettet
   til 1.000.
 - **Sprog.** Logs på andre sprog hentes med `translate=true`, som giver moderne engelske navne;

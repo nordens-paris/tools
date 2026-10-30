@@ -1,6 +1,6 @@
 {
   "name": "parse-mirror",
-  "version": "0.1.0",
+  "version": "0.3.2",
   "private": true,
   "description": "Sammenligner en spillers Warcraft Logs-kill med top 10 i samme spec, med WoWSims what-if-sims.",
   "type": "module",
