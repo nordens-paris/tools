@@ -17,7 +17,7 @@ const SAME_TICK_MS = 150;
 const isDirectHeal = (e: LogEvent) => e.type === 'heal' && !e.tick && !AUTO_HEALS.has(e.ability?.name ?? '');
 
 export function healerMetrics(m: FightModel, id: number): HealerMetrics {
-  const spec = m.healers.get(id);
+  const spec = m.healers.get(id) ?? m.minorHealers.get(id);
   if (!spec) throw new Error(`${m.name(id)} isn't one of this fight's healers`);
   const { T0, T1, durationSec: dur } = m;
   const mine = m.healing.filter((e) => e.sourceID === id);
@@ -291,6 +291,7 @@ export function healerMetrics(m: FightModel, id: number): HealerMetrics {
     absorbed,
     overhealPct: effective - absorbed + overhealTotal ? overhealTotal / (effective - absorbed + overhealTotal) : 0,
     shareOfRaid: m.raidEffective ? effective / m.raidEffective : 0,
+    ghostSec: ghostSec(m, id),
     role,
     tankShare,
     tankShareIcon: shareOn(m.tankSpecs),
@@ -332,6 +333,15 @@ export function healerMetrics(m: FightModel, id: number): HealerMetrics {
     dispels: mc.filter((e) => e.type === 'cast' && DISPELS.has(e.ability?.name ?? '')).length,
     context: { raidHealers: m.healers.size, raidDtps: m.raidDtps, healPerRaidDamage: m.raidDtps * dur ? effective / (m.raidDtps * dur) : 0 },
   };
+}
+
+/** Seconds as Teron's ghost: up to 60 after Shadow of Death runs out, until the fight ends. */
+function ghostSec(m: FightModel, id: number) {
+  let sec = 0;
+  for (const e of m.data.shadowOfDeath ?? []) {
+    if (e.targetID === id && e.type === 'removedebuff') sec += Math.max(0, Math.min(m.T1, e.timestamp + 60_000) - e.timestamp) / 1000;
+  }
+  return sec;
 }
 
 // Overheal from the healer's own choices, as a share of all healing they put out (shared: the

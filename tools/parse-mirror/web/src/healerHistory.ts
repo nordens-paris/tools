@@ -3,7 +3,7 @@
 // fetched for one healer covers every healer in it.
 import { useEffect, useRef, useState } from 'react';
 
-import { healerScore, healingSplit, type HealerScore, type HealerScoreRef, type HealingSplit } from '../../shared/healerScore.ts';
+import { healerScore, healingSplit, heldBack, usualIdle, usualShare, type HealerScore, type HealerScoreRef, type HealingSplit, type HeldBack } from '../../shared/healerScore.ts';
 import ref from '../../shared/healerScoreRef.json';
 import type { HealerAnalysis, HealerHistory, HealerKillRef, HealerKillScores } from '../../shared/types.ts';
 import { healerKillScores } from '../../server/analysis/healer/history.ts';
@@ -71,18 +71,34 @@ const sameKill = (a: HealerKillRef, b: HealerKillRef) => a.encounterId === b.enc
 export interface ScoredKill extends HealerKillRef {
   score: HealerScore;
   split?: HealingSplit;
+  /** Healers on the kill who held back (any of them, not just this healer). */
+  heldBack: HeldBack[];
 }
 
-/** The kill's healing split, from every healer's score inputs. */
+/** The kill's healing split, from every healer's score inputs (minor healers left out, as in the pool). */
 export const splitOf = (healers: HealerKillScores['healers'], encounterId: number) =>
-  healingSplit(healers.map((h) => ({ name: h.name, spec: h.inputs.spec, hps: h.inputs.values.hps ?? 0 })), scoreRef, encounterId);
+  healingSplit(healers.filter((h) => !h.minor).map((h) => ({ name: h.name, spec: h.inputs.spec, hps: h.inputs.values.hps ?? 0 })), scoreRef, encounterId);
+
+/**
+ * Who held back on a fight, each healer against their usual share on the other kills this browser
+ * has: the same raid's if there are at least 3, else all of them.
+ */
+export function heldBackOn(fight: Pick<HealerKillScores, 'report' | 'fight' | 'encounterId' | 'healers'>, stored: HealerKillScores[]): HeldBack[] {
+  const others = stored.filter((k) => !(k.report === fight.report && k.fight === fight.fight));
+  const sameRaid = others.filter((k) => k.report === fight.report).map((k) => k.healers);
+  const usual = (name: string) => usualShare(sameRaid, name, scoreRef) ?? usualShare(others.map((k) => k.healers), name, scoreRef);
+  const idle = (name: string) => usualIdle(sameRaid, name) ?? usualIdle(others.map((k) => k.healers), name);
+  return heldBack({ encounterId: fight.encounterId, healers: fight.healers }, usual, scoreRef, idle);
+}
 
 export interface RollingScore {
   history?: HealerHistory;
   /** Kills in the window this browser has, scored for the healer. */
   kills: ScoredKill[];
-  /** Scored kills left out of the average: the healing split was far more uneven than in other raids. */
+  /** Scored kills left out of the average: an uneven healing split, or a healer who held back. */
   leftOut: ScoredKill[];
+  /** Every kill this browser has (for the held-back check on this fight). */
+  stored: HealerKillScores[];
   /** Kills in the window this browser hasn't fetched yet. */
   missing: HealerKillRef[];
   loading: boolean;
@@ -97,7 +113,7 @@ function scoredFor(name: string, wanted: HealerKillRef[], stored: HealerKillScor
     const k = stored.find((s) => sameKill(s, w));
     const inputs = k?.healers.find((h) => h.name === name)?.inputs;
     const score = inputs && healerScore(inputs, scoreRef, w.encounterId);
-    if (k && score) out.push({ ...w, score, split: splitOf(k.healers, w.encounterId) });
+    if (k && score) out.push({ ...w, score, split: splitOf(k.healers, w.encounterId), heldBack: heldBackOn(k, stored) });
   }
   return out.sort((a, b) => a.startTime - b.startTime);
 }
@@ -170,5 +186,6 @@ export function useRollingScore(a: HealerAnalysis): RollingScore {
   };
 
   const scored = scoredFor(a.you.name, wanted, stored);
-  return { history, kills: scored.filter((k) => !k.split?.uneven), leftOut: scored.filter((k) => k.split?.uneven), missing, loading, fetching, error, fetchMissing };
+  const out = (k: ScoredKill) => !!k.split?.uneven || k.heldBack.length > 0;
+  return { history, kills: scored.filter((k) => !out(k)), leftOut: scored.filter(out), stored, missing, loading, fetching, error, fetchMissing };
 }

@@ -43,6 +43,10 @@ export async function healerKillScores(client: WclReader, report: string, fightI
     encounterId: f.boss,
     name: f.name,
     startTime: (fights.start ?? 0) + f.start_time,
-    healers: [...model.healers.keys()].map((id) => ({ name: model.name(id), inputs: scoreInputs(healerMetrics(model, id)) })),
+    healers: [...model.healers.keys(), ...model.minorHealers.keys()].map((id) => ({
+      name: model.name(id),
+      inputs: scoreInputs(healerMetrics(model, id)),
+      ...(model.healers.has(id) ? {} : { minor: true }),
+    })),
   };
 }

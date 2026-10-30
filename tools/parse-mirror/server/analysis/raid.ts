@@ -118,6 +118,7 @@ export async function raidSummary(client: WclClient, report: string, source: num
   const summary: RaidSummary = {
     report,
     title: fights.title,
+    startTime: fights.start,
     player: {
       name: actor.name,
       server: actor.server,

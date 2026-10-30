@@ -34,7 +34,7 @@ export async function analyzeHealer(
 ): Promise<HealerAnalysis> {
   const fights = await client.fights(report);
   const model = new FightModel(await fetchHealerFight(client, report, fightId, fights));
-  const spec = model.healers.get(source);
+  const spec = model.healers.get(source) ?? model.minorHealers.get(source);
   if (!spec) {
     const icon = model.icon(source).replace('-', ' ');
     // No list of supported DPS specs here: it would pull every spec into the browser (roleBrowser.ts).
@@ -43,6 +43,7 @@ export async function analyzeHealer(
   const you = healerMetrics(model, source);
   const warnings: string[] = [];
   if (!model.data.fight.kill) warnings.push('This fight was a wipe; peers are compared on kills, so expect differences.');
+  if (!model.healers.has(source)) warnings.push(`You did ${Math.round(you.shareOfRaid * 100)}% of the raid's healing, under the 5% it takes to count as one of its healers.`);
 
   log(`Finding ${spec.label}s in well-run raids like yours`);
   const group = await findHealerPeers(
@@ -83,7 +84,11 @@ export async function analyzeHealer(
     raid: { hps: model.durationSec ? model.raidEffective / model.durationSec : 0, dtps: model.raidDtps, healers: model.healers.size },
     warnings,
     startTime: (fights.start ?? 0) + model.data.fight.start_time,
-    scores: [...model.healers.keys()].map((id) => ({ name: model.name(id), inputs: scoreInputs(id === source ? you : healerMetrics(model, id)) })),
+    scores: [...model.healers.keys(), ...model.minorHealers.keys()].map((id) => ({
+      name: model.name(id),
+      inputs: scoreInputs(id === source ? you : healerMetrics(model, id)),
+      ...(model.healers.has(id) ? {} : { minor: true }),
+    })),
   };
 }
 

@@ -154,6 +154,57 @@ nogen af healerne i det; det står i listen over kills, og selve killet får en 
 20 almindelige kills bliver taget ud ved en fejl; en guild, der roterer, ligger på 20–30 %. Målet
 kan ikke bevise hensigt, kun at killet ikke viser almindeligt spil.
 
+### Healere der holder igen
+
+Fordelingen fanger kun kills, hvor hele fordelingen er skæv, og kun kills. En officer gennemgik
+guildens to seneste raids og fandt 16 tilfælde (kills og wipes), hvor en healer holdt igen: høj idle,
+lav HPS, overheal på de forkerte mål, eller næsten ingen healing (under 5 % af raidets healing, så
+healeren slet ikke talte som healer, og healer-siden gav en fejl).
+
+Målet (`heldBack` i `shared/healerScore.ts`) ser på den enkelte healer på kampe på mindst et
+minut, hvor healerens score (mod puljen, rettet for bossen) er 35 eller lavere, og et af to:
+
+- **Andel:** healerens andel af healingen (i forhold til specens sædvanlige) er højst 0,6 af
+  healerens egen sædvanlige andel den aften (medianen over aftenens øvrige kills, mindst 3), eller
+  puljens laveste 3 % på bossen, hvis det er lavere (Teron 0,49, Kaz'rogal 0,43, Reliquary 0,50;
+  Gurtogg, Council og Illidan omkring 0,73). Med en score på 15 eller lavere er grænsen 0,7.
+- **Idle:** 25 point mere idle mens nogen var lav end kampens øvrige healere og 20 point mindre tid
+  på at caste.
+- **Løft:** en anden healer gjorde mindst 1,6 gange sin sædvanlige andel, mens healeren gjorde højst
+  0,8 af sin og var 15 point mere idle end sin egen sædvanlige idle (medianen over aftenens øvrige
+  kills). En healer, der altid er idle, eller altid ligger lavt på bossen, markeres ikke af den.
+
+Healere under 5 % af raidets healing (`minorHealers` i `FightModel`) tages med her, men tæller
+ikke som raidets healere for kontekst, peers, fordelingen eller puljen, og et kill, hvor healeren
+var under 5 %, tæller ikke med i healerens sædvanlige andel. På Teron hentes Shadow of Death
+(debuff 40251, én ekstra forespørgsel): en healer, der var ånd (op til 60 s efter debuffen) i
+mindst en femtedel af kampen, bedømmes ikke.
+
+| | Fundet |
+|---|---|
+| Officerens 16 tilfælde | 13 (mangler Kodomuf på Naj'entus-wipen, Azgalor og Supremus) |
+| Andre healer-kampe i de to raids | 4 af 107: tre bekræftet af officeren (Sanctalux på en Reliquary-wipe på 5 min, Smallp på Anetheron 16. sep., Kodomuf på Akama med 0,19 af sin sædvanlige andel) og Banantyv på Supremus 16. sep. (0,75 af sin andel og 34 point mere idle end normalt, mens Sanctalux lå på 1,7), som officeren godtog |
+| Puljens raids (andre guilds) | 2,9 % af healer-kills (2,3 % uden grænsen ved score 15 og lavere og løft-reglen) |
+
+På Supremus-killet 16. sep. lå tre healere lavt, mens Sanctalux lå på 1,7 af sin sædvanlige andel.
+Banantyv var 34 point mere idle end normalt og markeres. Manatides (0,60 af sin andel) var kun 7
+point over sin normale idle, og han lå også lavt på Supremus ugen før (0,74 af specens andel, score
+19). Kodomuf (0,75) var 23 % idle, men hans sædvanlige idle den aften var 19 %, fordi han også var
+meget idle på aftenens BT-kills (84 % på Reliquary). Mod ugen før (cirka 7 %) var det 16 point mere,
+men Show healers kender kun aftenens kills. På Naj'entus-wipen lå hans andel (0,90), idle (16 %) og
+casting som de andres; på Azgalor var andelen 0,80 af hans sædvanlige, uden at nogen lå højt.
+
+Prøvet og droppet: løft-reglen uden idle-kravet markerede også Manatides og hævede puljens andel til
+3,9 %, og dens ekstra markeringer i puljen landede ikke oftere i aftener med andre markeringer end
+tilfældigt. Sædvanlig andel som 75 %-fraktilen i stedet for medianen fangede færre (12) og gav flere
+falske.
+
+En faste score-grænse på 30 i stedet for 35 fandt 11 af 16 med de samme falske alarmer; uden
+boss-grænserne var puljens andel 3,4 %. Målet bruges kun på de healere, der kigges på, ikke til
+at rense puljen. På healer-siden er "sædvanlig" healerens andel på de kills, browseren har gemt
+(samme raid med mindst 3, ellers de fire uger); på **Show healers** aftenens øvrige kills. Et kill,
+hvor en healer holdt igen, tæller ikke med i nogen af healernes fire-ugers-score.
+
 ### Er puljen for god?
 
 Healing parses sammenligner med alle healere på bossen, også de svage. Puljens raids er alle blandt

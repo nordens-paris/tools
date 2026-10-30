@@ -1,6 +1,6 @@
 // Gathers everything we need about one player in one fight from Warcraft Logs.
 import type { AbilityCasts, AuraUptime, CooldownUse, GearItem, PetSummary, PlayerFight } from '../../shared/types.ts';
-import { detectConsumes, tempEnchantName, type DetectedConsumes } from '../data/consumes.ts';
+import { PET_SCROLL_IDS, detectConsumes, tempEnchantName, type DetectedConsumes } from '../data/consumes.ts';
 import { armoryTalents } from '../armory/talents.ts';
 import { enchantInfo, gemInfo, itemInfo, spellName } from '../data/db.ts';
 import { talentRank } from '../data/talents.ts';
@@ -412,6 +412,28 @@ function petsOf(
  * stretch of 8 s or more without a hit (dead, called back, or passive). The run in at the pull counts
  * as not attacking, as it does in WoWSims.
  */
+const SCROLL_MS = 30 * 60_000;
+
+/**
+ * Scrolls on a hunter's pet at the pull. Pets have no combatant info, so a scroll only shows through
+ * its events: it was on if the last one before the pull put it there, or the first one after took
+ * it off (a dead or dismissed pet). Most fights show neither, so a scroll seen anywhere in the log
+ * counts for every fight (assumed: not seen on this one), and a compared player (assumeAll) is taken
+ * to use both. One request per report.
+ */
+async function petScrollsOn(client: WclClient, report: string, fights: WclFightsResponse, source: number, start: number, assumeAll: boolean) {
+  const pets = (fights.friendlyPets ?? []).filter((p) => p.petOwner === source).map((p) => p.id);
+  const reportEnd = Math.max(...fights.fights.map((f) => f.end_time)) + SCROLL_MS;
+  const all = await client.events('buffs', report, 0, reportEnd, { filter: `ability.id in (${PET_SCROLL_IDS.join(', ')})` });
+  return PET_SCROLL_IDS.flatMap((id) => {
+    const events = all.filter((e) => e.ability?.guid === id && pets.includes(e.targetID!));
+    const before = events.filter((e) => e.timestamp <= start).at(-1);
+    const after = events.find((e) => e.timestamp > start);
+    const seen = (before && before.type !== 'removebuff' && start - before.timestamp <= SCROLL_MS) || (after?.type === 'removebuff' && after.timestamp - start <= SCROLL_MS);
+    return assumeAll || events.length ? [{ id, assumed: !seen }] : [];
+  });
+}
+
 async function petUptimePct(client: WclClient, report: string, start: number, end: number, pet: number): Promise<number | undefined> {
   const hits = (await client.events('damage-done', report, start, end, { sourceid: pet }, ['timestamp', 'type', 'sourceID']))
     .filter((e) => e.type === 'damage' && e.sourceID === pet)
@@ -439,7 +461,7 @@ export async function collectPlayerFight(
   report: string,
   fightId: number,
   source: number,
-  extra: { rank?: number; server?: string; region?: string } = {},
+  extra: { rank?: number; server?: string; region?: string; assumePetScrolls?: boolean } = {},
 ): Promise<PlayerFightRaw> {
   const fights = await client.fights(report);
   const fight = findFight(fights, fightId);
@@ -669,6 +691,7 @@ export async function collectPlayerFight(
   const consumes = detectConsumes({
     buffs: buffs.map((b) => ({ id: b.id, name: b.name, icon: b.icon })),
     casts: casts.map((c) => ({ id: c.id, name: c.name, icon: c.icon })),
+    petScrolls: spec.className === 'Hunter' && hasPet ? await petScrollsOn(client, report, fights, source, start, !!extra.assumePetScrolls) : [],
     mhTempEnchant: mh?.temporaryEnchant,
     ohTempEnchant: oh?.temporaryEnchant,
   });

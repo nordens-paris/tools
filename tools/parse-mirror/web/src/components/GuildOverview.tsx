@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 import type { GuildFight, GuildSummary } from '../../../shared/types.ts';
 import { downloadCsv } from '../csv.ts';
-import { fmt, itemIcon, wclReportUrl, wclUrl } from '../format.ts';
+import { fmt, fmtDate, itemIcon, wclReportUrl, wclUrl } from '../format.ts';
 import { Hint } from './Hint.tsx';
 import { DebuffsPanel, GearPanel, PartiesPanel, PlayerName, shortBoss } from './RaidChecks.tsx';
 import { pctClass } from './RaidOverview.tsx';
@@ -117,6 +117,7 @@ export function GuildOverview({ guild, onRaid, onFight }: { guild: GuildSummary;
           <div className="eyebrow">Whole raid</div>
           <h1>{guild.title}</h1>
           <div className="report-meta">
+            {guild.startTime ? <span className="pill">{fmtDate(guild.startTime)}</span> : null}
             <span className="pill acc">{guild.bosses.length} boss kills</span>
             <span className="pill">
               {dps.length} DPS · {guild.players.length - dps.length} healers/tanks

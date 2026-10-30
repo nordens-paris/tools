@@ -93,6 +93,7 @@ export async function analyze(
     id: crypto.randomUUID(),
     comparison: group,
     generatedAt: new Date().toISOString(),
+    startTime: (fights.start ?? 0) + fight.start_time,
     encounter: { id: fight.boss, name: fight.name },
     spec: { className: spec.className, specName: spec.specName, caster: spec.caster, activityLabel: spec.activityLabel },
     you: you.fight,
@@ -201,7 +202,7 @@ export async function collectTopPlayers(
           (a) => a.name === r.name && a.type === spec.wcl.actorType && a.fights.some((f) => f.id === r.fightID),
         );
         if (!rActor) throw new Error(`could not find ${r.name} in report ${r.reportID}`);
-        return collectPlayerFight(client, spec, r.reportID, r.fightID, rActor.id, { rank, server: r.serverName, region: r.regionName });
+        return collectPlayerFight(client, spec, r.reportID, r.fightID, rActor.id, { rank, server: r.serverName, region: r.regionName, assumePetScrolls: true });
       }),
     );
     results.forEach((res, i) => {

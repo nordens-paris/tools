@@ -9,7 +9,7 @@
 //
 //   npx tsx --env-file=.env scripts/healer-score-ref.ts
 import fs from 'node:fs';
-import { SCORE_METRICS, adjusted, contextOf, healerScore, healingSplit, scoreInputs, type HealerScoreInputs, type HealerScoreRef, type ScoreMetric } from '../shared/healerScore.ts';
+import { SCORE_METRICS, adjusted, contextOf, healerScore, healingShares, healingSplit, scoreInputs, type HealerScoreInputs, type HealerScoreRef, type ScoreMetric } from '../shared/healerScore.ts';
 import type { HealerMetrics } from '../shared/types.ts';
 import { WclClient } from '../server/wcl/client.ts';
 
@@ -109,6 +109,23 @@ for (const boss of new Set([...spreads.values()].map((x) => x.boss))) {
   splitOf.set(boss, { threshold: round(xs.length >= MIN_SPLIT_KILLS ? quantile(xs, 0.95) : Math.max(allSplit, quantile(xs, 0.95))), kills: xs.length });
 }
 const flagged = new Set([...spreads].filter(([, x]) => x.spread > splitOf.get(x.boss)!.threshold).map(([kill]) => kill));
+
+// Held back (shared/healerScore.ts heldBack): per boss, the pool's lowest 3% of a healer's share
+// against their usual share that night (their other kills of the night, at least 3).
+const shareOf = new Map<(typeof rows)[number], number>();
+for (const ks of byKill.values()) {
+  const shares = healingShares(ks.map((k) => ({ name: k.name, inputs: k.s })), ref);
+  for (const k of ks) shareOf.set(k, shares.get(k.name) ?? 0);
+}
+const nightOf = (r: (typeof rows)[number]) => `${r.guild ? `${r.guild}:${r.night}` : r.kill.split(':')[0]}:${r.name}`;
+const byNight = new Map<string, typeof rows>();
+for (const r of rows) byNight.set(nightOf(r), [...(byNight.get(nightOf(r)) ?? []), r]);
+const relByBoss = new Map<number, number[]>();
+for (const r of rows) {
+  const own = byNight.get(nightOf(r))!.filter((x) => x !== r).map((x) => shareOf.get(x)!);
+  if (own.length < 3) continue;
+  relByBoss.set(r.boss, [...(relByBoss.get(r.boss) ?? []), shareOf.get(r)! / median(own)]);
+}
 const all = rows.length;
 rows.splice(0, rows.length, ...rows.filter((r) => !flagged.has(r.kill)));
 
@@ -134,7 +151,8 @@ for (const boss of [...new Set(rows.map((r) => r.boss))].sort()) {
     const xs = on.map((r) => r.sc!.parts[key]).filter((v): v is number => v !== undefined);
     if (xs.length >= MIN_POOL) offset[key] = Number((((avg(xs) - 50) * xs.length) / (xs.length + SHRINK)).toFixed(1));
   }
-  ref.bosses[boss] = { name: bossNames.get(boss) ?? String(boss), kills: on.length, offset, split: splitOf.get(boss)?.threshold ?? allSplit };
+  const rel = relByBoss.get(boss);
+  ref.bosses[boss] = { name: bossNames.get(boss) ?? String(boss), kills: on.length, offset, split: splitOf.get(boss)?.threshold ?? allSplit, ...(rel && rel.length >= MIN_SPLIT_KILLS ? { heldBack: round(quantile(rel, 0.03)) } : {}) };
 }
 const healers = new Set(rows.map((r) => r.healer)).size;
 ref.pool = `${rows.length} healer kills, ${healers} healers on every boss of Hyjal and Black Temple, from raids across the execution rankings`;
@@ -146,6 +164,7 @@ const scored = rows.map((r) => ({ ...r, before: healerScore(r.s, ref)?.score, af
 console.log(`${OUT}: ${(fs.statSync(OUT).size / 1024).toFixed(1)} KB, ${ref.pool}`);
 console.log(`Uneven healing split: ${flagged.size} of ${spreads.size} kills left out (${all - rows.length} healer kills); all bosses' threshold ${allSplit.toFixed(2)}`);
 for (const [boss, x] of splitOf) console.log(`  ${(bossNames.get(boss) ?? String(boss)).padEnd(24)} ${String(x.kills).padStart(3)} kills, threshold ${x.threshold.toFixed(2)}${x.kills < MIN_SPLIT_KILLS ? ' (few kills)' : ''}`);
+console.log(`Held back, share against usual: ${Object.values(ref.bosses).map((b) => `${b.name} ${b.heldBack ?? '-'}`).join(', ')}`);
 console.log(`Spec shares: ${specs.map((sp) => `${sp} ${ref.specs[sp].share}`).join(', ')}`);
 for (const [spec, s] of Object.entries(ref.specs)) {
   const xs = scored.filter((r) => r.s.spec === spec && r.after !== undefined).map((r) => r.after!);

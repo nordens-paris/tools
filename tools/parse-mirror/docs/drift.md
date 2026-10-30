@@ -81,6 +81,8 @@ kommandolinje-simmen `bin/wowsimcli.exe` (sims på pc'ens egne kerner).
 - Byg pakken fra et committet træ med `node scripts/package-windows.mjs parse-mirror-vX.Y` (skriver
   `dist-windows/parse-mirror-windows.zip`, cirka 23 MB) og læg den på releasen som asset.
 
+Før en release: giv afsnittet **Ikke udgivet** i [CHANGELOG.md](../CHANGELOG.md) versionsnummer og dato, og tag release-noterne derfra.
+
 Skrifterne er gemt som UTF-8 med BOM, ellers viser Windows PowerShell æ, ø og å forkert.
 
 ## `.env`

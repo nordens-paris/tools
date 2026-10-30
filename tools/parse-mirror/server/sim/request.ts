@@ -130,6 +130,8 @@ function consumablesSpec(player: SimPlayerSetup) {
     goblinSapper: flags.goblinSapper,
     scrollAgi: flags.scrollAgi,
     scrollStr: flags.scrollStr,
+    petScrollAgi: flags.petScrollAgi,
+    petScrollStr: flags.petScrollStr,
     nightmareSeed: flags.nightmareSeed,
     boglingRoot: flags.boglingRoot,
   };
