@@ -9,6 +9,16 @@ version udgives under
 [Releases](https://github.com/nordens-paris/tools/releases?q=parse-mirror&expanded=true); de er
 markeret med **Windows-pakke** her.
 
+## v0.3.4 (30. oktober 2026)
+
+### Rettet
+
+- **Empty Mug of Direbrew** talte som alkohol under consumables, så de fleste stod som manglende
+  noget. Dire Drunkard er trinkettens on-use. Den vises nu under cooldowns, og uden trinketten er det
+  en forskel i gear. Simmen havde den allerede fra gearet.
+- **Alkohol i consumables:** tabellen over alle spillere samler nu forskellige drikke i én række,
+  som den øverste tabel.
+
 ## v0.3.3 (30. oktober 2026)
 
 ### Forbedret

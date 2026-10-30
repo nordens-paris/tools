@@ -21,7 +21,8 @@ export const STAT = { spellDamage: 5, spellCritRating: 13, spirit: 16, attackPow
 // That ignores burst alignment (these are usually popped with Bloodlust), so it's slightly low.
 const STAT_BUFFS: Record<number, { name: string; stats: Partial<Record<keyof typeof STAT, number>>; consumable?: boolean }> = {
   31732: { name: 'Rallying Cry', stats: { attackPower: 165 } }, // Hyjal NPC buff
-  // Not trinket buffs like Dark Iron Pipeweed (Dark Iron Smoking Pipe) or Hopped Up (Direbrew
+  // Not trinket buffs like Dark Iron Pipeweed (Dark Iron Smoking Pipe), Dire Drunkard (Empty Mug of
+  // Direbrew) or Hopped Up (Direbrew
   // Hops): WoWSims has those trinkets and sims them from the gear, so adding them would count twice.
   29308: { name: 'Power Surge', stats: { spellDamage: 25 }, consumable: true }, // Power Core
   43722: { name: 'Enlightened', stats: { spellCritRating: 20, spirit: 20 }, consumable: true },

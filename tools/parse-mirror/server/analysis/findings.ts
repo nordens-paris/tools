@@ -33,6 +33,7 @@ const MAJOR_COOLDOWNS = ['Death Wish', 'Recklessness', 'Arcane Power'];
 const TRINKET_COOLDOWNS: Record<string, { item: string; ids: number[] }> = {
   'Blessing of the Silver Crescent': { item: 'Icon of the Silver Crescent', ids: [29370] },
   'Dark Iron Smoking Pipe': { item: 'Dark Iron Smoking Pipe', ids: [281735] },
+  'Empty Mug of Direbrew': { item: 'Empty Mug of Direbrew', ids: [281739] },
 };
 
 // Rage generators whose timing is about rage, not burst windows.

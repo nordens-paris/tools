@@ -39,8 +39,8 @@ const hunterBase: Omit<SpecConfig, 'key' | 'specName' | 'wcl' | 'talentPresets'>
   efficiency: [{ name: 'Kill Command', cooldownSec: 5 }],
   gcdAbilities: ['Arcane Shot', 'Multi-Shot', 'Serpent Sting', "Hunter's Mark", 'Aspect of the Hawk', 'Aspect of the Viper', 'Misdirection', 'Volley'],
   gcdSec: 1.5,
-  cooldowns: ['Bestial Wrath', 'Rapid Fire', 'Readiness', 'Blood Fury', 'Berserking', 'Haste', 'Restore Mana'],
-  castLabels: { Haste: 'Haste Potion', 'Restore Mana': 'Super Mana Potion' },
+  cooldowns: ['Bestial Wrath', 'Rapid Fire', 'Readiness', 'Blood Fury', 'Berserking', 'Haste', 'Restore Mana', 'Dire Drunkard'],
+  castLabels: { 'Dire Drunkard': 'Empty Mug of Direbrew', Haste: 'Haste Potion', 'Restore Mana': 'Super Mana Potion' },
   uptimes: ['Rapid Fire', 'The Beast Within', 'Quick Shots', 'Bloodlust', 'Drums of Battle'],
   expectedAbilities: [],
   // Ranged special shots miss 8% against a level 73 boss in WoWSims; Surefooted adds 1% per point.

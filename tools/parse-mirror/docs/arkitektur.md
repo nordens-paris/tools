@@ -267,7 +267,7 @@ gav de samme tal; kun rankings (rang ±1) var friskere end serverens cachede.
 - **`environment.ts`** oversætter buffs og debuffs fra loggen til WoWSims' raid/party/individual
   buffs og debuffs, plus mana fra andre (Innervate, Mana Tide, Vampiric Touch). Buffs WoWSims ikke
   kender (Rallying Cry, Power Core...) lægges til som stats vægtet med uptime. Trinkets' on-use buffs
-  (Dark Iron Pipeweed fra Dark Iron Smoking Pipe, Hopped Up fra Direbrew Hops) gør ikke: WoWSims
+  (Dark Iron Pipeweed fra Dark Iron Smoking Pipe, Dire Drunkard fra Empty Mug of Direbrew, Hopped Up fra Direbrew Hops) gør ikke: WoWSims
   simmer selve trinket'en fra gearet.
 - **`scenarios.ts`** kører what-ifs og execution:
   - *Your setup* (dit eget), *consumes* (gruppens mest brugte, byttet ind pr. kategori; flask og
