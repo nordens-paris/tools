@@ -632,53 +632,41 @@ function roleCounts(roster) {
   return out;
 }
 
-const MELEE_ORDER = ['Warrior', 'Rogue', 'Paladin', 'Shaman', 'Druid', 'Hunter', 'Mage', 'Warlock', 'Priest'];
+const MELEE_ORDER = ['Rogue', 'Druid', 'Paladin', 'Shaman', 'Warrior'];
 const CASTER_ORDER = ['Priest', 'Mage', 'Warlock', 'Druid', 'Shaman', 'Paladin', 'Hunter', 'Warrior', 'Rogue'];
+const isShadow = e => e.c === 'Priest' && e.s === 'Shadow';
+const isArcane = e => e.c === 'Mage' && e.s === 'Arcane';
 
-// Full melee groups first (tanks in group 1), full ranged groups, and a healer group with Mana Tide last.
+// The last group is the healers', the first the tanks'. In a 20-man melee fill 1>2>3>4, healers 4>3 and
+// ranged 3>4>2>1 with hunters after the casters. Shadow Priests and Arcane Mages take what is left of the
+// healer group before anyone else. A 10-man has no ranged group, so its ranged fill 2>1.
 // Shamans then go where their Tremor Totem is needed.
 function makeGroups(roster, size) {
   const nG = Math.max(1, Math.ceil(size / 5));
-  const tanks = roster.filter(e => e.r === 'Tank');
-  const melee = tanks.concat(roster.filter(e => e.r === 'Melee').sort((a, b) => MELEE_ORDER.indexOf(a.c) - MELEE_ORDER.indexOf(b.c)));
-  let ranged = roster.filter(e => e.r === 'Ranged').sort((a, b) => {
-    const sp = x => (x.c === 'Priest' && x.s === 'Shadow') ? -1 : 0;
-    return sp(a) - sp(b) || CASTER_ORDER.indexOf(a.c) - CASTER_ORDER.indexOf(b.c);
-  });
-  const healers = roster.filter(e => e.r === 'Healer').sort((a, b) => (b.c === 'Shaman') - (a.c === 'Shaman'));
-  const healGroup = healers.slice(0, 5);
-  const extraHeal = healers.slice(5);
-  // Shadow Priest and other casters share the healers' party buffs (spirit), hunters last.
-  while (healGroup.length < 5 && ranged.length) healGroup.push(ranged.shift());
-  const rangedGroups = [];
-  const rest = ranged.concat(extraHeal);
-  const groups = [];
-  for (let i = 0; i < melee.length; i += 5) groups.push(melee.slice(i, i + 5));
-  // Top up a half-full melee group with ranged before starting ranged groups.
-  if (groups.length && groups[groups.length - 1].length < 5) {
-    const last = groups[groups.length - 1];
-    while (last.length < 5 && rest.length) last.push(rest.shift());
+  const groups = Array.from({ length: nG }, () => []);
+  const healGroup = groups[nG - 1];
+  const backToFront = groups.slice().reverse();
+  const rangedFill = nG > 2 ? [groups[nG - 2], healGroup, ...groups.slice(0, nG - 2).reverse()] : backToFront;
+  const place = (e, fill) => (fill.find(g => g.length < 5) || healGroup).push(e);
+
+  roster.filter(e => e.r === 'Tank').forEach(e => place(e, groups));
+  roster.filter(e => e.r === 'Healer').sort((a, b) => (b.c === 'Shaman') - (a.c === 'Shaman')).forEach(e => place(e, backToFront));
+  const ranged = roster.filter(e => e.r === 'Ranged').sort((a, b) => CASTER_ORDER.indexOf(a.c) - CASTER_ORDER.indexOf(b.c));
+  const rest = [];
+  for (const e of [...ranged.filter(isShadow), ...ranged.filter(isArcane), ...ranged.filter(e => !isShadow(e) && !isArcane(e))]) {
+    if ((isShadow(e) || isArcane(e)) && healGroup.length < 5) healGroup.push(e);
+    else rest.push(e);
   }
-  for (let i = 0; i < rest.length; i += 5) rangedGroups.push(rest.slice(i, i + 5));
-  const all = groups.concat(rangedGroups);
-  if (healGroup.length) all.push(healGroup);
-  // Too many groups: dissolve the smallest non-healer group into the gaps.
-  while (all.length > nG) {
-    let k = 0;
-    for (let i = 1; i < all.length - (healGroup.length ? 1 : 0); i++) if (all[i].length < all[k].length) k = i;
-    const g = all.splice(k, 1)[0];
-    for (const e of g) { const t = all.find(x => x.length < 5) || all[all.length - 1]; t.push(e); }
-  }
-  while (all.length < nG) all.splice(healGroup.length ? all.length - 1 : all.length, 0, []);
-  spreadEnhancement(all);
-  placeShamans(all, healGroup);
-  return all.map(g => g.map(e => e.p));
+  roster.filter(e => e.r === 'Melee').sort((a, b) => MELEE_ORDER.indexOf(a.c) - MELEE_ORDER.indexOf(b.c)).forEach(e => place(e, groups));
+  rest.forEach(e => place(e, rangedFill));
+  placeShamans(groups, healGroup);
+  return groups.map(g => g.map(e => e.p));
 }
 
 // The first Shaman goes with the tanks in group 1, the second with the healers and the third in group 2.
 // Non-healers are picked first for group 1 and 2, a Restoration Shaman first for the healers.
 function placeShamans(groups, healGroup) {
-  const targets = [...new Set([groups[0], groups.includes(healGroup) ? healGroup : null, groups[1]])].filter(Boolean);
+  const targets = [...new Set([groups[0], healGroup, groups[1]])].filter(Boolean);
   const left = groups.flat().filter(e => e.c === 'Shaman'), placed = [];
   const spreadOrder = { Melee: 0, Ranged: 1, Healer: 2 }, healOrder = { Healer: 0, Ranged: 1, Melee: 2 };
   for (const t of targets) {
@@ -692,27 +680,11 @@ function placeShamans(groups, healGroup) {
     from.splice(from.indexOf(s), 1);
     if (t.length < 5) { t.push(s); continue; }
     // Swap with the player the group misses least, never a tank or a Shaman already placed.
-    const cost = e => (e.r === 'Healer' ? 3 : 0) + (e.c === 'Priest' && e.s === 'Shadow' ? 2 : 0) + (e.c === 'Shaman' ? 1 : 0);
+    const cost = e => (e.r === 'Healer' ? 4 : isShadow(e) ? 3 : isArcane(e) ? 2 : e.c === 'Shaman' ? 1 : 0);
     const out = t.filter(e => e.r !== 'Tank' && !placed.includes(e)).reverse().sort((a, b) => cost(a) - cost(b))[0];
     if (!out) { from.push(s); continue; }
     t[t.indexOf(out)] = s;
     from.push(out);
-  }
-}
-
-// One Enhancement Shaman per melee group where possible.
-function spreadEnhancement(groups) {
-  const isEnh = e => e.c === 'Shaman' && e.s === 'Enhancement';
-  const meleeGroups = groups.filter(g => g.filter(e => e.r === 'Melee' || e.r === 'Tank').length >= 3);
-  for (const g of meleeGroups) {
-    while (g.filter(isEnh).length > 1) {
-      const target = meleeGroups.find(x => x !== g && !x.some(isEnh));
-      if (!target) return;
-      const swapIdx = target.findIndex(e => e.r === 'Melee' && !isEnh(e));
-      const enhIdx = g.findIndex(isEnh);
-      if (swapIdx < 0) return;
-      const tmp = target[swapIdx]; target[swapIdx] = g[enhIdx]; g[enhIdx] = tmp;
-    }
   }
 }
 

@@ -97,7 +97,18 @@ Raids af samme størrelse er samme lockout: ingen kommer med i begge 10-mænd. O
 
 ![De to 10-mænd side om side med buffs, grupper og fælles bænk](images/raid-10-man-lockout.png)
 
-**Grupper:** fulde melee-grupper (tanks i gruppe 1), fulde ranged-grupper og en healergruppe med Mana Tide; Shadow Priest og andre casters fylder op hos healerne. Enhancement-shamaner spredes over melee-grupperne. Af hensyn til Tremor Totem kommer den første shaman altid i gruppe 1 hos tanks, den anden hos healerne (en Restoration Shaman, hvis der er en) og den tredje i gruppe 2. **Re-sort groups** bruger også reglerne på et roster, der allerede er lavet.
+**Grupper:** den sidste gruppe er healernes, og tanks står altid i gruppe 1.
+
+| Hvem | 20-mand | 10-mand |
+|---|---|---|
+| Tanks | 1 | 1 |
+| Healers | 4 > 3 | 2 > 1 |
+| Shadow Priest, Arcane Mage | 4, ellers som ranged | 2, ellers som ranged |
+| Melee | 1 > 2 > 3 > 4 | 1 > 2 |
+| Ranged | 3 > 4 > 2 > 1 | 2 > 1 |
+| Hunters | 3 > 4 > 2 > 1, efter de andre ranged | 2 > 1, efter de andre ranged |
+
+Melee fyldes på i rækkefølgen Rogue, Druid, Paladin, Shaman, Warrior. Af hensyn til Tremor Totem kommer den første shaman altid i gruppe 1 hos tanks, den anden hos healerne (en Restoration Shaman, hvis der er en) og den tredje i gruppe 2 i en 20-mand. Det går forud for alt andet, undtagen tanks. **Re-sort groups** bruger også reglerne på et roster, der allerede er lavet.
 
 ### Flyt spillere
 
