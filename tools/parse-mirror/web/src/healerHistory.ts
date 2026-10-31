@@ -1,9 +1,9 @@
 // The rolling healer score's kills, kept in the browser (IndexedDB): the server has no lasting
 // cache on the hosted site, so each kill's ~10 requests are paid once per visitor, and a kill
 // fetched for one healer covers every healer in it.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { healerScore, healingSplit, heldBack, usualIdle, usualShare, type HealerScore, type HealerScoreRef, type HealingSplit, type HeldBack } from '../../shared/healerScore.ts';
+import { ANETHERON, healerScore, healingSplit, heldBack, usualIdle, usualShare, type HealerScore, type HealerScoreRef, type HealingSplit, type HeldBack } from '../../shared/healerScore.ts';
 import ref from '../../shared/healerScoreRef.json';
 import type { HealerAnalysis, HealerHistory, HealerKillRef, HealerKillScores } from '../../shared/types.ts';
 import { healerKillScores } from '../../server/analysis/healer/history.ts';
@@ -42,7 +42,8 @@ async function loadAll(): Promise<HealerKillScores[]> {
       req.onerror = () => reject(req.error);
     });
     db.close();
-    for (const k of all) memory.set(`${k.report}:${k.fight}`, k);
+    // Anetheron kills kept before Carrion Swarm was measured are fetched again.
+    for (const k of all) if (!ANETHERON.has(k.encounterId) || k.healers.every((h) => h.inputs.carrionSwarmSec !== undefined)) memory.set(`${k.report}:${k.fight}`, k);
   } catch {
     // Fall back to what this page load has seen.
   }
@@ -66,7 +67,7 @@ async function save(k: HealerKillScores) {
 }
 
 /** The same kill from another report (several people log a raid): same boss, pulled within 2 minutes. */
-const sameKill = (a: HealerKillRef, b: HealerKillRef) => a.encounterId === b.encounterId && Math.abs(a.startTime - b.startTime) < 120_000;
+const sameKill = (a: Pick<HealerKillRef, 'encounterId' | 'startTime'>, b: Pick<HealerKillRef, 'encounterId' | 'startTime'>) => a.encounterId === b.encounterId && Math.abs(a.startTime - b.startTime) < 120_000;
 
 export interface ScoredKill extends HealerKillRef {
   score: HealerScore;
@@ -83,11 +84,13 @@ export const splitOf = (healers: HealerKillScores['healers'], encounterId: numbe
  * Who held back on a fight, each healer against their usual share on the other kills this browser
  * has: the same raid's if there are at least 3, else all of them.
  */
-export function heldBackOn(fight: Pick<HealerKillScores, 'report' | 'fight' | 'encounterId' | 'healers'>, stored: HealerKillScores[]): HeldBack[] {
-  const others = stored.filter((k) => !(k.report === fight.report && k.fight === fight.fight));
+export function heldBackOn(fight: Pick<HealerKillScores, 'report' | 'encounterId' | 'startTime' | 'healers'>, stored: HealerKillScores[]): HeldBack[] {
+  // Without this kill, and with each other kill once, however many people logged it.
+  const others = stored.filter((k) => !sameKill(k, fight));
   const sameRaid = others.filter((k) => k.report === fight.report).map((k) => k.healers);
-  const usual = (name: string) => usualShare(sameRaid, name, scoreRef) ?? usualShare(others.map((k) => k.healers), name, scoreRef);
-  const idle = (name: string) => usualIdle(sameRaid, name) ?? usualIdle(others.map((k) => k.healers), name);
+  const all = others.filter((k, i) => others.findIndex((x) => sameKill(x, k)) === i).map((k) => k.healers);
+  const usual = (name: string) => usualShare(sameRaid, name, scoreRef) ?? usualShare(all, name, scoreRef);
+  const idle = (name: string) => usualIdle(sameRaid, name) ?? usualIdle(all, name);
   return heldBack({ encounterId: fight.encounterId, healers: fight.healers }, usual, scoreRef, idle);
 }
 
@@ -129,9 +132,12 @@ export function useRollingScore(a: HealerAnalysis): RollingScore {
 
   useEffect(() => {
     cancelled.current = false;
+    // This run's own flag: the ref is reset by the next run, while this one may still be waiting.
+    let stale = false;
     setLoading(true);
     setError(undefined);
     setFetching(undefined);
+    setHistory(undefined);
     (async () => {
       // This kill is already here: keep it for every healer in it.
       if (a.kill && a.scores?.length) {
@@ -140,13 +146,14 @@ export function useRollingScore(a: HealerAnalysis): RollingScore {
       setStored(await loadAll());
       try {
         const h = await getHealerHistory(a.report, a.you.source);
-        if (!cancelled.current) setHistory(h);
+        if (!stale) setHistory(h);
       } catch (err) {
-        if (!cancelled.current) setError((err as Error).message);
+        if (!stale) setError((err as Error).message);
       }
-      if (!cancelled.current) setLoading(false);
+      if (!stale) setLoading(false);
     })();
     return () => {
+      stale = true;
       cancelled.current = true;
     };
   }, [a.id]);
@@ -185,7 +192,8 @@ export function useRollingScore(a: HealerAnalysis): RollingScore {
     });
   };
 
-  const scored = scoredFor(a.you.name, wanted, stored);
+  // Each kill's held-back check looks through every stored kill: not on every render.
+  const scored = useMemo(() => scoredFor(a.you.name, wanted, stored), [a.id, history, stored]);
   const out = (k: ScoredKill) => !!k.split?.uneven || k.heldBack.length > 0;
   return { history, kills: scored.filter((k) => !out(k)), leftOut: scored.filter(out), stored, missing, loading, fetching, error, fetchMissing };
 }

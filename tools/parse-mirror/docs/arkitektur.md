@@ -35,7 +35,7 @@ web (React)  ──/api──▶  server (Express)  ──▶  Warcraft Logs v1 
   fylder cirka en tiendedel; ældre ukomprimerede filer læses stadig). `events(..., fields)` gemmer
   kun de felter, der bruges: raid-wide events har position, stats og meget mere på hver linje. Undtagelse: fight-listen
   for en rapport, der sluttede for under 12 timer siden, opdateres hvert 5. minut (den kan stadig
-  blive logget). Rankings og en spillers parses caches i 6 timer. Ens forespørgsler, der er i gang
+  blive logget). En kampliste, der blev gemt inden for 12 timer efter rapportens sidste kamp, hentes igen, så en liste fra midt i et raid ikke bliver stående. Rankings og en spillers parses caches i 6 timer. Cachen trimmes ved opstart (`WCL_CACHE_MB`). Ens forespørgsler, der er i gang
   samtidig, deler ét kald.
 - **Rate limits.** Hvert svar har `x-ratelimit-limit`/`x-ratelimit-remaining` for et vindue på
   cirka et minut (800 på den nuværende plan). Klienten kører højst 8 kald ad gangen (`WCL_CONCURRENCY`) og holder pause,
@@ -285,7 +285,10 @@ gav de samme tal; kun rankings (rang ±1) var friskere end serverens cachede.
     (`GET /api/sim/:id/jobs`, long poll), giver hvert job til en ledig Web Worker (én pr. kerne,
     højst 6, eller 10 med mindst 8 GB hukommelse; modulet kompileres én gang og deles) og sender
     resultaterne tilbage (`POST /api/sim/:id/results`). Workers lukkes et minut efter sidste sim.
-    Jobs, der ikke bliver besvaret inden for 90 s, sendes ud igen. Med `SIM_MODE=cli` kører op til
+    Jobs, der ikke bliver besvaret inden for 90 s, sendes ud igen, og efter 20 s, hvis browseren,
+    der havde dem, er holdt op med at spørge. En worker, der går ned, eller et job over 10 minutter
+    giver en fejl i stedet for at hænge, og næste kørsel får nye workers. Sim-filernes URL'er har
+    en hash af filerne (`vite.config.ts`), så en ny sim ikke kræver en versions-bump. Med `SIM_MODE=cli` kører op til
     otte `wowsimcli`-processer på serveren (`SIM_PARALLEL`), én analyse ad gangen; hver proces
     bruger selv alle kerner.
 - **`luck.ts`** og **`procs.ts`**: held i tre dele, se [sim-noejagtighed.md](sim-noejagtighed.md).

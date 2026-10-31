@@ -104,4 +104,3 @@ for (const raw of players) {
   summary.push(`${(f.rank ? '#' + f.rank : 'you').padEnd(4)} ${f.name.padEnd(14)} exec ${((f.simComparableDps / res.avg) * 100).toFixed(1)}  minus luck ${(((f.simComparableDps - luck.luckDps) / res.avg) * 100).toFixed(1)}`);
 }
 console.log('\n' + summary.join('\n'));
-void pct;

@@ -1,6 +1,6 @@
 import { talentRank } from '../data/talents.ts';
 import type { SpecConfig } from './types.ts';
-import { curseOf } from './warlock-common.ts';
+import { curseOf, demonOf } from './warlock-common.ts';
 
 export const warlockDestruction: SpecConfig = {
   key: 'warlock-destruction',
@@ -71,7 +71,8 @@ export const warlockDestruction: SpecConfig = {
       return {
         options: {
           classOptions: {
-            summon: sacrifice || !raw.hasPet ? (fireMain ? 'Imp' : 'Succubus') : 'Imp',
+            // Sacrificed or gone, it's the demon the rotation would have given up.
+            summon: sacrifice || !raw.hasPet ? (fireMain ? 'Imp' : 'Succubus') : (demonOf(raw) ?? 'Imp'),
             sacrificeSummon: sacrifice,
             armor: 'FelArmor',
             curseOptions: curseOf(raw),

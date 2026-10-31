@@ -33,11 +33,12 @@ export const ConsumableType = {
   GuardianElixir: 7,
 } as const;
 
-const spellNames = load<Record<string, string>>('spell-names.json');
+// Slots worth an enchant for everyone. Rings are enchanter-only; ranged only matters for hunters.
+export const ENCHANT_SLOTS = ['Head', 'Shoulder', 'Back', 'Chest', 'Wrist', 'Hands', 'Legs', 'Feet', 'Main Hand', 'Off Hand'];
+/** Whether an item in a slot can take an enchant anyone would want (not a held-in-off-hand item). */
+export const enchantable = (slot: string, id: number) => ENCHANT_SLOTS.includes(slot) && !(slot === 'Off Hand' && itemInfo(id)?.o);
 
-/** The TBC name of a spell, falling back to the name Warcraft Logs gave. */
-export const spellName = (id: number, fallback: string) => spellNames[id] ?? fallback;
-
+export { spellName } from './spellNames.ts';
 export { gearStats, simItemId } from './gear.ts';
 export const itemInfo = (id: number) => items[simItemId(id)];
 export const enchantInfo = (effectId: number) => enchants[effectId];

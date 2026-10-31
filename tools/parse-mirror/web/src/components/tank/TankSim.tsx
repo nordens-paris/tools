@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import type { TankAnalysis, TankSimResult } from '../../../../shared/types.ts';
-import { runSim } from '../../api.ts';
+import { resendTankSims, runSim } from '../../api.ts';
 import { runBrowserSims } from '../../browserSims.ts';
 import { fmt, fmtSigned } from '../../format.ts';
 import { game } from '../../game.ts';
@@ -55,13 +55,19 @@ export function TankSim({ analysis: a }: { analysis: TankAnalysis }) {
     };
   }, [a.id, attempt]);
 
+  const sendAgain = async () => {
+    const sent = await resendTankSims(a.id).catch(() => false);
+    if (sent) setAttempt((n) => n + 1);
+    else window.location.reload();
+  };
+
   if (error) {
     return (
       <section className="panel">
         <div className="banner error">{error}</div>
         <div>
-          {/* The server forgot the analysis (it restarted): only a fresh analysis can sim again. */}
-          {error.startsWith('Analysis not found') ? <button onClick={() => window.location.reload()}>Run the analysis again</button> : <button onClick={() => setAttempt((n) => n + 1)}>Try again</button>}
+          {/* The server forgot the analysis (it restarted): send it again, or run a fresh one. */}
+          {error.startsWith('Analysis not found') ? <button onClick={sendAgain}>Run the sims again</button> : <button onClick={() => setAttempt((n) => n + 1)}>Try again</button>}
         </div>
       </section>
     );

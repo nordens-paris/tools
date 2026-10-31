@@ -38,6 +38,7 @@ export function withConsumablesFrom(
   durationSec: number,
 ): SimEnvironment {
   const out = structuredClone(env);
+  if (!others.length) return out;
   const half = others.length / 2;
   const drums = others.map((o) => o.drums).filter(Boolean) as string[];
   if (!out.partyBuffs.drums && drums.length >= half) {
@@ -152,9 +153,9 @@ export const HANDLED_AURA_NAMES = new Set([
 ]);
 
 // "Shadow Vulnerability" is the name of two debuffs: Shadow Weaving (priest) and Improved Shadow
-// Bolt (warlock), so these go by spell ID.
+// Bolt (warlock, one ID per rank), so these go by spell ID.
 const SHADOW_WEAVING_ID = 15258;
-const IMPROVED_SHADOW_BOLT_ID = 17800;
+export const IMPROVED_SHADOW_BOLT_IDS = [17794, 17797, 17798, 17799, 17800];
 
 export function buildEnvironment(
   buffs: AuraUptime[],
@@ -210,7 +211,7 @@ export function buildEnvironment(
   // ISB procs are the same aura, so they merge (up if either is) like the real shared debuff.
   // WoWSims applies the fixed uptime as a chance per hit, so the share of the player's own hits
   // that had it is the better number when we have it.
-  const isb = bossDebuffs.find((a) => a.id === IMPROVED_SHADOW_BOLT_ID);
+  const isb = bossDebuffs.find((a) => IMPROVED_SHADOW_BOLT_IDS.includes(a.id));
   const isbPct = opts.isbHitPct ?? isb?.uptimePct;
   if (isb && isbPct !== undefined && isbPct > 10) {
     env.debuffs.isbUptime = Math.round(isbPct) / 100;

@@ -41,7 +41,9 @@ som proxyer `/api`).
 
 | Kommando | Hvad den gør |
 |---|---|
-| `npm run typecheck` | TypeScript-tjek af server, web og dev-scripts |
+| `npm run typecheck` | TypeScript-tjek af server, web, tests og dev-scripts |
+| `npm test` | Testene i `tests/`, også kørt af GitHub på hver ændring |
+| `npm run check-threat -- <klon>` | Tjekker tank-threat-værdierne mod en WoWSims-klon |
 | `npm run build` | Typecheck og produktionsbuild af hjemmesiden til `dist/` |
 | `npm start` | Serveren alene; serverer også `dist/`, så side og API ligger på samme port |
 | `node scripts/build-wowsims.mjs <klon>` | Bygger simmen om (se nedenfor) |
@@ -104,6 +106,8 @@ Skrifterne er gemt som UTF-8 med BOM, ellers viser Windows PowerShell æ, ø og 
 | `VISITOR_LOOKUPS_PER_HOUR` | Opslag i timen pr. besøgende på serverens nøgle (standard 60, 0 = ingen grænse). Med egen nøgle er der ingen grænse |
 | `MAX_ANALYSES` | Analyser der holdes i hukommelsen (standard 50) |
 | `API_PORT` / `PORT` | Serverens port. Lokalt `API_PORT` (5174, fra `.env`); hosts som Render sætter `PORT`, som bruges når `API_PORT` ikke er sat |
+| `HOST` | Hvor serveren lytter. Standard: `127.0.0.1` med `API_PORT` (en lokal installation har intet login), ellers alle netkort, som hosts kræver |
+| `WCL_CACHE_MB` | Største størrelse på `.cache/wcl` i MB (standard 2048). De ældste svar slettes ved opstart |
 
 ## Hosting gratis
 
@@ -197,8 +201,9 @@ WantedBy=multi-user.target
 sudo systemctl enable --now parse-mirror
 ```
 
-Sæt [Caddy](https://caddyserver.com) foran til HTTPS (`reverse_proxy localhost:5174` i
-`Caddyfile`) og åbn kun port 80/443 udadtil.
+Sæt [Caddy](https://caddyserver.com) foran til HTTPS (`reverse_proxy 127.0.0.1:5174` i
+`Caddyfile`) og åbn kun port 80/443 udadtil. Med `API_PORT` i `.env` lytter serveren kun på
+maskinen selv, så den ikke kan nås uden om Caddy.
 
 ## Drift
 
@@ -206,12 +211,13 @@ Sæt [Caddy](https://caddyserver.com) foran til HTTPS (`reverse_proxy localhost:
   omkring 80 kald første gang, en healer- eller tank-analyse op til 100 (peers deles af alle med samme spec
   på samme boss), og en tank-analyses Sim-fane omkring 10 mere pr. tank; gentagne visninger kommer fra
   cachen. Grænsen pr. besøgende
-  (`VISITOR_LOOKUPS_PER_HOUR`) beskytter budgettet. Klik ikke "Use New Limits" på Warcraft Logs;
+  (`VISITOR_LOOKUPS_PER_HOUR`) beskytter budgettet: en hel raid-side tæller 5 opslag, en analyse 3.
+  Uploads af tank-analyser til sims er begrænset til 30 i timen pr. besøgende. Klik ikke "Use New Limits" på Warcraft Logs;
   det sænker budgettet til 1.000.
 - **Besøgendes egne nøgler** gemmes kun i deres browser, sendes kun med deres egne forespørgsler
   og gemmes eller logges aldrig på serveren.
 - **Cache:** `.cache/wcl` indeholder kun offentlige logdata (gzippet, omkring 0,2 MB pr. kill for
-  healer-data) og kan slettes når som helst.
+  healer-data), holdes under `WCL_CACHE_MB` og kan slettes når som helst. Windows-opdateringen beholder den.
 - **Hukommelse:** analyser holdes i hukommelsen, så sims kan genbruge dem (de seneste 50). Hvis
   serveren genstarter midt i en analyse, kører siden den automatisk igen.
 - **Hemmeligheder:** `.env` må aldrig komme i git.

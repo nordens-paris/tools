@@ -1,3 +1,4 @@
+import { median } from '../../../../server/analysis/stats.ts';
 import type { HealerAnalysis, HealerMetrics } from '../../../../shared/types.ts';
 import { fmt, fmtTime } from '../../format.ts';
 import { pct } from './HealerTables.tsx';
@@ -65,10 +66,7 @@ export function ManaChart({ analysis: a }: { analysis: HealerAnalysis }) {
 export function ManaSources({ analysis: a }: { analysis: HealerAnalysis }) {
   const names = [...new Set([...a.you.manaGained, ...a.peers.flatMap((p) => p.manaGained)].map((g) => g.name))];
   const amount = (m: HealerMetrics, n: string) => m.manaGained.find((g) => g.name === n)?.amount ?? 0;
-  const med = (n: string) => {
-    const v = a.peers.map((p) => amount(p, n)).sort((x, y) => x - y);
-    return v.length ? v[Math.floor(v.length / 2)] : 0;
-  };
+  const med = (n: string) => median(a.peers.map((p) => amount(p, n)));
   const rows = names.map((n) => ({ n, you: amount(a.you, n), peers: med(n) })).filter((r) => r.you || r.peers).sort((p, q) => Math.max(q.you, q.peers) - Math.max(p.you, p.peers));
   const max = Math.max(1, ...rows.flatMap((r) => [r.you, r.peers]));
   return (

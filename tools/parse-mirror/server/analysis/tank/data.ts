@@ -5,7 +5,7 @@
 import { TANK_ICONS } from '../../specs/tanks.ts';
 import type { WclReader } from '../../wcl/reader.ts';
 import type { WclActor, WclEvent, WclFightsResponse, WclTableAuras } from '../../wcl/types.ts';
-import { type ActorTableEntry, FIELDS, fetchHealerFight, type HealerFightData } from '../healer/data.ts';
+import { type ActorTableEntry, FIELDS, fetchHealerFight, type HealerFightData, tbcNames } from '../healer/data.ts';
 
 export interface TankFightData {
   raid: HealerFightData;
@@ -38,6 +38,7 @@ export async function fetchTankFight(client: WclReader, report: string, fightId:
     client.buffs(report, s, e, source),
     client.bossDebuffs(report, s, e, tank.name),
   ]);
+  tbcNames(fl, [done], [buffs, bossDebuffs]);
   const enemies = (fl.enemies ?? [])
     .filter((a) => a.fights.some((f) => f.id === fightId))
     .map((a) => ({ ...a, boss: a.type === 'Boss' }))
@@ -67,6 +68,7 @@ export async function fetchTankFightLite(client: WclReader, report: string, figh
     client.bossDebuffs(report, s, e, tank.name),
     client.table<{ entries: (ActorTableEntry & { sources?: { name: string; total: number; type: string }[] })[] }>('damage-taken', report, { ...range, abilityid: 1 }),
   ]);
+  tbcNames(fl, [taken, done, log, deaths], [buffs, bossDebuffs]);
   const players = fl.friendlies.filter((a) => a.type !== 'Pet' && a.type !== 'NPC' && a.fights.some((f) => f.id === fightId));
   const casts = log.filter((x) => (x.type === 'cast' || x.type === 'begincast') && x.sourceID === tank.id && x.ability?.guid !== 1);
   const combatants = log.filter((x) => x.type === 'combatantinfo' && x.timestamp <= s + 1000) as unknown as HealerFightData['combatants'];

@@ -12,7 +12,7 @@ const end = fight.start_time + Number(secondsArg ?? 30) * 1000;
 const boss = fights.enemies?.find((x) => x.type === 'Boss' && x.fights.some((f) => f.id === fight.id))!;
 const K = 467.5 * 70 - 22167.5;
 type Ev = { timestamp: number; type: string; sourceID: number; targetID: number; hitType?: number; amount?: number; mitigated?: number; unmitigatedAmount?: number; stack?: number; ability: { name: string; type: number; guid: number } };
-const list = (r: unknown) => ((r as { events?: Ev[] }).events ?? (r as Ev[]));
+const list = (r: unknown) => r as Ev[];
 const hits = list(await client.events('damage-done', report, fight.start_time, end, { hostility: 0 })).filter(
   (e) => e.type === 'damage' && e.targetID === boss.id && e.hitType === 1 && e.ability.type === 1 && e.unmitigatedAmount && e.amount,
 );

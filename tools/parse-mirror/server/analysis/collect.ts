@@ -2,7 +2,7 @@
 import type { AbilityCasts, AuraUptime, CooldownUse, GearItem, PetSummary, PlayerFight } from '../../shared/types.ts';
 import { PET_SCROLL_IDS, detectConsumes, tempEnchantName, type DetectedConsumes } from '../data/consumes.ts';
 import { armoryTalents } from '../armory/talents.ts';
-import { enchantInfo, gemInfo, itemInfo, spellName } from '../data/db.ts';
+import { enchantInfo, enchantable, gemInfo, itemInfo, spellName } from '../data/db.ts';
 import { talentRank } from '../data/talents.ts';
 import { closestTalentPreset } from '../sim/request.ts';
 import { castLabel, type SpecConfig } from '../specs/types.ts';
@@ -494,7 +494,7 @@ export async function collectPlayerFight(
     (a) => a.id !== source && (a.icon.startsWith('Shaman') || a.icon === 'Priest-Shadow') && a.fights.some((f) => f.id === fightId),
   );
   const [logEvents, damage, buffsTable, bossDebuffsTable, ownDebuffsTable, damageEvents, taken] = await Promise.all([
-    client.events('summary', report, start - TOTEM_LEAD_MS, end, { filter: fightEventsFilter(actor.name, givers) }),
+    client.events('summary', report, Math.max(0, start - TOTEM_LEAD_MS), end, { filter: fightEventsFilter(actor.name, givers) }),
     client.table('damage-done', report, { start, end, sourceid: source }),
     client.buffs(report, start, end, source),
     client.bossDebuffs(report, start, end),
@@ -576,6 +576,7 @@ export async function collectPlayerFight(
       icon: info?.i ?? g.icon?.replace(/\.jpg$/, '') ?? 'inv_misc_questionmark',
       quality: info?.q ?? g.quality ?? 0,
       itemLevel: g.itemLevel ?? 0,
+      ...(enchantable(slot, g.id) ? { canEnchant: true } : {}),
       enchantId: g.permanentEnchant || undefined,
       enchantName: g.permanentEnchant ? (enchantInfo(g.permanentEnchant)?.n ?? `Enchant ${g.permanentEnchant}`) : undefined,
       tempEnchantId: g.temporaryEnchant || undefined,

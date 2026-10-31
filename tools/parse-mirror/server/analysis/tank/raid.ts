@@ -1,11 +1,11 @@
 // Tanks on every boss kill of a report, for the raid pages (no peers). The raid-wide data is the
 // same the healer pages use; each tank adds 3 requests per kill.
 import type { TankMetrics, TankRaidRow, TankRaidSummary } from '../../../shared/types.ts';
-import { TANK_ICONS } from '../../specs/tanks.ts';
-import type { WclReader } from '../../wcl/reader.ts';
+import { mayTank } from '../../specs/tanks.ts';
+import { unlessOutage, type WclReader } from '../../wcl/reader.ts';
 import type { WclFightsResponse } from '../../wcl/types.ts';
 import { FightModel } from '../healer/model.ts';
-import { fetchTankFight } from './data.ts';
+import { fetchTankFight, isTanking } from './data.ts';
 import { tankMetrics, tankSpecIn } from './metrics.ts';
 
 export function tankRow(t: TankMetrics): TankRaidRow {
@@ -46,10 +46,12 @@ export async function tankRaidSummary(client: WclReader, report: string): Promis
     report,
     bosses: await Promise.all(
       kills.map(async (f) => {
-        // Tanks: tank-spec icons in the melee-taken table (shared with the raid-wide fetch).
+        // Tanks: from the melee-taken table (shared with the raid-wide fetch), bare class icons included.
         const melee = await client.table<{ entries: { id: number; icon: string }[] }>('damage-taken', report, { start: f.start_time, end: f.end_time, abilityid: 1 });
-        const ids = melee.entries.filter((e) => TANK_ICONS.has(e.icon)).map((e) => e.id);
-        const rows = (await Promise.all(ids.map((id) => tankRowOn(client, report, f.id, id, fights).catch(() => undefined)))).filter((r): r is TankRaidRow => !!r);
+        const candidates = melee.entries.filter((e) => mayTank(e.icon));
+        const tanking = await Promise.all(candidates.map((e) => isTanking(client, report, f.id, e.id, fights)));
+        const ids = candidates.filter((_, i) => tanking[i]).map((e) => e.id);
+        const rows = (await Promise.all(ids.map((id) => tankRowOn(client, report, f.id, id, fights).catch(unlessOutage(undefined))))).filter((r): r is TankRaidRow => !!r);
         return { fight: f.id, name: f.name, durationSec: (f.end_time - f.start_time) / 1000, rows: rows.sort((a, b) => b.swingShare - a.swingShare) };
       }),
     ),

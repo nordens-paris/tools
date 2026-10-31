@@ -8,6 +8,7 @@
 //   (amount = max mana, max = cost, type = current mana) in some loggers' logs, our guild's included.
 // - Hunter Feign Death is logged as a death at full HP.
 import { TANK_ICON, healerSpecFor, type HealerSpec } from '../../specs/healers.ts';
+import { specNameFor } from '../../specs/trees.ts';
 import type { WclActor, WclEvent } from '../../wcl/types.ts';
 import { median } from '../stats.ts';
 import type { HealerFightData } from './data.ts';
@@ -100,6 +101,7 @@ export class FightModel {
   private readonly deathTimes = new Map<number, number[]>();
   private readonly maxHpCache = new Map<number, { value: number; from: 'damage' | 'stamina' }>();
   private readonly stamina = new Map<number, number>();
+  private readonly dropsBelow = new Map<number, { t: number; id: number }[]>();
 
   constructor(readonly data: HealerFightData) {
     this.T0 = data.fight.start_time;
@@ -129,7 +131,8 @@ export class FightModel {
     }
     for (const e of data.deaths) {
       const who = e.targetID;
-      if (who === undefined || !this.players.has(who) || this.hpAt(who, e.timestamp - 1) >= 100) continue; // Feign Death
+      if (who === undefined || !this.players.has(who)) continue;
+      if (this.players.get(who)!.icon.startsWith('Hunter') && this.hpAt(who, e.timestamp - 1) >= 100) continue; // Feign Death
       this.deathTimes.set(who, [...(this.deathTimes.get(who) ?? []), e.timestamp]);
     }
 
@@ -151,7 +154,7 @@ export class FightModel {
     }
     this.raidEffective = [...this.effectiveBySource.values()].reduce((s, v) => s + v, 0);
     for (const [id, eff] of this.effectiveBySource) {
-      const spec = healerSpecFor(this.icons.get(id) ?? '', spells.get(id));
+      const spec = this.healerSpecOf(id, spells.get(id));
       if (spec && eff > 0.05 * this.raidEffective) this.healers.set(id, spec);
       else if (spec) this.minorHealers.set(id, spec);
     }
@@ -162,6 +165,18 @@ export class FightModel {
     }
     const taken = this.damage.reduce((s, e) => s + (e.targetID !== undefined && this.players.has(e.targetID) ? (e.amount ?? 0) : 0), 0);
     this.raidDtps = this.durationSec ? taken / this.durationSec : 0;
+  }
+
+  /**
+   * The healer spec of a player who healed. A bare class icon goes by its talents, which show the
+   * spec: one Flash of Light doesn't make a Retribution paladin a healer, and a Discipline priest
+   * needs no Pain Suppression on the fight to be one. Without talents, by the heals cast.
+   */
+  private healerSpecOf(id: number, healsCast?: Iterable<string>) {
+    const icon = this.icons.get(id) ?? '';
+    const t = this.data.combatants.find((c) => c.sourceID === id)?.talents;
+    const tree = !icon.includes('-') && t?.length ? specNameFor(icon, [t[0]?.id ?? 0, t[1]?.id ?? 0, t[2]?.id ?? 0]) : undefined;
+    return tree ? healerSpecFor(`${icon}-${tree}`) : healerSpecFor(icon, healsCast);
   }
 
   name(id: number | undefined) {
@@ -192,11 +207,15 @@ export class FightModel {
 
   /** Times a player's HP crossed from at/above `pct` to below it. */
   drops(pct: number): { t: number; id: number }[] {
-    const out: { t: number; id: number }[] = [];
+    let out = this.dropsBelow.get(pct);
+    if (out) return out;
+    out = [];
     for (const [id, s] of this.hp) {
       for (let i = 1; i < s.t.length; i++) if (s.v[i - 1] >= pct && s.v[i] < pct) out.push({ t: s.t[i], id });
     }
-    return out.sort((a, b) => a.t - b.t);
+    out.sort((a, b) => a.t - b.t);
+    this.dropsBelow.set(pct, out);
+    return out;
   }
 
   deaths(): { id: number; t: number }[] {

@@ -174,27 +174,40 @@ minut, hvor healerens score (mod puljen, rettet for bossen) er 35 eller lavere, 
   0,8 af sin og var 15 point mere idle end sin egen sædvanlige idle (medianen over aftenens øvrige
   kills). En healer, der altid er idle, eller altid ligger lavt på bossen, markeres ikke af den.
 
+Står en spiller kun med klasseikon i loggen, afgør talenterne, om vedkommende er healer, ikke
+enkelte heals. Dødsfald ved fuldt liv tæller, undtagen for hunters (Feign Death).
+
 Healere under 5 % af raidets healing (`minorHealers` i `FightModel`) tages med her, men tæller
 ikke som raidets healere for kontekst, peers, fordelingen eller puljen, og et kill, hvor healeren
 var under 5 %, tæller ikke med i healerens sædvanlige andel. På Teron hentes Shadow of Death
 (debuff 40251, én ekstra forespørgsel): en healer, der var ånd (op til 60 s efter debuffen) i
 mindst en femtedel af kampen, bedømmes ikke.
 
+På Anetheron hentes Carrion Swarm (debuff 31306, én ekstra forespørgsel): den tager 75 % af den
+healing, spilleren laver, så længe den sidder på. HPS og healing per mana divideres med den andel,
+healeren kunne nå at lave (`healingKept`), før score, andel, fordeling og held-back-måling. Rettelsen
+regner med 80 % og ikke 75 %, fordi den antager, at healeren healer jævnt over kampen, og det rammer
+for lavt: en healer, der er ramt i halvdelen af kampen, tæller som 60 %. Med 75 % stod Healer B på
+Anetheron 9. sep. stadig markeret på en hårsbredde. Puljen er ikke bygget om med rettelsen (en ombygning henter debuffen til gamle Anetheron-kills), men
+Anetheron flytter sig kun lidt i den (3 point på HPS). Tid efter healerens død tæller ikke. Tallene i tabellen nedenfor er fra før
+rettelsen: Healer B på Anetheron 16. sep. skyldtes Carrion Swarm, og Healer D på Supremus 16. sep. er
+ikke længere markeret, efter healere under 5 % ikke puster andelene op (0,90 af sin andel).
+
 | | Fundet |
 |---|---|
-| Officerens 16 tilfælde | 13 (mangler Kodomuf på Naj'entus-wipen, Azgalor og Supremus) |
-| Andre healer-kampe i de to raids | 4 af 107: tre bekræftet af officeren (Sanctalux på en Reliquary-wipe på 5 min, Smallp på Anetheron 16. sep., Kodomuf på Akama med 0,19 af sin sædvanlige andel) og Banantyv på Supremus 16. sep. (0,75 af sin andel og 34 point mere idle end normalt, mens Sanctalux lå på 1,7), som officeren godtog |
+| Officerens 16 tilfælde | 13 (mangler Healer C på Naj'entus-wipen, Azgalor og Supremus) |
+| Andre healer-kampe i de to raids | 4 af 107: tre bekræftet af officeren (Healer A på en Reliquary-wipe på 5 min, Healer B på Anetheron 16. sep., Healer C på Akama med 0,19 af sin sædvanlige andel) og Healer D på Supremus 16. sep. (0,75 af sin andel og 34 point mere idle end normalt, mens Healer A lå på 1,7), som officeren godtog |
 | Puljens raids (andre guilds) | 2,9 % af healer-kills (2,3 % uden grænsen ved score 15 og lavere og løft-reglen) |
 
-På Supremus-killet 16. sep. lå tre healere lavt, mens Sanctalux lå på 1,7 af sin sædvanlige andel.
-Banantyv var 34 point mere idle end normalt og markeres. Manatides (0,60 af sin andel) var kun 7
-point over sin normale idle, og han lå også lavt på Supremus ugen før (0,74 af specens andel, score
-19). Kodomuf (0,75) var 23 % idle, men hans sædvanlige idle den aften var 19 %, fordi han også var
+På Supremus-killet 16. sep. lå tre healere lavt, mens Healer A lå på 1,7 af sin sædvanlige andel.
+Healer D var 34 point mere idle end normalt og markeres. Healer E (0,60 af sin andel) var kun 7
+point over sin normale idle, og healeren lå også lavt på Supremus ugen før (0,74 af specens andel, score
+19). Healer C (0,75) var 23 % idle, men healerens sædvanlige idle den aften var 19 %, fordi healeren også var
 meget idle på aftenens BT-kills (84 % på Reliquary). Mod ugen før (cirka 7 %) var det 16 point mere,
-men Show healers kender kun aftenens kills. På Naj'entus-wipen lå hans andel (0,90), idle (16 %) og
-casting som de andres; på Azgalor var andelen 0,80 af hans sædvanlige, uden at nogen lå højt.
+men Show healers kender kun aftenens kills. På Naj'entus-wipen lå healerens andel (0,90), idle (16 %) og
+casting som de andres; på Azgalor var andelen 0,80 af healerens sædvanlige, uden at nogen lå højt.
 
-Prøvet og droppet: løft-reglen uden idle-kravet markerede også Manatides og hævede puljens andel til
+Prøvet og droppet: løft-reglen uden idle-kravet markerede også Healer E og hævede puljens andel til
 3,9 %, og dens ekstra markeringer i puljen landede ikke oftere i aftener med andre markeringer end
 tilfældigt. Sædvanlig andel som 75 %-fraktilen i stedet for medianen fangede færre (12) og gav flere
 falske.

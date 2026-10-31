@@ -7,7 +7,7 @@
 // tank's spec icon and share of the boss's melee), and ~8 per peer for their fight.
 import type { TankPeer, TankPeerGroup, TankRole } from '../../../shared/types.ts';
 import { type TankSpec, tankSpecFor } from '../../specs/tanks.ts';
-import type { WclReader } from '../../wcl/reader.ts';
+import { unlessOutage, type WclReader } from '../../wcl/reader.ts';
 import type { WclRaidRanking } from '../../wcl/types.ts';
 import type { ActorTableEntry } from '../healer/data.ts';
 import { bossMeleeShare, fetchTankFightLite, type TankFightData } from './data.ts';
@@ -80,7 +80,7 @@ export async function findTankPeers(
   // first, so rarer specs (bears) aren't lost among raids tanked by other classes.
   const withSpec = new Set<string>();
   for (const page of [1, 2, 3]) {
-    const r = await client.rankings(q.encounterId, q.spec.wcl.classId, q.spec.wcl.specId, page).catch(() => undefined);
+    const r = await client.rankings(q.encounterId, q.spec.wcl.classId, q.spec.wcl.specId, page).catch(unlessOutage(undefined));
     for (const row of r?.rankings ?? []) withSpec.add(`${row.reportID}:${row.fightID}`);
     if (!r?.hasMorePages) break;
   }
@@ -108,7 +108,7 @@ export async function findTankPeers(
         .filter((r) => !found.has(keyOf(r)))
         .slice(0, MAX_RAIDS - raidsChecked);
       raidsChecked += batch.length;
-      await Promise.all(batch.map(async (r) => found.set(keyOf(r), await tanksIn(client, r, q.spec).catch(() => []))));
+      await Promise.all(batch.map(async (r) => found.set(keyOf(r), await tanksIn(client, r, q.spec).catch(unlessOutage([])))));
     }
     const pool = poolOf().filter(fits);
     // Closest share of the boss first (a 90% main tank compares best with another one).
@@ -116,7 +116,7 @@ export async function findTankPeers(
     log(`Checked ${raidsChecked} raids: ${pool.length} ${q.spec.label}s in ${tier.match} matches`);
     const chosen = pool.slice(0, CONSIDER);
     chosen.forEach((c) => tried.add(`${c.name}:${c.raid.reportID}`));
-    const got = await Promise.all(chosen.map((c) => fetchTankFightLite(client, c.raid.reportID, c.raid.fightID, c.name).then((d) => ({ c, d })).catch(() => undefined)));
+    const got = await Promise.all(chosen.map((c) => fetchTankFightLite(client, c.raid.reportID, c.raid.fightID, c.name).then((d) => ({ c, d })).catch(unlessOutage(undefined))));
     for (const g of got) {
       if (!g || picked.length >= PEERS) continue;
       // A peer who died isn't one to copy.

@@ -1,4 +1,5 @@
 import type { RaidBoss, RaidSummary } from '../../../shared/types.ts';
+import { median } from '../../../server/analysis/stats.ts';
 import { specIcon } from '../brand.ts';
 import { downloadCsv } from '../csv.ts';
 import { fmt, fmtDate, fmtSigned, fmtTime, itemIcon, wclReportUrl, wclUrl } from '../format.ts';
@@ -6,11 +7,6 @@ import { Hint } from './Hint.tsx';
 import { GearChips, PlayerName, classIcon, upClass } from './RaidChecks.tsx';
 import { HealerBossTable, HealerKeyNote, HealerRaidKpis } from './healer/HealerRaid.tsx';
 import { TankBossTable, TankRaidKpis } from './tank/TankRaid.tsx';
-
-const median = (xs: number[]) => {
-  const s = [...xs].sort((a, b) => a - b);
-  return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
-};
 
 /** Warcraft Logs' percentile colours: grey, green, blue, purple, orange, pink, gold. */
 export function pctClass(p: number) {

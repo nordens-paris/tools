@@ -1,7 +1,7 @@
 // Healers on every boss kill of a report, for the raid pages. Own fights only (no peers): about
 // 10 requests per kill, shared by every healer and by the single-kill healer page. Wipes of a
 // minute or more are included for the held-back check.
-import { heldBack, scoreInputs, usualIdle, usualShare, type HealerScoreRef } from '../../../shared/healerScore.ts';
+import { healingKept, heldBack, scoreInputs, usualIdle, usualShare, type HealerScoreRef } from '../../../shared/healerScore.ts';
 import ref from '../../../shared/healerScoreRef.json' with { type: 'json' };
 import type { HealerMetrics, HealerRaidRow, HealerRaidSummary } from '../../../shared/types.ts';
 import type { WclReader } from '../../wcl/reader.ts';
@@ -22,6 +22,7 @@ export function raidRow(h: HealerMetrics, minor = false): HealerRaidRow {
     role: h.role,
     tankShare: h.tankShare,
     hps: h.hps,
+    ...(h.carrionSwarmSec ? { hpsUncut: h.hps / healingKept(h) } : {}),
     healPerMana: h.mana?.healPerMana,
     overhealPct: h.overhealPct,
     ownOverheal: ownOverheal(h),

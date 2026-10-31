@@ -11,6 +11,10 @@
 import fs from 'node:fs';
 import { SCORE_METRICS, adjusted, contextOf, healerScore, healingShares, healingSplit, scoreInputs, type HealerScoreInputs, type HealerScoreRef, type ScoreMetric } from '../shared/healerScore.ts';
 import type { HealerMetrics } from '../shared/types.ts';
+import { ANETHERON } from '../shared/healerScore.ts';
+import { fetchHealerFight } from '../server/analysis/healer/data.ts';
+import { healerMetrics } from '../server/analysis/healer/metrics.ts';
+import { FightModel } from '../server/analysis/healer/model.ts';
 import { WclClient } from '../server/wcl/client.ts';
 
 const SETS = ['', '-bt', '-btweeks', '-bosses'];
@@ -50,6 +54,13 @@ for (const set of SETS) {
     const fight = (await client.fights(x.report).catch(() => undefined))?.fights.find((f) => f.id === x.fight);
     const boss = x.bossId ?? fight?.boss ?? 0;
     if (boss) idOfName.set(x.boss, boss);
+    // Samples from before Carrion Swarm was measured.
+    if (ANETHERON.has(boss) && x.m.carrionSwarmSec === undefined) {
+      const model = await fetchHealerFight(client, x.report, x.fight).then((d) => new FightModel(d)).catch(() => undefined);
+      const id = model && [...model.players.values()].find((a) => a.name === x.name)?.id;
+      if (model && id !== undefined && (model.healers.has(id) || model.minorHealers.has(id))) x.m.carrionSwarmSec = healerMetrics(model, id).carrionSwarmSec;
+      else console.warn(`No Carrion Swarm for ${x.name} on ${x.report}:${x.fight}: left uncorrected`);
+    }
     // Names in English where any report has them (some raids log in Korean).
     if (fight && (/^[\x20-\x7e]+$/.test(fight.name) || !bossNames.has(boss))) bossNames.set(boss, fight.name);
     rows.push({ kill: `${x.report}:${x.fight}`, name: x.name, healer: x.guild ? `${x.guild}:${x.name}` : `${x.report}:${x.name}`, guild: x.guild, night: x.night, boss, bossName: x.boss, s: scoreInputs(x.m) });

@@ -72,7 +72,10 @@ export class BrowserWcl implements WclReader {
           await sleep(2_000 * 2 ** attempt);
           continue;
         }
-        if (res.status === 401 || res.status === 403) throw new Error('Warcraft Logs rejected your API key.');
+        if (res.status === 401 || res.status === 403) {
+          const said = ((await res.json().catch(() => undefined)) as { error?: string } | undefined)?.error;
+          throw new Error(`Warcraft Logs refused the request${said ? ` (${said})` : ''}. Your key must be a v1 client key, and the report must be public.`);
+        }
         if (!res.ok) throw new Error(`Warcraft Logs ${endpoint.split('/').slice(0, 2).join('/')} failed (${res.status}).`);
         return (await res.json()) as T;
       }

@@ -2,7 +2,7 @@
 import type { ConsumeUse } from '../../shared/types.ts';
 import { SIM_SLOT_ORDER, type PlayerFightRaw } from '../analysis/collect.ts';
 import type { DetectedConsumes } from '../data/consumes.ts';
-import { itemInfo, loadJson, simItemId } from '../data/db.ts';
+import { enchantInfo, gemInfo, itemInfo, loadJson, simItemId } from '../data/db.ts';
 import { baseEncounterId, game } from '../game.ts';
 import { talentSplit, type SpecConfig } from '../specs/types.ts';
 import type { WclGear } from '../wcl/types.ts';
@@ -23,6 +23,7 @@ export interface SimPlayerSetup {
   consumes: ConsumeUse[];
   flags: DetectedConsumes['flags'];
   conjuredId?: number;
+  conjuredIds?: number[];
   talents: string;
   specOptions: unknown;
   aplFile: string;
@@ -69,6 +70,7 @@ export function setupFromRaw(raw: PlayerFightRaw, spec: SpecConfig): SimPlayerSe
     consumes: raw.consumes.list,
     flags: raw.consumes.flags,
     conjuredId: raw.consumes.conjuredId,
+    conjuredIds: raw.consumes.conjuredIds,
     talents: raw.fight.talents,
     specOptions: spec.sim.specOptions(raw, raw.fight.talents),
     aplFile: typeof spec.sim.aplFile === 'string' ? spec.sim.aplFile : spec.sim.aplFile(raw),
@@ -123,7 +125,7 @@ function consumablesSpec(player: SimPlayerSetup) {
     conjuredId: player.conjuredId,
     // The sim only registers potions/conjured items listed here (the WoWSims UI fills these in).
     potions: potId ? [potId] : [],
-    conjuredItems: player.conjuredId ? [player.conjuredId] : [],
+    conjuredItems: [...new Set([...(player.conjuredId ? [player.conjuredId] : []), ...(player.conjuredIds ?? [])])],
     mhImbueId: first('Weapon (MH)'),
     ohImbueId: first('Weapon (OH)'),
     superSapper: flags.superSapper,
@@ -252,8 +254,9 @@ export function buildRequest(opts: {
     if (!g || !g.id || !itemInfo(g.id)) return {};
     return {
       id: simItemId(g.id),
-      ...(g.permanentEnchant ? { enchant: g.permanentEnchant } : {}),
-      ...(g.gems?.length ? { gems: g.gems.map((gem) => gem.id) } : {}),
+      // The same for enchants and gems; a gem's place is its socket, so it leaves a 0.
+      ...(g.permanentEnchant && enchantInfo(g.permanentEnchant) ? { enchant: g.permanentEnchant } : {}),
+      ...(g.gems?.length ? { gems: g.gems.map((gem) => (gemInfo(gem.id) ? gem.id : 0)) } : {}),
     };
   });
 

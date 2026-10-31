@@ -16,8 +16,9 @@ export async function roleAnalysis(kind: 'healer' | 'tank', key: string, report:
   const wcl = browserClient(key);
   if (kind === 'healer') return analyzeHealer(wcl, report, fight, source);
   const stored = await analyzeTank(wcl, report, fight, source);
-  // The sims start from the server, which needs what they're built from.
-  await postTankSims(stored);
+  // The sims start from the server, which needs what they're built from. Without it the analysis
+  // still stands: the Sim tab says so and can try again.
+  await postTankSims(stored.analysis.id, stored).catch(() => {});
   return stored.analysis;
 }
 

@@ -33,7 +33,7 @@ for (const encounterId of encounters.map(Number)) {
       const f = (await client.fights(raw.fight.report)).fights.find((x) => x.id === raw.fight.fight)!;
       const res = await client.events('damage-done', raw.fight.report, f.start_time, f.end_time, { sourceid: raw.fight.source });
       const own = zero();
-      for (const e of ((res as { events?: Ev[] }).events ?? (res as unknown as Ev[])).filter((e) => e.type === 'damage' && e.ability.name === 'Melee')) {
+      for (const e of (res as unknown as Ev[]).filter((e) => e.type === 'damage' && e.ability.name === 'Melee')) {
         const k = KIND[e.hitType ?? -1];
         if (!k) continue;
         own.swings++;

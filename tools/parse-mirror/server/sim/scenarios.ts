@@ -7,7 +7,7 @@ import { WCL_SLOTS, type PlayerFightRaw } from '../analysis/collect.ts';
 import { itemInfo } from '../data/db.ts';
 import { median, mostCommon } from '../analysis/stats.ts';
 
-import { bossArmor, buildRequest, encounterOf, environmentOf, raidAurasOf, setupFromRaw, type SimPlayerSetup } from './request.ts';
+import { bossArmor, buildRequest, encounterOf, environmentOf, raidAurasOf, setupFromRaw, unknownItems, type SimPlayerSetup } from './request.ts';
 import { buildEnvironment, withConsumablesFrom, withTopRaidBuffs, type SimEnvironment } from './environment.ts';
 import { computeLuck, simRollRates } from './luck.ts';
 import { procLuck } from './procs.ts';
@@ -193,6 +193,10 @@ export async function runScenarios(
       `Raid buffs detected for you: ${yourEnv.detected.join(', ') || 'none'}.`,
       `Your talents: ${you.fight.talentSource === 'armory' ? 'from the armory' : 'standard build (armory spec not found)'} (${you.fight.talents}).`,
       ...spec.sim.notes,
+      ...players
+        .map((raw) => ({ name: raw.fight.name, gear: raw.fight.gear, ids: unknownItems(raw.combatant!.gear) }))
+        .filter((x) => x.ids.length)
+        .map((x) => `Left out of ${x.name}'s sim (not in WoWSims): ${x.ids.map((id) => x.gear.find((g) => g.id === id)?.name ?? `item ${id}`).join(', ')}.`),
       `Boss armor ${bossArmor(encounter.id)}; execute phase ${Math.round((encounter.executeProportion ?? 0.2) * 100)}% of the fight${encounter.executeProportion ? ' (from your first Execute)' : ' (assumed)'}.`,
       "No crit adjustment: the sim's crit matches real kills on average. Ranked parses are each player's best kill out of many, so they usually rolled well; the luck columns show how much.",
       'Luck includes knock-on effects: each player is simmed again with crit and hit set to what they actually rolled, and again with their trinket and enchant procs up as long as they were in the log.',

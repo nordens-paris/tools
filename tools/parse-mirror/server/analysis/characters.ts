@@ -1,9 +1,11 @@
 // Finding a character's ranked kills. Logs don't say which region a character is from, so regions
 // are tried until one has the character.
-import type { WclReader } from '../wcl/reader.ts';
+import { unlessOutage, type WclReader } from '../wcl/reader.ts';
 import type { WclFight, WclFightsResponse, WclParse } from '../wcl/types.ts';
 
 const REGIONS = ['EU', 'US', 'KR', 'TW', 'CN'];
+/** Parse specs that rank healing. */
+export const HEALER_PARSE_SPECS = ['Holy', 'Discipline', 'Restoration'];
 /** Region each character was found in, so later lookups ask once. */
 const regionOf = new Map<string, string>();
 /** A server is in one region; once known, its other characters only need one try. */
@@ -21,15 +23,12 @@ export async function parsesFor(
   const id = `${name}-${server}`;
   const known = regionOf.get(id) ?? serverRegion.get(server);
   for (const region of known ? [known] : REGIONS) {
-    try {
-      const parses = await client.parses(name, server, region, zone, metric);
-      if (parses.length) {
-        regionOf.set(id, region);
-        serverRegion.set(server, region);
-        return { parses, region };
-      }
-    } catch {
-      // Character not found in this region.
+    // An error here is the character not being in this region.
+    const parses = await client.parses(name, server, region, zone, metric).catch(unlessOutage([] as WclParse[]));
+    if (parses.length) {
+      regionOf.set(id, region);
+      serverRegion.set(server, region);
+      return { parses, region };
     }
   }
   return { parses: [] };

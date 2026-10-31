@@ -31,7 +31,6 @@ export const warriorArms: SpecConfig = {
   ],
   gcdAbilities: [...warriorFury.gcdAbilities, 'Sweeping Strikes'],
   cooldowns: ['Death Wish', 'Recklessness', 'Sweeping Strikes', 'Bloodrage', 'Berserker Rage', 'Blood Fury', 'Berserking', 'Haste', 'Insane Strength', 'Dire Drunkard'],
-  castLabels: { 'Dire Drunkard': 'Empty Mug of Direbrew' },
   uptimes: ['Flurry', 'Death Wish', 'Recklessness', 'Bloodlust', 'Drums of Battle', 'Battle Shout'],
   debuffUptimes: ['Mortal Strike'],
   expectedAbilities: ['Execute'],

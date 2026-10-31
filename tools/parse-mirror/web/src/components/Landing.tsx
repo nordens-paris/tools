@@ -20,17 +20,19 @@ interface Props {
   onAnalyze: (r: string, f: number, s: number) => void;
   onRaid: (r: string, s: number) => void;
   onGuild: (r: string) => void;
+  onProgress: (r: string, s: number) => void;
   loading: boolean;
 }
 
-export function Landing({ onAnalyze, onRaid, onGuild, loading }: Props) {
+export function Landing({ onAnalyze, onRaid, onGuild, onProgress, loading }: Props) {
   const [key, setKey] = useState(0);
   const [initialUrl, setInitialUrl] = useState('');
   const last = lastOpened();
   const openLast = () => {
     const r = parseRoute(new URL(last!.url, window.location.origin).search);
     if (r.view === 'analysis') onAnalyze(r.report, r.fight, r.source);
-    else if (r.view === 'raid' || r.view === 'progress') onRaid(r.report, r.source);
+    else if (r.view === 'raid') onRaid(r.report, r.source);
+    else if (r.view === 'progress') onProgress(r.report, r.source);
     else if (r.view === 'guild') onGuild(r.report);
   };
 

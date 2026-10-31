@@ -2,17 +2,13 @@ import { useState } from 'react';
 
 import type { RaidSummary, TankRaidRow, TankRaidSummary } from '../../../../shared/types.ts';
 import { raidTanks } from '../../roles.ts';
-import { fmt, fmtTime, wclUrl } from '../../format.ts';
+import { fmt, fmtTime, medianOf as median, wclUrl } from '../../format.ts';
 import { Hint } from '../Hint.tsx';
 import { HealerKeyNote, useRolesAllowed } from '../healer/HealerRaid.tsx';
 import { iconOf, pct } from '../healer/HealerTables.tsx';
 
 const ROLE = { main: 'Main', off: 'Off', adds: 'Adds' } as const;
 const k = (v: number) => `${(v / 1000).toFixed(1)}k`;
-const median = (xs: number[]) => {
-  const s = [...xs].sort((a, b) => a - b);
-  return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : undefined;
-};
 
 /** Tank KPIs over a player's raid. */
 export function TankRaidKpis({ raid }: { raid: RaidSummary }) {

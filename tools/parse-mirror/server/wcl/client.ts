@@ -88,6 +88,21 @@ async function writeCache(base: string, data: unknown) {
   await fs.rename(tmp, `${base}.json.gz`);
 }
 
+/** Oldest responses go first when the cache outgrows this. A kill's raid-wide events are a few MB. */
+const CACHE_MAX_BYTES = Number(process.env.WCL_CACHE_MB ?? 2048) * 1024 * 1024;
+
+/** Trims the disk cache to its size limit; run at startup. */
+export async function pruneCache() {
+  const names = await fs.readdir(CACHE_DIR).catch(() => [] as string[]);
+  const files = await Promise.all(names.map(async (name) => ({ file: path.join(CACHE_DIR, name), ...(await fs.stat(path.join(CACHE_DIR, name))) })));
+  let total = files.reduce((sum, f) => sum + f.size, 0);
+  for (const f of files.sort((a, b) => a.mtimeMs - b.mtimeMs)) {
+    if (total <= CACHE_MAX_BYTES) break;
+    await fs.rm(f.file, { force: true });
+    total -= f.size;
+  }
+}
+
 /**
  * Fight lists parsed in the last few minutes. Every report request checks the report's language
  * in its fight list, so a kill read it from the disk cache a dozen times: about 30 ms of CPU here,
@@ -184,7 +199,8 @@ export class WclClient {
         continue;
       }
       if (res.status === 401 || res.status === 403) {
-        throw new Error('Warcraft Logs rejected the API key. Check that it is a v1 client key from your Warcraft Logs profile.');
+        const said = ((await res.json().catch(() => undefined)) as { error?: string } | undefined)?.error;
+        throw new Error(`Warcraft Logs refused the request${said ? ` (${said})` : ''}. The key must be a v1 client key from your Warcraft Logs profile, and the report must be public.`);
       }
       if (!res.ok) {
         const body = await res.text();
@@ -198,7 +214,7 @@ export class WclClient {
   private async get<T>(
     endpoint: string,
     params: Record<string, string | number>,
-    ttlMs?: number | ((cached: T) => number | undefined),
+    ttlMs?: number | ((cached: T, savedAt: number) => number | undefined),
     slim?: { key: string; apply: (data: T) => T },
   ): Promise<T> {
     // translate=true makes non-English logs return English ability names. Only use it when
@@ -211,7 +227,7 @@ export class WclClient {
 
     const cached = await readCache<T>(base);
     if (cached) {
-      const ttl = typeof ttlMs === 'function' ? ttlMs(cached.data) : ttlMs;
+      const ttl = typeof ttlMs === 'function' ? ttlMs(cached.data, cached.mtimeMs) : ttlMs;
       if (ttl === undefined || Date.now() - cached.mtimeMs < ttl) return cached.data;
     }
     // A slimmed response can be made from the full one if that's cached (report data never changes).
@@ -244,9 +260,10 @@ export class WclClient {
     const key = `${this.host}/${report}`;
     const kept = fightLists.get(key);
     if (kept && Date.now() - kept.at < LIVE_FIGHTS_TTL_MS) return kept.list;
-    // A report that ended recently may still be logging, so its fight list is refreshed.
-    const list = this.get<WclFightsResponse>(`report/fights/${report}`, {}, (cached) =>
-      cached.end && Date.now() - cached.end < LIVE_REPORT_MS ? LIVE_FIGHTS_TTL_MS : undefined,
+    // A list saved soon after the report's last fight may be missing later ones, however long ago
+    // that was now; a copy saved well after it is final.
+    const list = this.get<WclFightsResponse>(`report/fights/${report}`, {}, (cached, savedAt) =>
+      cached.end && savedAt - cached.end < LIVE_REPORT_MS ? LIVE_FIGHTS_TTL_MS : undefined,
     );
     list.catch(() => fightLists.delete(key));
     fightLists.delete(key);

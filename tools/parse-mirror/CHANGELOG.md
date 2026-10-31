@@ -9,6 +9,70 @@ version udgives under
 [Releases](https://github.com/nordens-paris/tools/releases?q=parse-mirror&expanded=true); de er
 markeret med **Windows-pakke** her.
 
+## v0.3.5 (31. oktober 2026) · Windows-pakke
+
+### Rettet
+
+- **Carrion Swarm på Anetheron** tager 75 % af den healing, en spiller laver, men værktøjet regnede
+  det ikke med, så ramte healere kunne stå som sandbagging. HPS og healing per mana rettes nu for
+  den tid, healeren var ramt, før healer score, healing-fordeling og held-back-tjek. Den viste HPS
+  er stadig den rigtige. Anetheron-kills, der allerede ligger i browseren, hentes igen. Healer-siden
+  skriver, at debuffen ramte, og giver ingen fund om healing per mana på den kamp.
+- **Kampe manglede:** en kampliste, der blev gemt midt i et raid, kunne stå som færdig dagen efter.
+- **Sims, der aldrig blev færdige:** en sim-worker, der gik ned, efterlod siden med en spinner for
+  evigt. Nu får du en fejl, og en side, der forlader en kørsel, holder ikke længere de andre hen.
+- **Forkert healers historik:** skiftede du hurtigt healer, kunne den forriges kills blive vist.
+- **Dødsfald ved fuldt liv** blev set som Feign Death for alle. Nu gælder det kun hunters.
+- **Rate limits** stod som "ingen parses fundet". Nu vises den rigtige besked, også for peers.
+- **Sandbagging-tjek:** healere under 5 % af healingen pustede de andres andel op, og samme kill
+  logget af to personer talte med i healerens sædvanlige andel.
+- **Duplikerede kills** på Progress og i healer score, når to loggede samme kill.
+- **Fejlbeskeder** fra en gammel side kunne dukke op på den nye, og private logs gav en besked om
+  nøglen. En tank-analyse går ikke længere tabt, hvis uploaden til sims fejler, og sims kan startes
+  igen, efter serveren har genstartet.
+- **Links med `fight=last`** åbner nu sidste kamp.
+- **CSV-filer** bruger semikolon og decimalkomma, så de åbner rigtigt i dansk Excel.
+- **Opdatering på Windows** stopper nu, før noget ændres, hvis Parse Mirror kører, virker fra andre
+  drev end C:, og beholder de hentede logs.
+
+- **Falske healere:** en Retribution-paladin eller Enhancement-shaman med kun klasseikon blev healer
+  af én enkelt heal. Nu afgør talenterne det. Samme tjek bruges for roller på raid-siden.
+- **Tanks** med kun klasseikon manglede i tank-panelet, og Shield Block talte som defensiv cooldown.
+- **Progress** viser nu healing-parses for healere.
+- **Potions:** Fel Mana og andre potions tæller nu med, og sims får alle conjured items.
+- **Sims:** ingen sammenligningsspillere ødelægger ikke længere simmen, gems og enchants, WoWSims ikke
+  kender, udelades, og noterne viser hvilke items der blev udeladt.
+- **API-nøgle:** gem eller glem nu slår igennem med det samme.
+- **Ikke-engelske logs:** healer- og tank-analyser bruger nu TBC-navnene på spells.
+- **Sims:** en Destruction-warlock får nu den demon, loggen viser, ikke altid en Imp.
+- **Fund:** "over hit-cappet" bruger kun den høje grænse for dual wield, Arms viser potion-navne, og
+  uden sammenligningsspillere står consumes ikke længere som "Different choice".
+- **Gear:** ting holdt i off-hand står ikke længere med "No enchant".
+- **Healere med kun klasseikon** tæller nu ud fra talenter, så en Discipline-priest ikke skal bruge
+  Pain Suppression for at blive set som healer.
+- **Tank-roller:** main og off-tank måles nu ens for dig og peers, ud fra bossens melee-skade.
+- **Småt:** Progress har reserve-ikon, og Continue på forsiden åbner Progress igen.
+
+### Forbedret
+
+- **Hurtigere healer-analyser:** reaktion og saves slår nu heals op pr. spiller i stedet for at
+  gennemgå alle heals for hvert fald i liv, og 4-ugers scoren regnes ikke om ved hver tegning.
+- **Mindre hukommelse og diskplads:** siden husker de seneste 20 analyser, og cachen af hentede logs
+  holdes under 2 GB (`WCL_CACHE_MB`).
+- **Tests og CI:** `npm test` tjekker scoring, sandbagging-reglerne, Warcraft Logs-klienten,
+  sim-køen og andre kerneregler, og GitHub kører tests, typecheck og build på hver ændring.
+- **Sim-filer** får ny URL af sig selv ved en ny build, og sim-noter viser udeladte items.
+- **Dev-scripts:** engangs-scripts er flyttet til `scripts/dev/`, og tank-threat kan tjekkes med
+  `npm run check-threat`.
+- **Dokumentation:** spillernavne er fjernet fra `docs/healer-score.md`, og nye indstillinger og
+  kommandoer er beskrevet.
+
+### Sikkerhed
+
+- Lokale installationer kan kun nås fra pc'en selv, ikke fra resten af netværket (`HOST`).
+- Tank-sims på serveren tjekker nøgle og rapportkoder og har en grænse pr. time, og hele raid-sider
+  og analyser tæller nu mere i grænsen for opslag på serverens nøgle.
+
 ## v0.3.4 (30. oktober 2026)
 
 ### Rettet
