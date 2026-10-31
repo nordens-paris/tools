@@ -173,7 +173,8 @@ Med et link med kun `source=` får du **din raid**:
 
 ![Progress](docs/billeder/17-progress.png)
 
-**Progress over time** viser dine parses på hver boss i raid-tieret, kill for kill.
+**Progress over time** viser dine parses på hver boss i raid-tieret, kill for kill. Healere ser
+deres healing-parses.
 
 ![Alle i raidet](docs/billeder/18-guild.png)
 
@@ -195,7 +196,7 @@ Med et link med kun `source=` får du **din raid**:
 - **Gear check:** manglende enchants, tomme sockets, grønne gems og hit under cap (for de
   understøttede specs) fra hver spillers seneste kill.
 
-Det hele kan eksporteres som CSV.
+Det hele kan eksporteres som CSV, med semikolon og decimalkomma til dansk Excel.
 
 ![Debuffs og gear check](docs/billeder/19-debuffs-gear.png)
 
@@ -424,6 +425,8 @@ gratis. Detaljer, og hvordan siden hostes gratis på Render, står i [docs/drift
    [Releases](https://github.com/nordens-paris/tools/releases?q=parse-mirror&expanded=true) eller
    byg den ([docs/drift.md](docs/drift.md#simmen)).
 4. `npm run dev` og åbn http://localhost:5173
+
+Serveren kan kun nås fra din egen pc, så længe `API_PORT` står i `.env`. `npm test` kører testene.
 
 **Netværk:** serveren henter logs fra Warcraft Logs og talenter fra Classic Armory, og browseren
 henter ikoner fra Warcraft Logs og Wowhead. Intet klikker eller automatiserer noget i spillet, og intet sendes
