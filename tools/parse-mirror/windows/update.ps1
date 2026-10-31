@@ -28,7 +28,8 @@ try {
   if ($current -eq $release.tag_name) { Done "Du har allerede den nyeste udgave ($current)." 'Green'; exit 0 }
 
   Say "Henter $($release.tag_name)..."
-  $tmp = Join-Path $env:TEMP "parse-mirror-update-$([guid]::NewGuid())"
+  # Ved siden af app-mappen: mapper kan kun flyttes inden for samme drev.
+  $tmp = Join-Path $root "parse-mirror-update-$([guid]::NewGuid())"
   New-Item -ItemType Directory $tmp | Out-Null
   $zip = Join-Path $tmp $asset
   $url = ($release.assets | Where-Object name -eq $asset).browser_download_url
@@ -37,17 +38,32 @@ try {
   $new = Get-ChildItem (Join-Path $tmp 'x') -Recurse -Directory -Filter app | Select-Object -First 1
   if (-not $new) { throw 'Pakken havde ingen app-mappe.' }
 
-  # Nøglen og pakkerne flyttes med; start-filen installerer pakkerne igen, hvis de er ændret.
-  foreach ($keep in '.env', 'node_modules') {
-    if (Test-Path (Join-Path $app $keep)) { Move-Item (Join-Path $app $keep) (Join-Path $new.FullName $keep) }
+  # Kører Parse Mirror, er mappen låst: så stopper vi her, før noget er ændret.
+  $old = "$app.old"
+  if (Test-Path $old) { Remove-Item $old -Recurse -Force }
+  try { Rename-Item $app $old } catch { throw 'Luk Parse Mirror-vinduet, og prøv igen.' }
+  # Nøglen, pakkerne og de hentede logs flyttes med; start-filen installerer pakkerne igen, hvis de er ændret.
+  $keeps = '.env', 'node_modules', '.cache'
+  try {
+    foreach ($keep in $keeps) {
+      if (Test-Path (Join-Path $old $keep)) { Move-Item (Join-Path $old $keep) (Join-Path $new.FullName $keep) }
+    }
+    Move-Item $new.FullName $app
+  } catch {
+    # Tilbage til den gamle udgave.
+    foreach ($keep in $keeps) {
+      if (Test-Path (Join-Path $new.FullName $keep)) { Move-Item (Join-Path $new.FullName $keep) (Join-Path $old $keep) }
+    }
+    Rename-Item $old $app
+    throw
   }
-  Remove-Item $app -Recurse -Force
-  Move-Item $new.FullName $app
+  Remove-Item $old -Recurse -Force -ErrorAction SilentlyContinue
   # De to start-filer øverst kan også være ændret.
   Get-ChildItem $new.Parent.FullName -File -Filter *.bat | Copy-Item -Destination $root -Force
-  Remove-Item $tmp -Recurse -Force
+  Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
   Done "Opdateret til $($release.tag_name). Start Parse Mirror igen." 'Green'
 } catch {
+  if ($tmp) { Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue }
   Done "Opdateringen fejlede: $($_.Exception.Message)" 'Red'
   exit 1
 }

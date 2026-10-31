@@ -3,7 +3,6 @@ import { QUALITY_CLASS, itemIcon, wowheadItem } from '../format.ts';
 import { useGroup } from '../group.ts';
 
 const SLOTS = ['Head', 'Neck', 'Shoulder', 'Back', 'Chest', 'Wrist', 'Hands', 'Waist', 'Legs', 'Feet', 'Finger 1', 'Finger 2', 'Trinket 1', 'Trinket 2', 'Main Hand', 'Off Hand', 'Ranged'];
-const ENCHANTABLE = new Set(['Head', 'Shoulder', 'Back', 'Chest', 'Wrist', 'Hands', 'Legs', 'Feet', 'Main Hand', 'Off Hand']);
 const PAIRED = (slot: string) => slot.replace(/ \d$/, '');
 
 export function Gear({ analysis }: { analysis: AnalysisResult }) {
@@ -38,7 +37,7 @@ export function Gear({ analysis }: { analysis: AnalysisResult }) {
           }
           const sorted = [...counts.values()].sort((a, b) => b.n - a.n);
           const popular = slot.endsWith(' 2') ? sorted[1] : sorted[0];
-          const missingEnchant = mine && ENCHANTABLE.has(slot) && !mine.enchantId;
+          const missingEnchant = mine?.canEnchant && !mine.enchantId;
           return (
             <div key={slot} className="gear-row">
               <div className="muted small">{slot}</div>

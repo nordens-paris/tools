@@ -30,7 +30,6 @@ export const openKeyForm = () => window.dispatchEvent(new Event(OPEN_KEY_FORM));
 
 export function setApiKey(key: string | undefined, remember: boolean) {
   memoryKey = key;
-  window.dispatchEvent(new Event(KEY_CHANGED));
   for (const store of [() => sessionStorage, () => localStorage]) {
     try {
       store().removeItem(STORAGE_KEY);
@@ -38,10 +37,11 @@ export function setApiKey(key: string | undefined, remember: boolean) {
       // Ignore unavailable storage.
     }
   }
-  if (!key) return;
   try {
-    (remember ? localStorage : sessionStorage).setItem(STORAGE_KEY, key);
+    if (key) (remember ? localStorage : sessionStorage).setItem(STORAGE_KEY, key);
   } catch {
     // Kept in memory for this visit.
   }
+  // Last: listeners read the key as soon as this fires.
+  window.dispatchEvent(new Event(KEY_CHANGED));
 }

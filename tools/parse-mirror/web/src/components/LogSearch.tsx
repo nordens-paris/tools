@@ -34,6 +34,14 @@ export function LogSearch({ variant, onAnalyze, onRaid, onGuild, loading, initia
       setError('That doesn’t look like a Warcraft Logs report link.');
       return;
     }
+    if (parsed.lastFight) {
+      try {
+        parsed.fight = (await getReport(parsed.report)).fights.at(-1)?.id;
+      } catch (err) {
+        setError((err as Error).message);
+        return;
+      }
+    }
     if (parsed.source) {
       setReport(undefined);
       if (parsed.fight) onAnalyze(parsed.report, parsed.fight, parsed.source);

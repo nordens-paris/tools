@@ -18,7 +18,9 @@ const client = new WclClient(process.env.WCL_API_KEY!, process.env.WCL_HOST!);
 
 const reports = new Map<string, { group: string; guild?: string; night?: number }>();
 for (const set of ['', '-bt', '-btweeks']) {
-  for (const s of JSON.parse(fs.readFileSync(`.cache/healer-score-samples${set}.json`, 'utf8')) as { report: string; group: string; guild?: string; night?: number }[]) {
+  const file = `.cache/healer-score-samples${set}.json`;
+  if (!fs.existsSync(file)) continue;
+  for (const s of JSON.parse(fs.readFileSync(file, 'utf8')) as { report: string; group: string; guild?: string; night?: number }[]) {
     if (!reports.has(s.report)) reports.set(s.report, { group: s.group, guild: s.guild, night: s.night });
   }
 }

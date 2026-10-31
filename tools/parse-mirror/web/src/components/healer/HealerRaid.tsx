@@ -7,15 +7,11 @@ import { KEY_CHANGED, getApiKey, openKeyForm } from '../../apiKey.ts';
 import { game } from '../../game.ts';
 import { scoreRef } from '../../healerHistory.ts';
 import { raidHealers } from '../../roles.ts';
-import { fmt, fmtTime, wclUrl } from '../../format.ts';
+import { fmt, fmtTime, medianOf as median, wclUrl } from '../../format.ts';
 import { Hint } from '../Hint.tsx';
 import { iconOf, pct } from './HealerTables.tsx';
 
 const ROLE = { tank: 'Tanks', mixed: 'Both', raid: 'Raid' } as const;
-const median = (xs: number[]) => {
-  const s = [...xs].sort((a, b) => a - b);
-  return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : undefined;
-};
 
 /** Whether healer and tank views can run now: always locally, on the hosted site only with the visitor's own key. */
 export function useRolesAllowed() {
@@ -174,7 +170,7 @@ const VIEWS = [
 
 // Kills only, and without minor healers (under 5% of the raid's healing), as in the pool.
 const splitOf = (b: HealerRaidBoss) =>
-  b.kill === false ? undefined : healingSplit(b.rows.filter((r) => !r.minor).map((r) => ({ name: r.name, spec: r.specLabel, hps: r.hps })), scoreRef, b.encounterId);
+  b.kill === false ? undefined : healingSplit(b.rows.filter((r) => !r.minor).map((r) => ({ name: r.name, spec: r.specLabel, hps: r.hpsUncut ?? r.hps })), scoreRef, b.encounterId);
 const heldText = (h: HeldBack) =>
   h.why === 'share'
     ? `${Math.round((h.share / h.usual!) * 100)}% of their usual share of the healing`

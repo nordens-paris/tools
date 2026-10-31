@@ -16,6 +16,28 @@ const SAME_TICK_MS = 150;
 
 const isDirectHeal = (e: LogEvent) => e.type === 'heal' && !e.tick && !AUTO_HEALS.has(e.ability?.name ?? '');
 
+interface HealsByTarget {
+  /** Players' chosen heals, oldest first. */
+  direct: Map<number, LogEvent[]>;
+  /** The same from anyone, and shields. */
+  savers: Map<number, LogEvent[]>;
+}
+const healIndexes = new WeakMap<FightModel, HealsByTarget>();
+/** Everyone's heals per target, once per fight: each healer looks through them for every HP drop. */
+function healsByTarget(m: FightModel) {
+  let index = healIndexes.get(m);
+  if (index) return index;
+  index = { direct: new Map(), savers: new Map() };
+  const add = (to: Map<number, LogEvent[]>, e: LogEvent) => (to.get(e.targetID!) ?? to.set(e.targetID!, []).get(e.targetID!)!).push(e);
+  for (const e of m.healing) {
+    if (e.targetID === undefined || !((e.amount ?? 0) > 0)) continue;
+    if (isDirectHeal(e) && e.sourceID !== undefined && m.players.has(e.sourceID)) add(index.direct, e);
+    if (isDirectHeal(e) || e.type === 'absorbed') add(index.savers, e);
+  }
+  healIndexes.set(m, index);
+  return index;
+}
+
 export function healerMetrics(m: FightModel, id: number): HealerMetrics {
   const spec = m.healers.get(id) ?? m.minorHealers.get(id);
   if (!spec) throw new Error(`${m.name(id)} isn't one of this fight's healers`);
@@ -206,14 +228,14 @@ export function healerMetrics(m: FightModel, id: number): HealerMetrics {
   const ov = overhealTotal || 1;
 
   // Reaction: assigned targets dropping below 50% -> this healer's first chosen heal on them.
-  const direct = m.healing.filter((e) => isDirectHeal(e) && e.sourceID !== undefined && m.players.has(e.sourceID) && (e.amount ?? 0) > 0);
+  const { direct, savers } = healsByTarget(m);
   const rts: number[] = [];
   let drops = 0;
   let first = 0;
   for (const d of m.drops(REACTION_PCT)) {
     if (!assigned.has(d.id) || !m.alive(d.id, d.t)) continue;
     drops++;
-    const after = direct.filter((x) => x.targetID === d.id && x.timestamp > d.t + SAME_TICK_MS && x.timestamp < d.t + 6000);
+    const after = (direct.get(d.id) ?? []).filter((x) => x.timestamp > d.t + SAME_TICK_MS && x.timestamp < d.t + 6000);
     const mineAfter = after.find((x) => x.sourceID === id);
     if (mineAfter) rts.push((mineAfter.timestamp - d.t) / 1000);
     if (after[0]?.sourceID === id) first++;
@@ -221,12 +243,11 @@ export function healerMetrics(m: FightModel, id: number): HealerMetrics {
 
   // Saves: someone below 25% pulled back by this healer (a heal or shield of 10%+ of their HP)
   // within 3 s, who then lived 5 s more.
-  const savers = m.healing.filter((e) => (isDirectHeal(e) || e.type === 'absorbed') && (e.amount ?? 0) > 0);
   let saves = 0;
   for (const d of m.drops(SAVE_PCT)) {
     if (!m.alive(d.id, d.t + 5000)) continue;
     const big = 0.1 * m.maxHp(d.id).value;
-    const h = savers.find((x) => x.targetID === d.id && x.timestamp >= d.t && x.timestamp < d.t + 3000 && (x.amount ?? 0) > big);
+    const h = (savers.get(d.id) ?? []).find((x) => x.timestamp >= d.t && x.timestamp < d.t + 3000 && (x.amount ?? 0) > big);
     if (h?.sourceID === id) saves++;
   }
 
@@ -292,6 +313,7 @@ export function healerMetrics(m: FightModel, id: number): HealerMetrics {
     overhealPct: effective - absorbed + overhealTotal ? overhealTotal / (effective - absorbed + overhealTotal) : 0,
     shareOfRaid: m.raidEffective ? effective / m.raidEffective : 0,
     ghostSec: ghostSec(m, id),
+    carrionSwarmSec: carrionSwarmSec(m, id),
     role,
     tankShare,
     tankShareIcon: shareOn(m.tankSpecs),
@@ -338,10 +360,29 @@ export function healerMetrics(m: FightModel, id: number): HealerMetrics {
 /** Seconds as Teron's ghost: up to 60 after Shadow of Death runs out, until the fight ends. */
 function ghostSec(m: FightModel, id: number) {
   let sec = 0;
-  for (const e of m.data.shadowOfDeath ?? []) {
+  for (const e of m.data.debuffs?.shadowOfDeath ?? []) {
     if (e.targetID === id && e.type === 'removedebuff') sec += Math.max(0, Math.min(m.T1, e.timestamp + 60_000) - e.timestamp) / 1000;
   }
   return sec;
+}
+
+/** Seconds under Carrion Swarm (undefined off Anetheron). A new hit refreshes it, so one stretch can outlast 20 s. */
+function carrionSwarmSec(m: FightModel, id: number) {
+  const swarm = m.data.debuffs?.carrionSwarm;
+  if (!swarm) return undefined;
+  // It stops counting when they die: it isn't why they healed less after that.
+  const end = m.deaths().find((d) => d.id === id)?.t ?? m.T1;
+  let ms = 0;
+  let since: number | undefined;
+  for (const e of swarm) {
+    if (e.targetID !== id) continue;
+    if (e.type === 'removedebuff') {
+      ms += Math.max(0, Math.min(e.timestamp, end) - (since ?? m.T0));
+      since = undefined;
+    } else since ??= e.timestamp;
+  }
+  if (since !== undefined) ms += Math.max(0, end - since);
+  return ms / 1000;
 }
 
 // Overheal from the healer's own choices, as a share of all healing they put out (shared: the

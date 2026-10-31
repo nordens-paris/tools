@@ -3,6 +3,7 @@ import { specIcon } from '../brand.ts';
 import { downloadCsv } from '../csv.ts';
 import { fmt, fmtSigned, wclUrl } from '../format.ts';
 import { Hint } from './Hint.tsx';
+import { classIcon } from './RaidChecks.tsx';
 import { pctClass } from './RaidOverview.tsx';
 
 type Kill = ProgressSummary['bosses'][number]['kills'][number];
@@ -17,7 +18,7 @@ function change(kills: Kill[]) {
 const date = (ms: number) => new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 
 /** Parse per kill, oldest to newest: a dot in its parse colour per kill, hover for the details. */
-function Sparkline({ kills }: { kills: Kill[] }) {
+function Sparkline({ kills, unit }: { kills: Kill[]; unit: string }) {
   const w = 220;
   const h = 36;
   const x = (i: number) => (kills.length === 1 ? w / 2 : 5 + (i / (kills.length - 1)) * (w - 10));
@@ -29,7 +30,7 @@ function Sparkline({ kills }: { kills: Kill[] }) {
       {kills.length > 1 && <polyline points={kills.map((k, i) => `${x(i)},${y(k.percentile)}`).join(' ')} className="spark-line" />}
       {kills.map((k, i) => (
         <circle key={i} cx={x(i)} cy={y(k.percentile)} r={i === kills.length - 1 ? 4 : 3} className={`${pctClass(k.percentile)} ${i === kills.length - 1 ? 'last' : ''}`}>
-          <title>{`${date(k.startTime)}: parse ${fmt(k.percentile)}, ${fmt(k.dps)} DPS, ${fmt(k.durationSec)} s${k.itemLevel ? `, ilvl ${fmt(k.itemLevel)}` : ''}`}</title>
+          <title>{`${date(k.startTime)}: parse ${fmt(k.percentile)}, ${fmt(k.dps)} ${unit}, ${fmt(k.durationSec)} s${k.itemLevel ? `, ilvl ${fmt(k.itemLevel)}` : ''}`}</title>
         </circle>
       ))}
     </svg>
@@ -39,22 +40,24 @@ function Sparkline({ kills }: { kills: Kill[] }) {
 /** One character's parses on each boss of the raid tier over time. */
 export function Progress({ progress }: { progress: ProgressSummary }) {
   const { player, bosses } = progress;
+  const unit = progress.metric.toUpperCase();
   const [className, specName = ''] = player.icon.split('-');
   const changes = bosses.map((b) => change(b.kills)).filter((t): t is number => t !== undefined);
   const overall = avg(changes);
   const latest = bosses.map((b) => b.kills.at(-1)!).filter(Boolean);
   const kills = bosses.reduce((n, b) => n + b.kills.length, 0);
+  const withIlvl = bosses.flatMap((b) => b.kills).filter((k) => k.itemLevel).sort((a, b) => a.startTime - b.startTime);
 
   const exportCsv = () =>
     downloadCsv(`${player.name}-progress.csv`, [
-      ['Boss', 'Date', 'Parse', 'DPS', 'Kill time (s)', 'Item level', 'Spec', 'Report'],
+      ['Boss', 'Date', 'Parse', unit, 'Kill time (s)', 'Item level', 'Spec', 'Report'],
       ...bosses.flatMap((b) => b.kills.map((k) => [b.name, new Date(k.startTime).toISOString().slice(0, 10), k.percentile, k.dps, k.durationSec, k.itemLevel, k.spec, k.report])),
     ]);
 
   return (
     <>
       <section className="report-head">
-        {specName && <img className="spec-icon" src={specIcon(className, specName)} alt="" />}
+        {specName && <img className="spec-icon" src={specIcon(className, specName)} alt="" onError={(e) => (e.currentTarget.src = classIcon(player.icon))} />}
         <div className="report-title">
           <div className="eyebrow">Progress over time{player.region ? ` · ${player.region}` : ''}</div>
           <h1>
@@ -94,7 +97,7 @@ export function Progress({ progress }: { progress: ProgressSummary }) {
             <div className="kpi">
               <span className="eyebrow">Item level</span>
               <span className="kpi-value">
-                {fmt(Math.min(...bosses.flatMap((b) => b.kills.map((k) => k.itemLevel ?? Infinity))))}→{fmt(Math.max(...latest.map((k) => k.itemLevel ?? 0)))}
+                {withIlvl.length ? `${fmt(withIlvl[0].itemLevel!)}→${fmt(withIlvl.at(-1)!.itemLevel!)}` : '–'}
               </span>
               <span className="kpi-sub">First ranked kill to now</span>
             </div>
@@ -128,12 +131,12 @@ export function Progress({ progress }: { progress: ProgressSummary }) {
                       <tr key={b.encounterId}>
                         <td className="strong">{b.name}</td>
                         <td>
-                          <Sparkline kills={b.kills} />
+                          <Sparkline kills={b.kills} unit={unit} />
                         </td>
                         <td className="num mono">{b.kills.length}</td>
                         <td className={`num mono ${pctClass(best)}`}>{fmt(best)}</td>
                         <td className={`num mono strong ${pctClass(last.percentile)}`}>
-                          <a href={wclUrl(last.report, last.fight)} target="_blank" rel="noreferrer" title={`${date(last.startTime)} · ${fmt(last.dps)} DPS`}>
+                          <a href={wclUrl(last.report, last.fight)} target="_blank" rel="noreferrer" title={`${date(last.startTime)} · ${fmt(last.dps)} ${unit}`}>
                             {fmt(last.percentile)}
                           </a>
                         </td>

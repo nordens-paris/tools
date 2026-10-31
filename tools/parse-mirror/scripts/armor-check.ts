@@ -22,7 +22,7 @@ const armorOf = (reduction: number) => (reduction * K) / (1 - reduction);
 
 type Ev = { timestamp: number; type: string; targetID: number; hitType?: number; amount?: number; mitigated?: number; unmitigatedAmount?: number; ability: { name: string; type: number } };
 const res = await client.events('damage-done', report, fight.start_time, fight.end_time, { sourceid: actor.id });
-const events = ((res as { events?: Ev[] }).events ?? (res as unknown as Ev[])).filter(
+const events = (res as unknown as Ev[]).filter(
   // Normal physical hits on the boss: crits and glancing blows have their own multipliers.
   (e) => e.type === 'damage' && e.hitType === 1 && e.ability.type === 1 && e.unmitigatedAmount && e.amount,
 );

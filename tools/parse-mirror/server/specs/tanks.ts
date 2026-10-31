@@ -1,7 +1,7 @@
 // Tank specs: how to recognise them, their Warcraft Logs ranking ids, and their threat. Threat
 // follows WoWSims tbc-new exactly (core/spell_result.go ThreatFromDamage):
 //   threat = (damage × spell multiplier + flat bonus) × the player's multiplier, on hits that land.
-// Values are copied from WoWSims; `src` names the file, and scripts/check-threat.mjs checks them
+// Values are copied from WoWSims; `src` names the file, and scripts/check-threat.ts (npm run check-threat) checks them
 // against a WoWSims checkout. Like WoWSims, threat from healing and rage gains isn't counted.
 
 export interface ThreatRule {
@@ -11,7 +11,7 @@ export interface ThreatRule {
   flat?: number;
   /** WoWSims source file the value comes from (sim/<class>/<file>). */
   src: string;
-  /** The literal in that file, for scripts/check-threat.mjs. */
+  /** The literal in that file, for scripts/check-threat.ts. */
   check: string;
 }
 
@@ -69,7 +69,7 @@ export const tankSpecs: TankSpec[] = [
     },
     mitigation: ['Shield Block'],
     bossDebuffs: ['Sunder Armor', 'Thunder Clap', 'Demoralizing Shout'],
-    cooldowns: ['Shield Wall', 'Last Stand', 'Shield Block'],
+    cooldowns: ['Shield Wall', 'Last Stand'],
     threatDrops: [],
     taunts: ['Taunt', 'Mocking Blow', 'Challenging Shout'],
     offGcd: ['Bloodrage', 'Berserker Rage', 'Shield Block'],

@@ -1,10 +1,10 @@
 // Turns the raw comparison into a short, ranked list of things to look at.
 import { CONSUME_CATEGORIES, type AnalysisResult, type ComparisonGroup, type Finding, type PlayerFight } from '../../shared/types.ts';
+import { ENCHANT_SLOTS, enchantable } from '../data/db.ts';
 import { talentPoints } from '../data/talents.ts';
 import { castLabel, type SpecConfig } from '../specs/types.ts';
 import { median, mostCommon as mostCommonBy } from './stats.ts';
 
-const ENCHANTABLE = ['Head', 'Shoulder', 'Back', 'Chest', 'Wrist', 'Hands', 'Legs', 'Feet', 'Main Hand', 'Off Hand'];
 const PERSONAL_RAID_BUFFS = [
   'Bloodlust',
   'Ferocious Inspiration',
@@ -227,9 +227,9 @@ export function buildFindings(
   }
 
   // Gear.
-  for (const slot of ENCHANTABLE) {
+  for (const slot of ENCHANT_SLOTS) {
     const item = you.gear.find((g) => g.slot === slot);
-    if (!item || item.enchantId) continue;
+    if (!item || item.enchantId || !enchantable(slot, item.id)) continue;
     const topEnchanted = share(top, (p) => !!p.gear.find((g) => g.slot === slot)?.enchantId);
     if (topEnchanted > 0) {
       findings.push({
@@ -268,6 +268,8 @@ export function buildFindings(
     const { pct, capPct } = you.hit;
     const withHit = top.filter((p) => p.hit);
     const capped = withHit.filter((p) => p.hit!.pct >= p.hit!.capPct - 0.5).length;
+    // Only dual wielders gain from hit past the cap (Arms has both kinds).
+    const whiteCap = you.gear.some((g) => g.slot === 'Off Hand') ? spec.hit.whiteCapPct : undefined;
     const how = you.hit.extras.length ? ` (${you.hit.fromRating.toFixed(1)}% from rating, ${you.hit.extras.join(', ')})` : '';
     if (pct < capPct - 1) {
       // Under the cap like most of the group is a gearing choice; under it alone is a real gap.
@@ -282,13 +284,13 @@ export function buildFindings(
             ? `${capped} of ${withHit.length} ${G} were at the cap.`
             : `Only ${capped} of ${withHit.length} ${G} were at the cap (median ${median(withHit.map((p) => p.hit!.pct)).toFixed(1)}%), so they mostly chose other stats too.`),
       });
-    } else if (pct > (spec.hit.whiteCapPct ?? capPct) + 2) {
-      const cap = spec.hit.whiteCapPct ?? capPct;
+    } else if (pct > (whiteCap ?? capPct) + 2) {
+      const cap = whiteCap ?? capPct;
       findings.push({
         severity: 'low',
         area: 'Gear',
         title: `${(pct - cap).toFixed(1)}% over the hit cap`,
-        detail: spec.hit.whiteCapPct
+        detail: whiteCap
           ? `You had ${pct.toFixed(1)}% hit${how}: past the ${cap}% where dual-wield white hits stop missing, so the rest does nothing; that rating could go into other stats.`
           : `You had ${pct.toFixed(1)}% hit${how} against a ${capPct}% cap. Hit over the cap does nothing${spec.caster ? '' : ' for special attacks (white hits still use it)'}; that rating could go into other stats.`,
       });

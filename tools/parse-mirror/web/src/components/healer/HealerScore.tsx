@@ -46,7 +46,7 @@ export function HealerScorePanel({ analysis: a }: { analysis: HealerAnalysis }) 
   const weeks = n ? mean((s) => s.score) : undefined;
   const split = a.kill && a.scores?.length ? splitOf(a.scores, a.encounter.id) : undefined;
   // Kills and wipes: against each healer's usual share on the kills this browser has.
-  const held = a.scores?.length ? heldBackOn({ report: a.report, fight: a.fight, encounterId: a.encounter.id, healers: a.scores }, rolling.stored) : [];
+  const held = a.scores?.length ? heldBackOn({ report: a.report, encounterId: a.encounter.id, startTime: a.startTime, healers: a.scores }, rolling.stored) : [];
   const youHeld = held.find((h) => h.name === a.you.name);
   const othersHeld = held.filter((h) => h.name !== a.you.name);
   const why = (h: (typeof held)[number]) => {

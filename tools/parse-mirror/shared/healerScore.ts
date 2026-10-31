@@ -29,6 +29,8 @@ export interface HealerScoreInputs {
   activity?: number;
   /** Seconds as Teron's ghost, for the held-back check (missing on older kills). */
   ghostSec?: number;
+  /** Seconds under Carrion Swarm: on every healer on Anetheron, 0 included (missing on older kills). */
+  carrionSwarmSec?: number;
 }
 
 export interface HealerScoreRef {
@@ -67,13 +69,30 @@ export const ownOverheal = (h: HealerMetrics) => {
   return direct + over ? (h.overheal.ownChoice * over) / (direct + over) : 0;
 };
 
+export const ANETHERON = new Set([619, 50619]);
+/**
+ * Carrion Swarm takes 75% off the healing a player does while they have it. Counted as 80%: dividing
+ * by the time hit assumes healers heal evenly over the fight, which falls short of what they lose
+ * (it's what they do in the Swarm, times four, that they'd have done), and a low guess marks them.
+ */
+const CARRION_SWARM_CUT = 0.8;
+
+/**
+ * The share of their healing a healer got to do after Carrion Swarm (1 if never hit). A healer hit
+ * for half of Anetheron is counted as doing 60% of their healing, so what the score and the
+ * held-back check see is divided by this.
+ */
+export const healingKept = (m: Pick<HealerMetrics, 'carrionSwarmSec' | 'durationSec'>) =>
+  m.durationSec ? Math.max(0.25, 1 - CARRION_SWARM_CUT * Math.min(1, (m.carrionSwarmSec ?? 0) / m.durationSec)) : 1;
+
 export function scoreInputs(m: HealerMetrics): HealerScoreInputs {
+  const kept = healingKept(m);
   const values: HealerScoreInputs['values'] = {
-    hpm: m.mana?.healPerMana,
+    hpm: m.mana && m.mana.healPerMana / kept,
     ownOverheal: ownOverheal(m),
     idle: m.idleWhileNeeded.ofSec >= 5 ? m.idleWhileNeeded.sec / m.idleWhileNeeded.ofSec : undefined,
     reaction: m.reaction.medianSec,
-    hps: m.hps,
+    hps: m.hps / kept,
   };
   for (const k of Object.keys(values) as ScoreMetric[]) if (typeof values[k] !== 'number' || !Number.isFinite(values[k])) delete values[k];
   return {
@@ -85,6 +104,7 @@ export function scoreInputs(m: HealerMetrics): HealerScoreInputs {
     tankShare: m.tankShare,
     activity: m.activity,
     ...(m.ghostSec ? { ghostSec: m.ghostSec } : {}),
+    ...(m.carrionSwarmSec !== undefined ? { carrionSwarmSec: m.carrionSwarmSec } : {}),
   };
 }
 
@@ -170,11 +190,15 @@ export function healingSplit(healers: { name: string; spec: string; hps: number 
   return { shares, spread, threshold, uneven: threshold !== undefined && spread > threshold };
 }
 
-/** Each healer's share of the fight's healing, times the healer count, over their spec's usual. */
-export function healingShares(healers: { name: string; inputs: HealerScoreInputs }[], ref: HealerScoreRef): Map<string, number> {
+/**
+ * Each healer's share of the fight's healing, times the healer count, over their spec's usual.
+ * Minor healers get a share too, but the total and the count are the raid's healers, as in the pool.
+ */
+export function healingShares(healers: { name: string; minor?: boolean; inputs: HealerScoreInputs }[], ref: HealerScoreRef): Map<string, number> {
   const known = healers.filter((h) => ref.specs[h.inputs.spec]);
-  const total = known.reduce((sum, h) => sum + (h.inputs.values.hps ?? 0), 0);
-  return new Map(known.map((h) => [h.name, total ? (((h.inputs.values.hps ?? 0) / total) * known.length) / ref.specs[h.inputs.spec].share : 0]));
+  const main = known.filter((h) => !h.minor);
+  const total = main.reduce((sum, h) => sum + (h.inputs.values.hps ?? 0), 0);
+  return new Map(known.map((h) => [h.name, total ? (((h.inputs.values.hps ?? 0) / total) * main.length) / ref.specs[h.inputs.spec].share : 0]));
 }
 
 /**
@@ -189,7 +213,8 @@ export function healingShares(healers: { name: string; inputs: HealerScoreInputs
  *   boost: another healer did 1.6 times their usual share or more, while this one did at most 0.8
  *     of theirs and was 15 points more idle than they usually are (a healer who is always idle, or
  *     always low on the boss, isn't flagged by this).
- * A healer who was Teron's ghost for a fifth of the fight or more isn't judged.
+ * A healer who was Teron's ghost for a fifth of the fight or more isn't judged. Shares and scores
+ * are after Carrion Swarm (see healingKept).
  * Checked against the officers' list for two raids and against the pool's raids. See
  * docs/healer-score.md.
  */
@@ -211,7 +236,7 @@ const middle = (xs: number[]) => {
 };
 
 export function heldBack(
-  fight: { encounterId: number; healers: { name: string; inputs: HealerScoreInputs }[] },
+  fight: { encounterId: number; healers: { name: string; minor?: boolean; inputs: HealerScoreInputs }[] },
   usual: (name: string) => number | undefined,
   ref: HealerScoreRef,
   usualIdleOf: (name: string) => number | undefined = () => undefined,

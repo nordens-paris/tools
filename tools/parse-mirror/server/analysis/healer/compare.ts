@@ -8,7 +8,7 @@ import type {
   HealerRow,
   HealerSpellCompare,
 } from '../../../shared/types.ts';
-import { scoreInputs } from '../../../shared/healerScore.ts';
+import { healingKept, scoreInputs } from '../../../shared/healerScore.ts';
 import type { WclReader } from '../../wcl/reader.ts';
 import { median } from '../stats.ts';
 import { fetchHealerFight } from './data.ts';
@@ -44,6 +44,10 @@ export async function analyzeHealer(
   const warnings: string[] = [];
   if (!model.data.fight.kill) warnings.push('This fight was a wipe; peers are compared on kills, so expect differences.');
   if (!model.healers.has(source)) warnings.push(`You did ${Math.round(you.shareOfRaid * 100)}% of the raid's healing, under the 5% it takes to count as one of its healers.`);
+
+  if (you.carrionSwarmSec) {
+    warnings.push(`Carrion Swarm cut your healing by 75% for ${Math.round(you.carrionSwarmSec)} s (${Math.round((you.carrionSwarmSec / you.durationSec) * 100)}% of the fight). The healer score allows for it; the HPS and healing per mana on this page don't.`);
+  }
 
   log(`Finding ${spec.label}s in well-run raids like yours`);
   const group = await findHealerPeers(
@@ -201,7 +205,8 @@ function healerFindings(you: HealerMetrics, peers: HealerMetrics[], spells: Heal
   const share = (pred: (h: HealerMetrics) => boolean) => peers.filter(pred).length;
 
   // Spell efficiency: main spells that give much less healing per mana than the peers get.
-  for (const s of spells) {
+  // Carrion Swarm's healing cut would read as a spell gone wrong.
+  for (const s of healingKept(you) < 0.9 ? [] : spells) {
     if (s.you.share < 0.15 || s.you.healPerMana === null || s.peers.healPerMana === null || s.peers.users < MIN_PEERS) continue;
     const ratio = s.you.healPerMana / s.peers.healPerMana;
     if (ratio > 0.8) continue;

@@ -1,6 +1,9 @@
 import type { AnalysisResult, GuildSummary, HealerAnalysis, HealerHistory, HealerKillScores, HealerRaidSummary, ProgressSummary, RaidSummary, SimResult, TankAnalysis, TankRaidSummary } from '../../shared/types.ts';
 import { getApiKey } from './apiKey.ts';
 
+// What was sent for tank sims, for this page load.
+const tankUploads = new Map<string, unknown>();
+
 export interface Quota {
   own: boolean;
   windowLimit?: number;
@@ -45,7 +48,17 @@ export const getRaid = (code: string, source: number, browserRoles = false) => r
 /** Whether a player gets the healer, tank or DPS analysis on a kill. */
 export const getRole = (code: string, fight: number, source: number) => request<{ kind: 'healer' | 'tank' | 'dps' }>(`/api/role/${code}/${fight}/${source}`);
 /** A tank analysis made in this browser: the server keeps what its sims need. */
-export const postTankSims = (stored: unknown) => request<{ ok: true }>('/api/tank/sims', stored);
+export const postTankSims = (id: string, stored: unknown) => {
+  tankUploads.set(id, stored);
+  if (tankUploads.size > 20) tankUploads.delete(tankUploads.keys().next().value!);
+  return request<{ ok: true }>('/api/tank/sims', stored);
+};
+/** Sends a tank analysis again after the server forgot it (it restarted); false if it isn't kept here. */
+export async function resendTankSims(id: string) {
+  const stored = tankUploads.get(id);
+  if (stored) await postTankSims(id, stored);
+  return !!stored;
+}
 export const getGuild = (code: string) => request<GuildSummary>(`/api/guild/${code}`);
 export const getGuildHealers = (code: string) => request<HealerRaidSummary>(`/api/guild/${code}/healers`);
 export const getGuildTanks = (code: string) => request<TankRaidSummary>(`/api/guild/${code}/tanks`);
@@ -58,9 +71,9 @@ export const analyze = (report: string, fight: number, source: number, mode: 'to
 export const runSim = <T = SimResult>(analysisId: string) => request<T>('/api/sim', { analysisId });
 
 /** Pulls report code, fight and source out of a Warcraft Logs URL. */
-export function parseLogUrl(url: string): { report?: string; fight?: number; source?: number } {
+export function parseLogUrl(url: string): { report?: string; fight?: number; lastFight?: boolean; source?: number } {
   const report = url.match(/reports\/([A-Za-z0-9]{16})/)?.[1];
   const fight = url.match(/[?#&]fight=(\d+)/)?.[1];
   const source = url.match(/[?#&]source=(\d+)/)?.[1];
-  return { report, fight: fight ? Number(fight) : undefined, source: source ? Number(source) : undefined };
+  return { report, fight: fight ? Number(fight) : undefined, lastFight: /[?#&]fight=last\b/.test(url) || undefined, source: source ? Number(source) : undefined };
 }

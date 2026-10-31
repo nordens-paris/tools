@@ -46,7 +46,7 @@ export function Consumes({ analysis }: { analysis: AnalysisResult }) {
     const choices = new Map<string, number>();
     for (const p of top) for (const c of p.consumes.filter(match)) choices.set(c.name, (choices.get(c.name) ?? 0) + 1);
     const sorted = [...choices].sort((a, b) => b[1] - a[1]);
-    const common = users >= Math.ceil(n * 0.6);
+    const common = n > 0 && users >= Math.ceil(n * 0.6);
     // Your pick counts as "same" if a fair share of the top players use that exact item.
     const shared = mine.some((m) => (choices.get(m.name) ?? 0) >= Math.max(2, n * 0.4) || m.name === sorted[0]?.[0]);
     let status: Status = 'none';

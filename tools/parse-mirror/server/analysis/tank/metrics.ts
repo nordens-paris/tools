@@ -6,7 +6,7 @@ import { gearStats } from '../../data/gear.ts';
 import { CAT_FORM_MULT, type TankSpec, tankSpecFor } from '../../specs/tanks.ts';
 import type { WclAura } from '../../wcl/types.ts';
 import { FightModel, type LogEvent } from '../healer/model.ts';
-import type { TankFightData } from './data.ts';
+import { bossMeleeShare, type TankFightData } from './data.ts';
 
 /** Warcraft Logs hit types. */
 const HIT = { miss: 0, hit: 1, crit: 2, block: 4, glancing: 6, dodge: 7, parry: 8, immune: 10, resist: 14, crush: 15 } as const;
@@ -94,8 +94,9 @@ export function tankMetrics(data: TankFightData, model = new FightModel(data.rai
   const tankedEnemy = data.enemies.find((e) => e.id === tankedId);
   const enemySwings = model.damage.filter((e) => e.sourceID === tankedId && e.ability?.name === 'Melee' && e.targetID !== undefined && model.players.has(e.targetID));
   const mine = enemySwings.filter((e) => e.targetID === id);
-  // A peer's fight has only their own swings: their share of the boss comes from the melee table.
-  const swingShare = data.lite ? data.lite.swingShare : enemySwings.length ? mine.length / enemySwings.length : 0;
+  // The boss's melee table, as for peers (their fights have only their own swings); adds aren't in it.
+  const bySwings = enemySwings.length ? mine.length / enemySwings.length : 0;
+  const swingShare = data.lite ? data.lite.swingShare : (tankedEnemy?.boss && bossMeleeShare(data.raid.meleeTaken, id)) || bySwings;
   const role: TankRole = !tankedEnemy?.boss ? 'adds' : swingShare >= 0.4 ? 'main' : 'off';
 
   // Swing outcomes.

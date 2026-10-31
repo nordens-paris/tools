@@ -1,4 +1,8 @@
+import { median } from '../../server/analysis/stats.ts';
 import { game } from './game.ts';
+
+/** The median, or undefined with nothing to take it of. */
+export const medianOf = (xs: number[]) => (xs.length ? median(xs) : undefined);
 
 export const fmt = (n: number, digits = 0) =>
   n.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });

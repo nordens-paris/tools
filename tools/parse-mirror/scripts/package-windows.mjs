@@ -2,7 +2,7 @@
 // files at the top ("Start Parse Mirror.bat", "Opdater Parse Mirror.bat") and the tool in app/:
 // the committed files, the browser sim (web/public/sim/wowsim.wasm.gz) and the command-line sim
 // (bin/wowsimcli.exe, so sims run on the pc's own cores). windows/start.ps1 does the rest on the
-// guildmate's pc: Node.js, the Warcraft Logs key, npm ci, build, start. See docs/lokal-installation.md.
+// guildmate's pc: Node.js, the Warcraft Logs key, npm ci, build, start. See docs/drift.md.
 //
 //   node scripts/package-windows.mjs <release tag, parse-mirror-v<package.json version>>
 import { execSync } from 'node:child_process';

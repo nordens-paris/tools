@@ -10,7 +10,7 @@
 // healers to choose from.
 import type { HealerPeer, HealerPeerGroup, HealerRole } from '../../../shared/types.ts';
 import { TANK_ICON, type HealerSpec, healerSpecFor } from '../../specs/healers.ts';
-import type { WclReader } from '../../wcl/reader.ts';
+import { unlessOutage, type WclReader } from '../../wcl/reader.ts';
 import type { WclRaidRanking } from '../../wcl/types.ts';
 import { median } from '../stats.ts';
 
@@ -135,20 +135,20 @@ export async function findHealerPeers(client: WclReader, q: HealerPeerQuery, log
         .filter((r) => !found.has(keyOf(r)))
         .slice(0, MAX_RAIDS - raidsChecked);
       raidsChecked += batch.length;
-      await Promise.all(batch.map(async (r) => found.set(keyOf(r), await healersIn(client, r, q.spec).catch(() => []))));
+      await Promise.all(batch.map(async (r) => found.set(keyOf(r), await healersIn(client, r, q.spec).catch(unlessOutage([] as Candidate[])))));
     }
     const pool = poolOf();
     log(`Checked ${raidsChecked} raids: ${pool.length} ${q.spec.label}s in ${tier.match} matches`);
     // In the last tier, take the closest assignments first.
     if (tier.match === 'assignment') pool.sort((a, b) => Math.abs(a.tankShareIcon - q.tankShareIcon) - Math.abs(b.tankShareIcon - q.tankShareIcon));
-    const chosen = pool.filter((c, i) => fits(c) && pool.findIndex((x) => x.name === c.name) === i).slice(0, CONSIDER);
+    const chosen = pool.filter(fits).filter((c, i, all) => all.findIndex((x) => x.name === c.name) === i).slice(0, CONSIDER);
     // Their parses, all at once (the fight list gives each one's server, for the lookup).
     const checked = await Promise.all(
       chosen.map(async (c) => {
         const fl = await client.fights(c.raid.reportID);
         const actor = fl.friendlies.find((a) => a.name === c.name && a.fights.some((f) => f.id === c.raid.fightID));
         const server = actor?.server ?? c.raid.serverName;
-        const cons = await consistency(client, c.name, server, c.raid.regionName, fl.zone, q.spec).catch(() => undefined);
+        const cons = await consistency(client, c.name, server, c.raid.regionName, fl.zone, q.spec).catch(unlessOutage(undefined));
         return { c, server, cons };
       }),
     );

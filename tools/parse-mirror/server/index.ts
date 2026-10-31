@@ -22,7 +22,7 @@ import { runTankSims } from './sim/tank.ts';
 import { mayHeal } from './specs/healers.ts';
 import { mayTank } from './specs/tanks.ts';
 import { mayBeDps, specForIcon } from './specs/index.ts';
-import { WclClient } from './wcl/client.ts';
+import { WclClient, pruneCache } from './wcl/client.ts';
 
 // Locally the Vite dev server proxies to API_PORT (from .env); hosts like Render give the port in
 // PORT. API_PORT wins, since dev tools may set PORT for Vite.
@@ -85,18 +85,28 @@ const VISITOR_LOOKUPS_PER_HOUR = Number(process.env.VISITOR_LOOKUPS_PER_HOUR ?? 
 // HEALERS_NEED_OWN_KEY is the old name),
 // they only run on a visitor's own key, so they never use up the server key's hourly budget.
 const ROLES_NEED_OWN_KEY = (process.env.ROLES_NEED_OWN_KEY ?? process.env.HEALERS_NEED_OWN_KEY) === 'true';
+/** Tank analyses a visitor can leave here for sims in an hour: each can be megabytes of memory. */
+const TANK_UPLOADS_PER_HOUR = 30;
 const lookups = new Map<string, number[]>();
-/** `weight`: how many lookups a request counts as (a healer analysis fetches several raids' logs). */
+const tankUploads = new Map<string, number[]>();
+/** Adds `weight` uses to this visitor's last hour; false if they were at `max` already. */
+function spend(uses: Map<string, number[]>, req: express.Request, max: number, weight: number) {
+  const hourAgo = Date.now() - 60 * 60 * 1000;
+  // Visitors who stopped coming go first.
+  if (uses.size > 10_000) for (const [ip, times] of uses) if (times.at(-1)! <= hourAgo) uses.delete(ip);
+  const ip = req.ip ?? 'unknown';
+  const recent = (uses.get(ip) ?? []).filter((t) => t > hourAgo);
+  if (recent.length >= max) return false;
+  for (let i = 0; i < weight; i++) recent.push(Date.now());
+  uses.set(ip, recent);
+  return true;
+}
+/** `weight`: how many lookups a request counts as (a whole-raid page or analysis fetches many logs). */
 function limitVisitor(req: express.Request, weight = 1) {
   if (req.get('x-wcl-key') || !VISITOR_LOOKUPS_PER_HOUR) return;
-  const ip = req.ip ?? 'unknown';
-  const hourAgo = Date.now() - 60 * 60 * 1000;
-  const recent = (lookups.get(ip) ?? []).filter((t) => t > hourAgo);
-  if (recent.length >= VISITOR_LOOKUPS_PER_HOUR) {
+  if (!spend(lookups, req, VISITOR_LOOKUPS_PER_HOUR, weight)) {
     throw new BadRequest(`You've looked up a lot of logs this hour. Wait a bit, or add your own Warcraft Logs key under “API key”.`);
   }
-  for (let i = 0; i < weight; i++) recent.push(Date.now());
-  lookups.set(ip, recent);
 }
 
 const log = (msg: string) => console.log(`[${new Date().toLocaleTimeString()}] ${msg}`);
@@ -195,7 +205,7 @@ app.get('/api/raid/:code/:source', async (req, res) => {
 
 app.get('/api/guild/:code', async (req, res) => {
   try {
-    limitVisitor(req);
+    limitVisitor(req, 5);
     res.json(await guildSummary(clientFor(req), reportCode(req.params.code)));
   } catch (err) {
     fail(res, 'Guild overview', err);
@@ -296,16 +306,20 @@ app.get('/api/role/:code/:fight/:source', async (req, res) => {
 });
 
 const ANALYSIS_ID = /^[0-9a-f-]{36}$/;
+/** You and your peers. */
+const MAX_TANK_SIM_PLAYERS = 12;
 
 // A tank analysis made in the browser: the server keeps what its sims need, as for its own tank
 // analyses. The sims fetch each tank's gear with the visitor's key and run in their browser.
 app.post('/api/tank/sims', (req, res) => {
   try {
-    requireRoleKey(req);
+    roleClient(req);
     const stored = req.body as StoredTank;
-    if (typeof stored?.analysis?.id !== 'string' || !ANALYSIS_ID.test(stored.analysis.id) || !Array.isArray(stored.simInput?.players)) {
+    const players = stored?.simInput?.players;
+    if (typeof stored?.analysis?.id !== 'string' || !ANALYSIS_ID.test(stored.analysis.id) || !Array.isArray(players) || players.length > MAX_TANK_SIM_PLAYERS || !players.every((p) => REPORT_CODE.test(p?.report))) {
       throw new BadRequest('Expected { analysis, simInput } from a tank analysis.');
     }
+    if (!spend(tankUploads, req, TANK_UPLOADS_PER_HOUR, 1)) throw new BadRequest('Too many tank analyses this hour. Wait a bit.');
     remember(stored.analysis.id, async (run, parallel, simClient) => runTankSims(stored, simClient(), run, iterations, log, parallel));
     res.json({ ok: true });
   } catch (err) {
@@ -322,9 +336,10 @@ app.post('/api/analyze', async (req, res) => {
     const client = clientFor(req);
     const code = reportCode(report);
     const role = await roleOf(client, code, fight, source);
+    if (role.kind !== 'dps') requireRoleKey(req);
+    // The analysis fetches the players it compares with, not just this one.
+    limitVisitor(req, 2);
     if (role.kind !== 'dps') {
-      requireRoleKey(req);
-      limitVisitor(req, 2);
       if (role.kind === 'tank') {
         const stored = await analyzeTank(client, code, fight, source, log);
         remember(stored.analysis.id, async (run, parallel, simClient) => runTankSims(stored, simClient(), run, iterations, log, parallel));
@@ -395,7 +410,7 @@ app.get('/api/sim/:id/jobs', async (req, res) => {
     return;
   }
   const done = () => !!stored.simResult || !!stored.simError;
-  const jobs = await stored.browser.take(15_000, done);
+  const jobs = await stored.browser.take(15_000, done, String(req.query.runner ?? ''));
   res.json({ jobs, result: stored.simResult, error: stored.simError });
 });
 
@@ -423,6 +438,11 @@ if (fs.existsSync(dist)) {
   app.get(/^(?!\/api).*/, (_req, res) => res.sendFile(path.join(dist, 'index.html')));
 }
 
-app.listen(PORT, () =>
+void pruneCache().catch((err) => log(`Cache trim failed: ${(err as Error).message}`));
+
+// A local install has no login, so it's only open to this pc. API_PORT is what marks one (see PORT
+// above); hosts give the port in PORT and need to reach the server from outside.
+const HOST = process.env.HOST ?? (process.env.API_PORT ? '127.0.0.1' : '0.0.0.0');
+app.listen(PORT, HOST, () =>
   log(`Server listening on http://localhost:${PORT} (sims: ${SIM_MODE}${serverClient ? '' : '; no server API key: visitors must bring their own'})`),
 );

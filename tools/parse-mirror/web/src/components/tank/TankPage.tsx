@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 
+import { median as med } from '../../../../server/analysis/stats.ts';
 import type { TankAnalysis, TankMetrics, TankTab } from '../../../../shared/types.ts';
 import { abilityIcon, fmt, fmtDate, fmtTime, wclReportUrl, wclUrl } from '../../format.ts';
 import { Findings } from '../Findings.tsx';
@@ -19,7 +20,6 @@ const MATCH: Record<TankAnalysis['group']['match'], { label: string; pill: strin
   none: { label: 'No peers found', pill: 'bad' },
 };
 const k = (v: number) => `${(v / 1000).toFixed(1)}k`;
-const med = (xs: number[]) => (xs.length ? [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] : 0);
 type Row = { name: string; m: TankMetrics; you?: boolean };
 const rowsOf = (a: TankAnalysis): Row[] => [{ name: `${a.you.name} (you)`, m: a.you, you: true }, ...a.peers.map((p) => ({ name: p.name, m: p as TankMetrics }))];
 

@@ -7,10 +7,13 @@ import crypto from 'node:crypto';
 import type { SimDps, SimPlayerMetrics } from './runner.ts';
 
 const RESEND_AFTER_MS = 90_000;
+/** A browser polls again as soon as it's answered (at most 15 s), so this long of silence means it left. */
+const RUNNER_GONE_MS = 20_000;
 
 interface Job {
   request: unknown;
   sentAt: number;
+  sentTo?: string;
   resolve: (dps: SimDps) => void;
   reject: (err: Error) => void;
 }
@@ -25,6 +28,8 @@ export interface JobOutcome {
 export class BrowserSims {
   private jobs = new Map<string, Job>();
   private wake: (() => void)[] = [];
+  /** When each browser last asked for jobs. */
+  private polled = new Map<string, number>();
 
   /** Queues a sim for the browser; resolves when its result comes back. */
   run = (request: unknown): Promise<SimDps> =>
@@ -33,9 +38,14 @@ export class BrowserSims {
       for (const w of this.wake.splice(0)) w();
     });
 
-  /** Jobs not handed out yet (or handed out long ago), waiting up to `waitMs` for new ones. */
-  async take(waitMs: number, isDone: () => boolean): Promise<{ id: string; request: unknown }[]> {
-    const due = () => [...this.jobs].filter(([, j]) => !j.sentAt || Date.now() - j.sentAt > RESEND_AFTER_MS);
+  /**
+   * Jobs not handed out yet, handed out long ago or held by a browser that left, waiting up to
+   * `waitMs` for new ones. `runner`: which browser is asking.
+   */
+  async take(waitMs: number, isDone: () => boolean, runner: string): Promise<{ id: string; request: unknown }[]> {
+    this.polled.set(runner, Date.now());
+    const left = (j: Job) => j.sentTo !== runner && Date.now() - (this.polled.get(j.sentTo ?? '') ?? 0) > RUNNER_GONE_MS;
+    const due = () => [...this.jobs].filter(([, j]) => !j.sentAt || Date.now() - j.sentAt > RESEND_AFTER_MS || left(j));
     if (!due().length && !isDone()) {
       await new Promise<void>((resolve) => {
         const timer = setTimeout(resolve, waitMs);
@@ -48,6 +58,7 @@ export class BrowserSims {
     const now = Date.now();
     return due().map(([id, j]) => {
       j.sentAt = now;
+      j.sentTo = runner;
       return { id, request: j.request };
     });
   }

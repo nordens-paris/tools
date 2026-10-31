@@ -40,6 +40,13 @@ const asTab = (t?: string): Tab => (TABS as readonly string[]).includes(t ?? '')
 /** Healer and tank analyses: no sims, their own tabs. */
 type RoleAnalysis = HealerAnalysis | TankAnalysis;
 const roleTabs = (x: RoleAnalysis): string[] => (x.kind === 'healer' ? HEALER_TABS : TANK_TABS);
+/** Analyses kept for back and forward; each can be megabytes. */
+const KEPT_ANALYSES = 20;
+function keep<T>(cache: Map<string, T>, key: string, value: T) {
+  cache.delete(key);
+  cache.set(key, value);
+  if (cache.size > KEPT_ANALYSES) cache.delete(cache.keys().next().value!);
+}
 
 export function App() {
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.search));
@@ -123,14 +130,20 @@ export function App() {
     setError(undefined);
     setNeedsKey(false);
     keyRetry.current = false;
-    if (r.view === 'home') return;
+    // A request still running for the page being left mustn't show up on this one.
+    const leave = () => {
+      if (!loading) return;
+      ++latest.current;
+      setLoading(false);
+    };
+    if (r.view === 'home') return leave();
     const loaded =
       (r.view === 'guild' && guild?.report === r.report) ||
       (r.view === 'raid' && raid?.report === r.report && raid.player.source === r.source) ||
       (r.view === 'progress' && progress?.report === r.report && progress.player.source === r.source) ||
       matches(analysis, r) ||
       matchesRole(role, r);
-    if (loaded && !force) return;
+    if (loaded && !force) return leave();
     const cachedRole = r.view === 'analysis' ? roleCache.current.get(roleKey(r)) : undefined;
     if (cachedRole && !force) {
       ++latest.current;
@@ -172,11 +185,11 @@ export function App() {
         const result = (await roleAnalysisHere(r.report, r.fight, r.source)) ?? (await analyze(r.report, r.fight, r.source, r.peers ? 'peers' : 'top'));
         if (token !== latest.current) return;
         if (result.kind === 'healer' || result.kind === 'tank') {
-          roleCache.current.set(roleKey(r), result);
+          keep(roleCache.current, roleKey(r), result);
           setRole(result);
           return;
         }
-        fightCache.current.set(fightKey(r), { analysis: result });
+        keep(fightCache.current, fightKey(r), { analysis: result });
         setAnalysis(result);
         // Sims take a few seconds; start them in the background right away.
         void startSim(result.id, token);
@@ -297,7 +310,7 @@ export function App() {
           </div>
         )}
 
-        {route.view === 'home' && <Landing onAnalyze={openFight} onRaid={openRaid} onGuild={openGuild} loading={loading} />}
+        {route.view === 'home' && <Landing onAnalyze={openFight} onRaid={openRaid} onGuild={openGuild} onProgress={openProgress} loading={loading} />}
 
         {route.view !== 'home' && loading && (
           <div className="loading">

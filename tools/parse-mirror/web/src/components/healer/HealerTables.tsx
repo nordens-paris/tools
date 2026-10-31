@@ -271,12 +271,12 @@ export function DeathList({ analysis: a }: { analysis: HealerAnalysis }) {
         <div>
           <h2>Deaths</h2>
           <p className="sub">
-            Every death on this kill: how fast it happened, the damage in the last 5 seconds, and what each healer cast while it happened. Only deaths with time to save
+            Every death: how fast it happened, the damage in the last 5 seconds, and what each healer cast while it happened. Only deaths with time to save
             someone say anything about healing.
           </p>
         </div>
       </div>
-      {!a.deaths.length && <div className="muted">Nobody died on this kill.</div>}
+      {!a.deaths.length && <div className="muted">Nobody died.</div>}
       <div className="deaths">
         {a.deaths.map((d, i) => (
           <div className="death" key={i}>

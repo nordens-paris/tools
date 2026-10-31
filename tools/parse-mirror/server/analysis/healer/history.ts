@@ -4,13 +4,12 @@
 import type { HealerHistory, HealerKillScores } from '../../../shared/types.ts';
 import { scoreInputs } from '../../../shared/healerScore.ts';
 import type { WclReader } from '../../wcl/reader.ts';
-import { parsesFor } from '../characters.ts';
+import { HEALER_PARSE_SPECS, parsesFor } from '../characters.ts';
 import { fetchHealerFight } from './data.ts';
 import { healerMetrics } from './metrics.ts';
 import { FightModel } from './model.ts';
 
 const WEEKS = 4;
-const HEALER_SPECS = ['Holy', 'Discipline', 'Restoration'];
 
 export async function healerHistory(client: WclReader, report: string, source: number): Promise<HealerHistory> {
   const fights = await client.fights(report);
@@ -19,13 +18,12 @@ export async function healerHistory(client: WclReader, report: string, source: n
   const until = fights.end ?? Date.now();
   const from = (fights.start ?? until) - WEEKS * 7 * 24 * 60 * 60 * 1000;
   const { parses, region } = await parsesFor(client, actor.name, actor.server, fights.zone, 'hps');
-  // The same kill can be ranked from two reports (two people logging); keep one.
-  const seen = new Set<string>();
+  // The same kill can be ranked from two reports (two people logging), pulled moments apart; keep one.
+  const lastPull = new Map<number, number>();
   const kills: HealerHistory['kills'] = [];
   for (const p of [...parses].sort((a, b) => a.startTime - b.startTime)) {
-    const key = `${p.encounterID}:${Math.round(p.startTime / 60_000)}`;
-    if (p.startTime < from || p.startTime > until || !HEALER_SPECS.includes(p.spec) || seen.has(key)) continue;
-    seen.add(key);
+    if (p.startTime < from || p.startTime > until || !HEALER_PARSE_SPECS.includes(p.spec) || p.startTime - (lastPull.get(p.encounterID) ?? -Infinity) < 120_000) continue;
+    lastPull.set(p.encounterID, p.startTime);
     kills.push({ report: p.reportID, fight: p.fightID, encounterId: p.encounterID, name: p.encounterName, startTime: p.startTime });
   }
   return { name: actor.name, server: actor.server, region, from, until, kills };

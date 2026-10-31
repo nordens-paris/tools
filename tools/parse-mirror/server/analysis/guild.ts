@@ -8,7 +8,7 @@ import { mayTank } from '../specs/tanks.ts';
 import { mayBeDps, specForIcon } from '../specs/index.ts';
 import type { WclClient } from '../wcl/client.ts';
 import { parseOf, parsesFor } from './characters.ts';
-import { NOT_DPS, consumesAt, fetchRaidEvents, gearIssues, hasTotemOfWrath, partiesOf, potionsUsed, raidDebuffs } from './raidAudit.ts';
+import { NOT_DPS, consumesAt, fetchRaidEvents, iconByTalents, gearIssues, hasTotemOfWrath, partiesOf, potionsUsed, raidDebuffs } from './raidAudit.ts';
 
 export async function guildSummary(client: WclClient, report: string): Promise<GuildSummary> {
   const fights = await client.fights(report);
@@ -48,7 +48,7 @@ export async function guildSummary(client: WclClient, report: string): Promise<G
         server: p.server,
         icon: p.icon,
         supported: !!specForIcon(p.icon) || mayBeDps(p.icon) || mayHeal(p.icon) || mayTank(p.icon),
-        dps: !NOT_DPS.has(p.icon),
+        dps: !NOT_DPS.has(iconByTalents(p.icon, latestInfo(p.id)?.infos.find((i) => i.sourceID === p.id))),
         fights: Object.fromEntries(
           perBoss
             .filter((b) => p.fights.some((f) => f.id === b.fight.id))

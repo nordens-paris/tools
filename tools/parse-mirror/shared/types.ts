@@ -20,6 +20,8 @@ export interface GearItem {
   /** Temporary enchant (sharpening stone, oil, etc.) effect ID. */
   tempEnchantId?: number;
   tempEnchantName?: string;
+  /** A slot people enchant, with an item that can take one. */
+  canEnchant?: boolean;
   gems: { id: number; name: string; icon: string }[];
 }
 
@@ -388,6 +390,8 @@ export interface RaidParty {
 
 export interface ProgressSummary {
   report: string;
+  /** What the parses rank; `dps` on each kill is this amount per second. */
+  metric: 'dps' | 'hps';
   player: { name: string; server?: string; region?: string; icon: string; source: number };
   bosses: {
     encounterId: number;
@@ -529,6 +533,8 @@ export interface HealerMetrics {
   activity: number;
   /** Seconds as Teron's ghost after Shadow of Death (0 elsewhere). */
   ghostSec?: number;
+  /** Seconds with Carrion Swarm's healing cut (Anetheron only, 0 if never hit). */
+  carrionSwarmSec?: number;
   /** Seconds not casting while someone they heal was below 70%. */
   idleWhileNeeded: { sec: number; ofSec: number };
   upkeep: HealerUpkeep[];
@@ -679,6 +685,8 @@ export interface HealerRaidRow {
   role: HealerRole;
   tankShare: number;
   hps: number;
+  /** HPS after Carrion Swarm's cut, for the healing split (only when the healer was hit). */
+  hpsUncut?: number;
   healPerMana?: number;
   overhealPct: number;
   /** Overheal by the healer's own choice, as a share of all their healing. */

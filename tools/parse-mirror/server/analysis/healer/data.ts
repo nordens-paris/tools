@@ -4,6 +4,8 @@
 // from the same raid costs nothing.
 import type { WclReader } from '../../wcl/reader.ts';
 import type { WclActor, WclCombatantInfo, WclEvent, WclFight, WclFightsResponse } from '../../wcl/types.ts';
+import { ANETHERON } from '../../../shared/healerScore.ts';
+import { spellName } from '../../data/spellNames.ts';
 
 
 /** A table row split by actor (healing done, damage taken). Icons carry the spec. */
@@ -32,14 +34,21 @@ export interface HealerFightData {
   healingDone: ActorTableEntry[];
   /** The boss's melee taken per player: finds the tanks. */
   meleeTaken: ActorTableEntry[];
-  /** Teron Gorefiend's Shadow of Death debuffs (empty on other fights): a ghost can't heal. */
-  shadowOfDeath?: WclEvent[];
+  /** The fight's debuffs from HEALER_DEBUFFS. */
+  debuffs?: Partial<Record<HealerDebuff, WclEvent[]>>;
 }
 
 const CAST_TYPES = ['cast', 'begincast'];
 const BUFF_TYPES = ['applybuff', 'applybuffstack', 'refreshbuff', 'removebuff', 'removebuffstack'];
-const TERON = new Set([601, 50604]);
-const SHADOW_OF_DEATH = 40251;
+/**
+ * Debuffs that decide what a healer can do, fetched on their boss only (one request each): a ghost
+ * of Teron's Shadow of Death can't heal, and Carrion Swarm cuts healing done by 75%.
+ */
+const HEALER_DEBUFFS = {
+  shadowOfDeath: { bosses: new Set([604, 50604]), id: 40251 },
+  carrionSwarm: { bosses: ANETHERON, id: 31306 },
+};
+export type HealerDebuff = keyof typeof HEALER_DEBUFFS;
 
 /** The event fields the healer and tank metrics read; the rest is dropped before caching. */
 export const FIELDS = [
@@ -70,6 +79,16 @@ export const FIELDS = [
   'armor',
 ] as const;
 
+/**
+ * Back to the TBC names the analyses match on: non-English logs are fetched with translate=true,
+ * which gives modern names.
+ */
+export function tbcNames(fights: WclFightsResponse, events: WclEvent[][], auras: { auras: { guid: number; name: string }[] }[] = []) {
+  if (fights.lang === 'en') return;
+  for (const list of events) for (const e of list) if (e.ability) e.ability.name = spellName(e.ability.guid, e.ability.name);
+  for (const table of auras) for (const a of table.auras) a.name = spellName(a.guid, a.name);
+}
+
 /** Raid-wide healer data for one fight. */
 export async function fetchHealerFight(client: WclReader, report: string, fightId: number, fights?: WclFightsResponse): Promise<HealerFightData> {
   const fl = fights ?? (await client.fights(report));
@@ -81,15 +100,20 @@ export async function fetchHealerFight(client: WclReader, report: string, fightI
   // Casts, buffs, mana and combatant info in one request. It also has what those views leave out:
   // pets' casts, players' melee swings and enemies' buffs. Deaths stay apart: only that view tells
   // Feign Death from a real one.
-  const [healing, damage, log, deaths, healingDone, meleeTaken, shadowOfDeath] = await Promise.all([
+  const [healing, damage, log, deaths, healingDone, meleeTaken, debuffs] = await Promise.all([
     client.events('healing', report, s, e, {}, FIELDS),
     client.events('damage-taken', report, s, e, {}, FIELDS),
     client.events('summary', report, s, e, { filter: `type in (${[...CAST_TYPES, ...BUFF_TYPES, 'resourcechange', 'combatantinfo'].map((t) => `"${t}"`).join(', ')})` }, [...FIELDS, 'targetIsFriendly']),
     client.events('deaths', report, s, e, {}, FIELDS),
     client.table<{ entries: ActorTableEntry[] }>('healing', report, range),
     client.table<{ entries: ActorTableEntry[] }>('damage-taken', report, { ...range, abilityid: 1 }),
-    TERON.has(fight.boss) ? client.events('debuffs', report, s, e, { abilityid: SHADOW_OF_DEATH }, FIELDS) : Promise.resolve([]),
+    Promise.all(
+      Object.entries(HEALER_DEBUFFS)
+        .filter(([, d]) => d.bosses.has(fight.boss))
+        .map(async ([key, d]) => [key, await client.events('debuffs', report, s, e, { abilityid: d.id }, FIELDS)] as const),
+    ),
   ]);
+  tbcNames(fl, [healing, damage, log, deaths]);
   const ids = new Set(players.map((p) => p.id));
   return {
     report,
@@ -104,6 +128,6 @@ export async function fetchHealerFight(client: WclReader, report: string, fightI
     combatants: log.filter((x) => x.type === 'combatantinfo' && x.timestamp <= s + 1000) as unknown as HealerFightData['combatants'],
     healingDone: healingDone.entries,
     meleeTaken: meleeTaken.entries,
-    shadowOfDeath,
+    debuffs: Object.fromEntries(debuffs),
   };
 }

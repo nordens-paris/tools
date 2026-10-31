@@ -3,7 +3,11 @@
 Alle scripts køres fra projektmappen med `npx tsx --env-file=.env scripts/<navn>.ts ...`. Scripts,
 der simmer, bruger kommandolinje-simmen (`WOWSIMS_CLI`). De
 bruger samme cache som serveren, så gentagne kørsler er gratis på Warcraft Logs-budgettet.
-`npm run typecheck` tjekker også scripts.
+`npm run typecheck` tjekker også scripts. `npm test` kører testene i `tests/`; CI kører typecheck,
+tests og build på hver ændring (`.github/workflows/ci.yml`).
+
+Engangs-scripts ligger i `scripts/dev/` og køres derfra. Mappen hører kun til det private repo og
+kopieres ikke til guildets: `buff-list.ts`, `cd-timing.ts`, `ci-stats.ts`, `dump-request.ts`, `healer-analyze.ts`, `parse-probe.ts`, `party-probe.ts`, `pet-probe.ts`, `rage-probe.ts`, `raw-hits.ts`, `resist-check.ts`, `role-sweep.ts`, `sb-auras.ts`, `sb-gap.ts`, `sb-hits.ts`, `seal-procs.ts`, `show-detected.ts`, `show-env.ts`, `sim-timing-page.ts`, `sim-timing.ts`, `sim-vs-log.ts`, `target-probe.ts`, `temp-enchants.ts`, `totem-probe.ts`, `try-analysis.ts`, `unknown-ids.ts`, `wasm-timing.mjs`, `white-hits.ts`.
 
 Scripts, der arbejder på tværs af mange spillere (`sim-vs-log`, `crit-unbiased`, `audit-auras`,
 `cd-timing`, `show-env`), vælger spec med `SPEC=<key>` (f.eks. `SPEC=warlock-destruction`,
@@ -16,7 +20,7 @@ Scripts, der arbejder på tværs af mange spillere (`sim-vs-log`, `crit-unbiased
 | `build-wowsims.mjs <klon> [--wasm-only]` | Lægger `wowsims-patches/` ind i en tbc-new-klon og bygger WebAssembly-simmen til `web/public/sim/` og `bin/wowsimcli` |
 | `screenshots.ts [url]` | Tager skærmbillederne til README'en med eksempel-loggene (kræver `npm run dev` og Chrome/Edge) |
 | `extract-wowsims-data.mjs <klon> [--only=fil,fil]` | Henter navne, ikoner, talenttræer, procs, APL'er og tank-stats til `data/wowsims/` (`npm run extract-wowsims`); `--only` skriver kun de nævnte filer |
-| `check-threat.ts <klon>` | Tjekker tank-threat-værdierne i `server/specs/tanks.ts` mod WoWSims-kilden |
+| `check-threat.ts <klon>` (`npm run check-threat -- <klon>`) | Tjekker tank-threat-værdierne i `server/specs/tanks.ts` mod WoWSims-kilden |
 
 ## Hverdagsværktøjer
 

@@ -13,9 +13,11 @@ interface JobResult {
   error?: string;
 }
 
-// Built by scripts/build-wowsims.mjs: gzipped, so it's 7 MB to download instead of 42. Browsers
-// cache it for a day, so bump the version after a rebuild.
-const WASM_URL = '/sim/wowsim.wasm.gz?v=2';
+/** A hash of the sim's files (vite.config.ts). */
+declare const __SIM_VERSION__: string;
+
+// Built by scripts/build-wowsims.mjs: gzipped, so it's 7 MB to download instead of 42.
+const WASM_URL = `/sim/wowsim.wasm.gz?v=${__SIM_VERSION__}`;
 
 let modulePromise: Promise<WebAssembly.Module> | undefined;
 /** Downloads and compiles WoWSims once; every worker shares the compiled module. */
@@ -35,34 +37,53 @@ function wasmModule() {
   return modulePromise;
 }
 
+/** Longest a sim may take: a worker that never answers would otherwise hang the run for good. */
+const JOB_TIMEOUT_MS = 10 * 60_000;
+
 class SimWorker {
-  private worker = new Worker('/sim/worker.js?v=3');
+  private worker = new Worker(`/sim/worker.js?v=${__SIM_VERSION__}`);
   private pending = new Map<string, (r: JobResult) => void>();
   readonly ready: Promise<void>;
 
-  constructor(module: WebAssembly.Module) {
+  constructor(module: WebAssembly.Module, onCrash: () => void) {
     this.ready = new Promise((resolve, reject) => {
       this.worker.onmessage = (e: MessageEvent) => {
         const msg = e.data;
         if (msg.type === 'ready') resolve();
         else if (msg.type === 'failed') reject(new Error(msg.error));
-        else if (msg.type === 'result') {
-          this.pending.get(msg.id)?.(msg);
-          this.pending.delete(msg.id);
-        }
+        else if (msg.type === 'result') this.finish(msg);
       };
-      this.worker.onerror = (e) => reject(new Error(e.message || 'Sim worker crashed'));
+      this.worker.onerror = (e) => {
+        const error = e.message || 'Sim worker crashed';
+        reject(new Error(error));
+        this.failPending(error);
+        onCrash();
+      };
     });
     this.worker.postMessage({ type: 'init', module });
   }
 
+  private finish(result: JobResult) {
+    this.pending.get(result.id)?.(result);
+    this.pending.delete(result.id);
+  }
+
+  private failPending(error: string) {
+    for (const id of [...this.pending.keys()]) this.finish({ id, error });
+  }
+
   terminate() {
     this.worker.terminate();
+    this.failPending('Sim worker closed');
   }
 
   run(job: Job): Promise<JobResult> {
     return new Promise((resolve) => {
-      this.pending.set(job.id, resolve);
+      const timer = setTimeout(() => this.finish({ id: job.id, error: 'The sim took too long' }), JOB_TIMEOUT_MS);
+      this.pending.set(job.id, (result) => {
+        clearTimeout(timer);
+        resolve(result);
+      });
       this.worker.postMessage({ type: 'sim', id: job.id, request: JSON.stringify(job.request) });
     });
   }
@@ -87,20 +108,21 @@ function workers() {
   clearTimeout(idleTimer);
   workersPromise ??= (async () => {
     const module = await wasmModule();
-    const pool = Array.from({ length: workerCount() }, () => new SimWorker(module));
+    const pool = Array.from({ length: workerCount() }, () => new SimWorker(module, closeWorkers));
     await Promise.all(pool.map((w) => w.ready));
     return pool;
   })();
   workersPromise.catch(() => (workersPromise = undefined));
   return workersPromise;
 }
+function closeWorkers() {
+  const closing = workersPromise;
+  workersPromise = undefined;
+  void closing?.then((pool) => pool.forEach((w) => w.terminate()));
+}
 function closeWhenIdle() {
   clearTimeout(idleTimer);
-  idleTimer = setTimeout(() => {
-    const closing = workersPromise;
-    workersPromise = undefined;
-    void closing?.then((pool) => pool.forEach((w) => w.terminate()));
-  }, IDLE_CLOSE_MS);
+  idleTimer = setTimeout(closeWorkers, IDLE_CLOSE_MS);
 }
 
 async function call<T>(url: string, body?: unknown): Promise<T> {
@@ -140,6 +162,8 @@ async function simulate<T>(analysisId: string, onProgress: (done: number, total:
   const seen = new Set<string>();
   const idle = [...pool];
   let failure: Error | undefined;
+  // So the server can tell this page from one that left with jobs unanswered.
+  const runner = Math.random().toString(36).slice(2);
 
   const pump = () => {
     // Each job goes to a free worker; a worker is free again as soon as its sim is done, while the
@@ -163,7 +187,7 @@ async function simulate<T>(analysisId: string, onProgress: (done: number, total:
 
   for (;;) {
     if (failure) throw failure;
-    const r = await call<{ jobs: Job[]; result?: T; error?: string }>(`/api/sim/${analysisId}/jobs`);
+    const r = await call<{ jobs: Job[]; result?: T; error?: string }>(`/api/sim/${analysisId}/jobs?runner=${runner}`);
     if (r.error) throw new Error(r.error);
     if (r.result) return r.result;
     // The server hands a job out again if no answer came for a while; it may still be running here.

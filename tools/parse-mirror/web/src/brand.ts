@@ -22,7 +22,7 @@ export const SUPPORTED = [
   { className: 'Hunter', specName: 'Survival' },
 ];
 
-/** Tank specs: compared with tanks from well-run raids, no sims yet. */
+/** Tank specs: compared with tanks from well-run raids, with threat sims. */
 export const TANKS = [
   { className: 'Warrior', specName: 'Protection' },
   { className: 'Paladin', specName: 'Protection' },

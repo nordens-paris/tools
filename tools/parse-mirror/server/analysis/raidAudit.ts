@@ -2,13 +2,14 @@
 // and potions. Built from what the raid summary fetches anyway (combatant info), plus two calls per
 // boss kill: the boss debuff table, and one event query for drums, Vampiric Touch mana and potions.
 import type { GearIssue, GuildFight, GuildSummary, RaidParty } from '../../shared/types.ts';
-import { detectConsumes } from '../data/consumes.ts';
-import { gemInfo, itemInfo, spellName } from '../data/db.ts';
+import { POTIONS as POTION_INFO, detectConsumes } from '../data/consumes.ts';
+import { ENCHANT_SLOTS, enchantable, gemInfo, itemInfo, spellName } from '../data/db.ts';
 import { talentRank } from '../data/talents.ts';
 import { closestTalentPreset } from '../sim/request.ts';
-import { specForIcon } from '../specs/index.ts';
+import { specForIcon, specNameFor } from '../specs/index.ts';
 import type { WclClient } from '../wcl/client.ts';
 import type { WclActor, WclCombatantInfo, WclEvent, WclFight } from '../wcl/types.ts';
+import { IMPROVED_SHADOW_BOLT_IDS } from '../sim/environment.ts';
 import { PARTY_AURAS, VAMPIRIC_TOUCH_MANA, WCL_SLOTS } from './collect.ts';
 
 type Info = WclCombatantInfo & { sourceID: number };
@@ -48,6 +49,14 @@ function weaponLabel(name: string, icon: string | undefined, playerIcon: string)
   return { name, icon: 'inv_misc_questionmark' };
 }
 
+/** A bare class icon ("Priest") with the tree its talents give, for the role checks. */
+export function iconByTalents(icon: string, info?: Info) {
+  if (icon.includes('-') || !info?.talents?.length) return icon;
+  const t = info.talents;
+  const tree = specNameFor(icon, [t[0]?.id ?? 0, t[1]?.id ?? 0, t[2]?.id ?? 0]);
+  return tree ? `${icon}-${tree}` : icon;
+}
+
 /** Flask/elixirs, food, weapon oil and scrolls at the pull. Missing when the player was out of range. */
 export function consumesAt(info: Info | undefined, playerIcon: string): Consumes | undefined {
   if (!info) return undefined;
@@ -80,8 +89,8 @@ export function hasTotemOfWrath(player: WclActor, actors: WclActor[], infos: Inf
 }
 
 const DRUMS = [35476, 35475, 351355, 35477, 35478];
-// Potions (cast spell IDs) and the runes that share their purpose. Thistle Tea is a rogue's potion.
-const POTIONS = [28507, 28508, 28494, 28506, 17528, 28515, 28499, 28495, 17531, 17534, 38929, 22729, 9512];
+// Potions (cast spell IDs) and the runes that share their purpose.
+const POTIONS = Object.keys(POTION_INFO).map(Number);
 const RUNES = [27869, 16666];
 
 /** Two calls per kill: boss debuffs, and drums/Vampiric Touch mana/potion events. */
@@ -90,7 +99,7 @@ export async function fetchRaidEvents(client: WclClient, report: string, f: WclF
   const [debuffs, all] = await Promise.all([
     client.bossDebuffs(report, f.start_time, f.end_time),
     // Pre-pull potions are drunk a second or two before the pull.
-    client.events('summary', report, f.start_time - 5000, f.end_time, {
+    client.events('summary', report, Math.max(0, f.start_time - 5000), f.end_time, {
       filter:
         `type = "combatantinfo" or (type = "cast" and ability.id in (${ids([...POTIONS, ...RUNES, ...DRUMS])})) or ` +
         `(type in ("applybuff", "resourcechange") and ability.id in (${ids([...DRUMS, VAMPIRIC_TOUCH_MANA])}))`,
@@ -107,17 +116,7 @@ export function potionsUsed(events: WclEvent[], source: number) {
     .map((e) => ({ name: potionName(e.ability!.guid, e.ability!.name), icon: e.ability!.abilityIcon?.replace(/\.jpg$/, '') }));
 }
 // Potion casts are named after their effect ("Haste", "Restore Mana").
-const POTION_NAMES: Record<number, string> = {
-  28507: 'Haste Potion',
-  28508: 'Destruction Potion',
-  28499: 'Super Mana Potion',
-  28495: 'Super Healing Potion',
-  28515: 'Ironshield Potion',
-  17531: 'Major Mana Potion',
-  17534: 'Major Healing Potion',
-  9512: 'Thistle Tea',
-};
-const potionName = (id: number, name: string) => POTION_NAMES[id] ?? name;
+const potionName = (id: number, name: string) => POTION_INFO[id]?.name ?? name;
 
 // Roles for the party checks. Hunters aren't "melee": they don't use Windfury.
 const MELEE = /^(Warrior-(Fury|Arms)|Rogue|Shaman-Enhancement|Druid-Feral|Paladin-Retribution)/;
@@ -271,7 +270,7 @@ const RAID_DEBUFFS: { name: string; by: string[]; names?: string[]; ids?: number
   { name: 'Faerie Fire', by: ['Druid'], names: ['Faerie Fire', 'Faerie Fire (Feral)'], icon: 'spell_nature_faeriefire' },
   { name: 'Curse of Recklessness', by: ['Warlock'], icon: 'spell_shadow_unholystrength' },
   { name: 'Curse of the Elements', by: ['Warlock'], icon: 'spell_shadow_chilltouch' },
-  { name: 'Improved Shadow Bolt', by: ['Warlock'], ids: [17794, 17797, 17798, 17799, 17800], icon: 'spell_shadow_shadowbolt', target: 60 },
+  { name: 'Improved Shadow Bolt', by: ['Warlock'], ids: IMPROVED_SHADOW_BOLT_IDS, icon: 'spell_shadow_shadowbolt', target: 60 },
   { name: 'Misery', by: ['Priest-Shadow'], icon: 'spell_shadow_misery' },
   { name: 'Shadow Weaving', by: ['Priest-Shadow'], ids: [15258], icon: 'spell_shadow_blackplague' },
   { name: 'Judgement of the Crusader', by: ['Paladin'], icon: 'spell_holy_holysmite' },
@@ -315,9 +314,6 @@ export function debuffsFor(icon: string): string[] {
   return CASTER.test(icon) ? [...SPELL_DEBUFFS, ...extra] : [];
 }
 
-// Slots worth an enchant for everyone. Rings are enchanter-only; ranged only matters for hunters.
-const ENCHANT_SLOTS = ['Head', 'Shoulder', 'Back', 'Chest', 'Wrist', 'Hands', 'Legs', 'Feet', 'Main Hand', 'Off Hand'];
-
 /** Missing enchants, empty sockets, green gems, and hit under the cap for the specs we know. */
 export function gearIssues(icon: string, info: Info, totemOfWrath: boolean): GearIssue[] {
   const issues: GearIssue[] = [];
@@ -326,9 +322,8 @@ export function gearIssues(icon: string, info: Info, totemOfWrath: boolean): Gea
     if (!g?.id) continue;
     const data = itemInfo(g.id);
     const item = { id: g.id, name: data?.n ?? `Item ${g.id}`, icon: data?.i ?? 'inv_misc_questionmark', quality: data?.q ?? g.quality ?? 0 };
-    const enchantable = ENCHANT_SLOTS.includes(slot) || (slot === 'Ranged' && icon.startsWith('Hunter'));
-    // Held-in-off-hand items and tabards can't be enchanted.
-    if (enchantable && !g.permanentEnchant && !(slot === 'Off Hand' && data?.o)) issues.push({ kind: 'enchant', slot, item, text: `${slot}: no enchant` });
+    const wanted = enchantable(slot, g.id) || (slot === 'Ranged' && icon.startsWith('Hunter'));
+    if (wanted && !g.permanentEnchant) issues.push({ kind: 'enchant', slot, item, text: `${slot}: no enchant` });
     const gems = (g.gems ?? []).filter((x) => x.id);
     const empty = (data?.s ?? 0) - gems.length;
     if (empty > 0) issues.push({ kind: 'socket', slot, item, text: `${slot}: ${empty} empty socket${empty > 1 ? 's' : ''}` });

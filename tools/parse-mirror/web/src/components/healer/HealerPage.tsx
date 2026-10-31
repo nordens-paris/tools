@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 
+import { median } from '../../../../server/analysis/stats.ts';
 import type { HealerAnalysis, HealerTab } from '../../../../shared/types.ts';
 import { fmt, fmtDate, fmtTime, wclUrl } from '../../format.ts';
 import { Findings } from '../Findings.tsx';
@@ -134,7 +135,6 @@ function HealerFixFirst({ analysis: a, onTab }: { analysis: HealerAnalysis; onTa
 function PeerMatch({ analysis: a, onTab }: { analysis: HealerAnalysis; onTab: (t: HealerTab) => void }) {
   const g = a.group;
   const peers = a.peers;
-  const median = (xs: number[]) => (xs.length ? [...xs].sort((p, q) => p - q)[Math.floor(xs.length / 2)] : 0);
   const yourPerHealer = a.raid.dtps / Math.max(1, a.raid.healers);
   const theirPerHealer = median(peers.map((p) => p.peer.raid.dtpsPerHealer));
   return (

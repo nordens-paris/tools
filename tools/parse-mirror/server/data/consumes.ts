@@ -12,8 +12,8 @@ const WELL_FED: Record<number, { name: string; simId: number }> = {
   33263: { name: 'Blackened Basilisk (23 Spell Dmg)', simId: 27657 },
 };
 
-// Potion buff/cast spell ID -> WoWSims item ID.
-const POTIONS: Record<number, { name: string; simId: number }> = {
+// Potion buff/cast spell ID -> name and WoWSims item ID, if it has one. Thistle Tea is a rogue's potion.
+export const POTIONS: Record<number, { name?: string; simId?: number }> = {
   28507: { name: 'Haste Potion', simId: 22838 },
   28494: { name: 'Insane Strength Potion', simId: 22828 },
   28506: { name: 'Heroic Potion', simId: 22837 },
@@ -21,6 +21,13 @@ const POTIONS: Record<number, { name: string; simId: number }> = {
   17528: { name: 'Mighty Rage Potion', simId: 13442 },
   28515: { name: 'Ironshield Potion', simId: 22849 },
   28499: { name: 'Super Mana Potion', simId: 22832 },
+  // Not simmed: only so a kill with one of these doesn't read as no potion.
+  28495: { name: 'Super Healing Potion' },
+  17531: { name: 'Major Mana Potion' },
+  17534: { name: 'Major Healing Potion' },
+  38929: { name: 'Fel Mana Potion' },
+  9512: { name: 'Thistle Tea' },
+  22729: {},
 };
 
 type Flag = 'superSapper' | 'goblinSapper' | 'scrollAgi' | 'scrollStr' | 'petScrollAgi' | 'petScrollStr' | 'nightmareSeed' | 'boglingRoot';
@@ -143,6 +150,8 @@ export interface DetectedConsumes {
   /** WoWSims ConsumesSpec boolean fields. */
   flags: Partial<Record<Flag, boolean>>;
   conjuredId?: number;
+  /** Every conjured item used; conjuredId is the one the sim leads with. */
+  conjuredIds?: number[];
   drums?: string;
 }
 
@@ -182,7 +191,7 @@ export function detectConsumes(input: ConsumeInput): DetectedConsumes {
       add('Drums', DRUMS[b.id].name, { simulated: true });
       out.drums = DRUMS[b.id].sim;
     }
-    if (POTIONS[b.id]) add('Potion', POTIONS[b.id].name, { simId: POTIONS[b.id].simId });
+    if (POTIONS[b.id]) add('Potion', POTIONS[b.id].name ?? b.name, { simId: POTIONS[b.id].simId });
   }
 
   // "Other": a log often doesn't show them (see collect.ts), so one missing isn't flagged.
@@ -194,7 +203,7 @@ export function detectConsumes(input: ConsumeInput): DetectedConsumes {
 
   for (const c of input.casts) {
     icon = c.icon;
-    if (POTIONS[c.id]) add('Potion', POTIONS[c.id].name, { simId: POTIONS[c.id].simId });
+    if (POTIONS[c.id]) add('Potion', POTIONS[c.id].name ?? c.name, { simId: POTIONS[c.id].simId });
     const eng = ENGINEERING[c.id];
     if (eng) {
       if (typeof eng.sim === 'number') add('Engineering', eng.name, { simId: eng.sim });
@@ -206,7 +215,10 @@ export function detectConsumes(input: ConsumeInput): DetectedConsumes {
     const other = OTHER_CASTS[c.name];
     if (other) {
       add('Other', other.name, { simulated: !!(other.conjuredId || other.flag || other.simulated) });
-      if (other.conjuredId) out.conjuredId = other.conjuredId;
+      if (other.conjuredId) {
+        out.conjuredId = other.conjuredId;
+        out.conjuredIds = [...new Set([...(out.conjuredIds ?? []), other.conjuredId])];
+      }
       if (other.flag) out.flags[other.flag] = true;
     }
   }

@@ -2,18 +2,12 @@ import { useState } from 'react';
 
 import type { GuildFight, GuildSummary } from '../../../shared/types.ts';
 import { downloadCsv } from '../csv.ts';
-import { fmt, fmtDate, itemIcon, wclReportUrl, wclUrl } from '../format.ts';
+import { fmt, fmtDate, itemIcon, medianOf as median, wclReportUrl, wclUrl } from '../format.ts';
 import { Hint } from './Hint.tsx';
 import { DebuffsPanel, GearPanel, PartiesPanel, PlayerName, shortBoss } from './RaidChecks.tsx';
 import { pctClass } from './RaidOverview.tsx';
 import { HealerRaidPanel } from './healer/HealerRaid.tsx';
 import { TankRaidPanel } from './tank/TankRaid.tsx';
-
-const median = (xs: number[]) => {
-  if (!xs.length) return undefined;
-  const s = [...xs].sort((a, b) => a - b);
-  return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
-};
 
 type Player = GuildSummary['players'][number];
 type Used = NonNullable<GuildFight['consumes']>['used'][number];
