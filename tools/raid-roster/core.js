@@ -62,7 +62,7 @@ const DEFAULT_SETTINGS = {
   ],
   defaultDays: [3, 0],
   maxRaidsPerDay: 2,
-  weights: { fair: 600, prio: 300, parse: 2, offspec: 150, tentative: 250, late: 120, benchSignup: 600, specSpread: 80, raidBalance: 1500, reliability: 0, teams: 400 },
+  weights: { fair: 600, prio: 300, parse: 2, offspec: 150, tentative: 250, late: 120, benchSignup: 600, specSpread: 80, raidBalance: 1500, reliability: 0, teams: 400, teamPref: 450 },
 };
 
 // Saved settings from before the two Druid crit buffs (b6, b7) became one: the merged buff takes the higher place.
@@ -330,6 +330,9 @@ function teamCore(roster, teams) {
   return Object.entries(n).reduce((best, [k, c]) => (c > best[0] ? [c, k] : best), [0, null]);
 }
 
+// The raid of this lockout a player prefers to play in, if any.
+function prefTeam(pl, rids) { return pl && rids.includes(pl.teamPref) ? pl.teamPref : null; }
+
 // ---------- Optimizer ----------
 // "Never bench" beats every buff combined but never breaks the tank and healer rules.
 const NEVER_BENCH_BONUS = 2e6;
@@ -369,6 +372,10 @@ function optimizeType(raids, typeCfg, ctx) {
   const TEAMS = raids.length > 1 ? (Number(W.teams) || 0) : 0;
   const teamOf = TEAMS ? lastTeams(type, week.id, weeks, settings) : {};
   const teamIdx = {};
+  // Being in the other raid costs, so a preference never helps a player past the bench.
+  // Two moved players cost less than the lowest buff, so one swap between the raids always wins a buff back.
+  const rids = raids.map(rd => rd.rid);
+  const PREF = raids.length > 1 ? (Number(W.teamPref) || 0) : 0;
   for (const rd of raids) for (const [pid, l] of Object.entries(rd.locks || {})) if (l === 'in' && !keptIn[pid]) keptIn[pid] = rd.rid;
 
   const prep = raids.map(rd => {
@@ -377,14 +384,16 @@ function optimizeType(raids, typeCfg, ctx) {
     const cands = new Map();
     const addCand = (pid, info) => {
       const pl = players[pid] || {};
-      const base = playerValue(pl, info.st, debt(pid), W) - relCost(pid) + (pl.noBench ? NEVER_BENCH_BONUS : 0);
+      const pref = prefTeam(pl, rids);
+      const base = playerValue(pl, info.st, debt(pid), W) - relCost(pid) + (pl.noBench ? NEVER_BENCH_BONUS : 0) - (PREF && pref && pref !== rd.rid ? PREF : 0);
       const opts = info.opts.map(o => {
         let mask = 0;
         rules.forEach((ru, k) => { if (ruleMatches(ru, o.c, o.s)) mask |= 1 << k; });
         const role = o.r === 'Tank' ? 1 : o.r === 'Healer' ? 2 : 0;
         return { ...o, mask, role, ci: SPREAD_INDEX[spreadKey(o.c, o.s)] ?? 0, tankBonus: role === 1 && isDesignatedTank(pl, type) ? TANK_BONUS : 0 };
       });
-      const tk = teamOf[pid];
+      // A preference replaces last time's team.
+      const tk = pref ? null : teamOf[pid];
       cands.set(pid, { pid, st: info.st, opts, base, team: tk ? (teamIdx[tk] ??= Object.keys(teamIdx).length) : -1 });
     };
     for (const [pid, info] of av) if (AVAILABLE.has(info.st) && locks[pid] !== 'out' && (!keptIn[pid] || keptIn[pid] === rd.rid)) addCand(pid, info);
@@ -589,11 +598,13 @@ function planWeek(week, ctx) {
     if (!typeCfg) continue;
     const pins = defs.map(d => (week.raids && week.raids[d.id] && week.raids[d.id].pinDay) || null);
     const tuples = [];
+    // Team preferences tie players to a named raid, so the raids stop being interchangeable.
+    const named = Object.values(ctx.players || {}).some(p => prefTeam(p, defs.map(d => d.id)));
     const rec = (k, acc, minIdx) => {
       if (k === defs.length) { tuples.push(acc.slice()); return; }
       if (pins[k] && dayIds.includes(pins[k])) { acc.push(pins[k]); rec(k + 1, acc, minIdx); acc.pop(); return; }
-      // Raids of one type are interchangeable, so only keep day orders that never go backwards.
-      for (let d = pins.some(Boolean) ? 0 : minIdx; d < dayIds.length; d++) { acc.push(dayIds[d]); rec(k + 1, acc, d); acc.pop(); }
+      // Raids of one type are otherwise interchangeable, so only keep day orders that never go backwards.
+      for (let d = named || pins.some(Boolean) ? 0 : minIdx; d < dayIds.length; d++) { acc.push(dayIds[d]); rec(k + 1, acc, d); acc.pop(); }
     };
     rec(0, [], 0);
     typeOptions[type] = tuples.map(tuple => {
@@ -1006,6 +1017,6 @@ function parseAttendance(text, players) {
 if (typeof module !== 'undefined') {
   module.exports = {
     CLASSES, DEFAULT_SETTINGS, withDefaults, spreadKey, isoWeek, weekName, weekSpan, parseRaidHelper, parseRaidHelperMany, splitJsonObjects, benchByTurn, guessChar, nameKey, availability, playerOpts, optimizeType, planWeek,
-    makeGroups, coverage, roleCounts, benchFor, attendanceCellOf, lastTeams, awayOn, benchStats, charName, teamCore, reliability, UNRELIABLE_POINTS, explainBench, benchCandidates, sharedBench, sharedBenchList, benchDayTag, benchLabel, benchHistory, playerValue, isDesignatedTank, exportAddon, exportDiscord, parseAttendance, resetOf, addDays, benchDebt,
+    makeGroups, coverage, roleCounts, benchFor, attendanceCellOf, lastTeams, prefTeam, awayOn, benchStats, charName, teamCore, reliability, UNRELIABLE_POINTS, explainBench, benchCandidates, sharedBench, sharedBenchList, benchDayTag, benchLabel, benchHistory, playerValue, isDesignatedTank, exportAddon, exportDiscord, parseAttendance, resetOf, addDays, benchDebt,
   };
 }
