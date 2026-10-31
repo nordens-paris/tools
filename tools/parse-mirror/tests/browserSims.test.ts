@@ -23,7 +23,6 @@ class FakeWorker {
   }
 }
 g.Worker = FakeWorker;
-(WebAssembly as unknown as { compile: () => Promise<object> }).compile = async () => ({});
 
 /** A server with one job; it fails the run when told the job failed, as the real one does. */
 function server() {
@@ -31,7 +30,7 @@ function server() {
   let polls = 0;
   globalThis.fetch = (async (url: string, init?: { body?: string }) => {
     const json = (body: unknown) => new Response(JSON.stringify(body));
-    if (url.startsWith('/sim/')) return new Response(new Uint8Array([0, 0x61, 0x73, 0x6d]));
+    if (url.startsWith('/sim/')) return new Response(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0]));
     if (url === '/api/sim') return json({ mode: 'browser' });
     if (url.includes('/results')) {
       posted.push(JSON.parse(init!.body!));
