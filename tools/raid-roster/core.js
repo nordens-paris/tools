@@ -33,6 +33,8 @@ function spreadCost(n, w) { return w * n * (n - 1) / 2; }
 const STATUS_LABEL = { yes: 'Signed up', late: 'Late', tentative: 'Tentative', bench: 'Bench', absence: 'Absent' };
 const AVAILABLE = new Set(['yes', 'late', 'tentative', 'bench']);
 
+// Moonkin and Leader of the Pack are one raid-wide crit buff, so any one of these Druids covers it.
+const CRIT_BUFF = { id: 'b6', label: 'Raid crit (Moonkin / Leader of the Pack)', cls: 'Druid', specs: ['Balance', 'Feral', 'Guardian'], min: 1 };
 const DEFAULT_SETTINGS = {
   // The raid team's name, shown in the top bar and on the roster image.
   teamName: '',
@@ -42,8 +44,7 @@ const DEFAULT_SETTINGS = {
     { id: 'b3', label: 'Curse of the Elements', cls: 'Warlock', specs: [], min: 1 },
     { id: 'b5', label: '2nd Paladin (Wisdom / Might)', cls: 'Paladin', specs: [], min: 2 },
     { id: 'b4', label: 'Fortitude', cls: 'Priest', specs: [], min: 1 },
-    { id: 'b6', label: 'Melee crit (Leader of the Pack)', cls: 'Druid', specs: ['Feral', 'Guardian'], min: 1 },
-    { id: 'b7', label: 'Spell crit (Moonkin)', cls: 'Druid', specs: ['Balance'], min: 1 },
+    CRIT_BUFF,
     { id: 'b8', label: 'Battle Shout', cls: 'Warrior', specs: [], min: 1 },
     { id: 'b10', label: '2nd Shaman (Agility & more totems)', cls: 'Shaman', specs: [], min: 2 },
     // Party-wide 15% spirit; the groups put a Shadow Priest with the healers.
@@ -64,6 +65,13 @@ const DEFAULT_SETTINGS = {
   weights: { fair: 600, prio: 300, parse: 2, offspec: 150, tentative: 250, late: 120, benchSignup: 600, specSpread: 80, raidBalance: 1500, reliability: 0, teams: 400 },
 };
 
+// Saved settings from before the two Druid crit buffs (b6, b7) became one: the merged buff takes the higher place.
+function mergeCritBuffs(buffs) {
+  if (!buffs.some(b => b.id === 'b6') || !buffs.some(b => b.id === 'b7')) return buffs;
+  const first = buffs.find(b => b.id === 'b6' || b.id === 'b7');
+  return buffs.filter(b => b === first || (b.id !== 'b6' && b.id !== 'b7')).map(b => (b === first ? { ...CRIT_BUFF } : b));
+}
+
 function withDefaults(s) {
   const d = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
   if (!s) return d;
@@ -71,7 +79,7 @@ function withDefaults(s) {
     ...d, ...s,
     types: { ...d.types, ...(s.types || {}) },
     weights: { ...d.weights, ...(s.weights || {}) },
-    buffs: Array.isArray(s.buffs) ? s.buffs : d.buffs,
+    buffs: Array.isArray(s.buffs) ? mergeCritBuffs(s.buffs) : d.buffs,
     raids: Array.isArray(s.raids) ? s.raids : d.raids,
     defaultDays: Array.isArray(s.defaultDays) ? s.defaultDays : d.defaultDays,
   };
@@ -628,6 +636,7 @@ const MELEE_ORDER = ['Warrior', 'Rogue', 'Paladin', 'Shaman', 'Druid', 'Hunter',
 const CASTER_ORDER = ['Priest', 'Mage', 'Warlock', 'Druid', 'Shaman', 'Paladin', 'Hunter', 'Warrior', 'Rogue'];
 
 // Full melee groups first (tanks in group 1), full ranged groups, and a healer group with Mana Tide last.
+// Shamans then go where their Tremor Totem is needed.
 function makeGroups(roster, size) {
   const nG = Math.max(1, Math.ceil(size / 5));
   const tanks = roster.filter(e => e.r === 'Tank');
@@ -660,12 +669,38 @@ function makeGroups(roster, size) {
     const g = all.splice(k, 1)[0];
     for (const e of g) { const t = all.find(x => x.length < 5) || all[all.length - 1]; t.push(e); }
   }
-  while (all.length < nG) all.push([]);
+  while (all.length < nG) all.splice(healGroup.length ? all.length - 1 : all.length, 0, []);
   spreadEnhancement(all);
+  placeShamans(all, healGroup);
   return all.map(g => g.map(e => e.p));
 }
 
-// Tremor and other party totems: one Enhancement Shaman per melee group where possible.
+// The first Shaman goes with the tanks in group 1, the second with the healers and the third in group 2.
+// Non-healers are picked first for group 1 and 2, a Restoration Shaman first for the healers.
+function placeShamans(groups, healGroup) {
+  const targets = [...new Set([groups[0], groups.includes(healGroup) ? healGroup : null, groups[1]])].filter(Boolean);
+  const left = groups.flat().filter(e => e.c === 'Shaman'), placed = [];
+  const spreadOrder = { Melee: 0, Ranged: 1, Healer: 2 }, healOrder = { Healer: 0, Ranged: 1, Melee: 2 };
+  for (const t of targets) {
+    if (!left.length) return;
+    const order = t === healGroup ? healOrder : spreadOrder;
+    const s = left.slice().sort((a, b) => order[a.r] - order[b.r] || t.includes(b) - t.includes(a))[0];
+    left.splice(left.indexOf(s), 1);
+    placed.push(s);
+    if (t.includes(s)) continue;
+    const from = groups.find(g => g.includes(s));
+    from.splice(from.indexOf(s), 1);
+    if (t.length < 5) { t.push(s); continue; }
+    // Swap with the player the group misses least, never a tank or a Shaman already placed.
+    const cost = e => (e.r === 'Healer' ? 3 : 0) + (e.c === 'Priest' && e.s === 'Shadow' ? 2 : 0) + (e.c === 'Shaman' ? 1 : 0);
+    const out = t.filter(e => e.r !== 'Tank' && !placed.includes(e)).reverse().sort((a, b) => cost(a) - cost(b))[0];
+    if (!out) { from.push(s); continue; }
+    t[t.indexOf(out)] = s;
+    from.push(out);
+  }
+}
+
+// One Enhancement Shaman per melee group where possible.
 function spreadEnhancement(groups) {
   const isEnh = e => e.c === 'Shaman' && e.s === 'Enhancement';
   const meleeGroups = groups.filter(g => g.filter(e => e.r === 'Melee' || e.r === 'Tank').length >= 3);
