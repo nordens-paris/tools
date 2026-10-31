@@ -640,7 +640,7 @@ const isArcane = e => e.c === 'Mage' && e.s === 'Arcane';
 // The last group is the healers', the first the tanks'. In a 20-man melee fill 1>2>3>4, healers 4>3 and
 // ranged 3>4>2>1 with hunters after the casters. Shadow Priests and Arcane Mages take what is left of the
 // healer group before anyone else. A 10-man has no ranged group, so its ranged fill 2>1.
-// Shamans then go where their Tremor Totem is needed.
+// Shamans go where their Tremor Totem is needed before the groups fill, so nobody has to move for them.
 function makeGroups(roster, size) {
   const nG = Math.max(1, Math.ceil(size / 5));
   const groups = Array.from({ length: nG }, () => []);
@@ -650,42 +650,35 @@ function makeGroups(roster, size) {
   const place = (e, fill) => (fill.find(g => g.length < 5) || healGroup).push(e);
 
   roster.filter(e => e.r === 'Tank').forEach(e => place(e, groups));
-  roster.filter(e => e.r === 'Healer').sort((a, b) => (b.c === 'Shaman') - (a.c === 'Shaman')).forEach(e => place(e, backToFront));
-  const ranged = roster.filter(e => e.r === 'Ranged').sort((a, b) => CASTER_ORDER.indexOf(a.c) - CASTER_ORDER.indexOf(b.c));
+  const placed = placeShamans(roster, groups, healGroup);
+  const free = roster.filter(e => !placed.includes(e));
+  free.filter(e => e.r === 'Healer').sort((a, b) => (b.c === 'Shaman') - (a.c === 'Shaman')).forEach(e => place(e, backToFront));
+  const ranged = free.filter(e => e.r === 'Ranged').sort((a, b) => CASTER_ORDER.indexOf(a.c) - CASTER_ORDER.indexOf(b.c));
   const rest = [];
   for (const e of [...ranged.filter(isShadow), ...ranged.filter(isArcane), ...ranged.filter(e => !isShadow(e) && !isArcane(e))]) {
     if ((isShadow(e) || isArcane(e)) && healGroup.length < 5) healGroup.push(e);
     else rest.push(e);
   }
-  roster.filter(e => e.r === 'Melee').sort((a, b) => MELEE_ORDER.indexOf(a.c) - MELEE_ORDER.indexOf(b.c)).forEach(e => place(e, groups));
+  free.filter(e => e.r === 'Melee').sort((a, b) => MELEE_ORDER.indexOf(a.c) - MELEE_ORDER.indexOf(b.c)).forEach(e => place(e, groups));
   rest.forEach(e => place(e, rangedFill));
-  placeShamans(groups, healGroup);
   return groups.map(g => g.map(e => e.p));
 }
 
 // The first Shaman goes with the tanks in group 1, the second with the healers and the third in group 2.
 // Non-healers are picked first for group 1 and 2, a Restoration Shaman first for the healers.
-function placeShamans(groups, healGroup) {
+function placeShamans(roster, groups, healGroup) {
   const targets = [...new Set([groups[0], healGroup, groups[1]])].filter(Boolean);
-  const left = groups.flat().filter(e => e.c === 'Shaman'), placed = [];
+  const left = roster.filter(e => e.c === 'Shaman'), placed = [];
   const spreadOrder = { Melee: 0, Ranged: 1, Healer: 2 }, healOrder = { Healer: 0, Ranged: 1, Melee: 2 };
   for (const t of targets) {
-    if (!left.length) return;
+    if (!left.length || t.length >= 5) continue;
     const order = t === healGroup ? healOrder : spreadOrder;
-    const s = left.slice().sort((a, b) => order[a.r] - order[b.r] || t.includes(b) - t.includes(a))[0];
+    const s = left.slice().sort((a, b) => order[a.r] - order[b.r])[0];
     left.splice(left.indexOf(s), 1);
     placed.push(s);
-    if (t.includes(s)) continue;
-    const from = groups.find(g => g.includes(s));
-    from.splice(from.indexOf(s), 1);
-    if (t.length < 5) { t.push(s); continue; }
-    // Swap with the player the group misses least, never a tank or a Shaman already placed.
-    const cost = e => (e.r === 'Healer' ? 4 : isShadow(e) ? 3 : isArcane(e) ? 2 : e.c === 'Shaman' ? 1 : 0);
-    const out = t.filter(e => e.r !== 'Tank' && !placed.includes(e)).reverse().sort((a, b) => cost(a) - cost(b))[0];
-    if (!out) { from.push(s); continue; }
-    t[t.indexOf(out)] = s;
-    from.push(out);
+    t.push(s);
   }
+  return placed;
 }
 
 function sameTypeRaids(settings, rid) {
