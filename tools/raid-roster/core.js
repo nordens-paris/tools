@@ -532,43 +532,48 @@ function optimizeType(raids, typeCfg, ctx) {
     mems.forEach((mem, i) => mem.forEach(m => where.set(m.info.pid, i)));
     const sc = mems.map(mem => reopt(mem));
     const oks = mems.map(covered);
-    let improved = true, guard = 0;
-    while (improved && guard++ < 60) {
-      improved = false;
-      for (let i = 0; i < prep.length; i++) {
-        const P = prep[i];
-        for (let a = 0; a < mems[i].length; a++) {
-          const out = mems[i][a];
-          if (P.locks[out.info.pid] === 'in') continue;
-          for (const c of P.cands.values()) {
-            const j = where.has(c.pid) ? where.get(c.pid) : -1;
-            if (j === i) continue;
-            let b = -1;
-            if (j >= 0) {
-              if (prep[j].locks[c.pid] === 'in' || !prep[j].cands.has(out.info.pid)) continue;
-              b = mems[j].findIndex(m => m.info.pid === c.pid);
+    // A buff missing from both raids needs a swap in each, and the first swap alone makes the raids uneven,
+    // so it is never taken while balance counts. Half the restarts first climb without it, then even out.
+    const climbs = BAL && r >= restarts / 2 ? [() => 0, unevenCost] : [unevenCost];
+    for (const uneven of climbs) {
+      let improved = true, guard = 0;
+      while (improved && guard++ < 60) {
+        improved = false;
+        for (let i = 0; i < prep.length; i++) {
+          const P = prep[i];
+          for (let a = 0; a < mems[i].length; a++) {
+            const out = mems[i][a];
+            if (P.locks[out.info.pid] === 'in') continue;
+            for (const c of P.cands.values()) {
+              const j = where.has(c.pid) ? where.get(c.pid) : -1;
+              if (j === i) continue;
+              let b = -1;
+              if (j >= 0) {
+                if (prep[j].locks[c.pid] === 'in' || !prep[j].cands.has(out.info.pid)) continue;
+                b = mems[j].findIndex(m => m.info.pid === c.pid);
+              }
+              const snapI = mems[i].map(m => m.oi);
+              const snapJ = j >= 0 ? mems[j].map(m => m.oi) : null;
+              const oldJ = j >= 0 ? mems[j][b] : null;
+              const before = sc[i] + (j >= 0 ? sc[j] : 0) - uneven(oks);
+              mems[i][a] = { info: c, oi: 0 };
+              if (j >= 0) mems[j][b] = { info: prep[j].cands.get(out.info.pid), oi: 0 };
+              const ni = reopt(mems[i]);
+              const nj = j >= 0 ? reopt(mems[j]) : 0;
+              const newOks = oks.slice();
+              if (BAL) { newOks[i] = covered(mems[i]); if (j >= 0) newOks[j] = covered(mems[j]); }
+              if (ni + nj - uneven(newOks) > before + 1e-6) {
+                if (BAL) { oks[i] = newOks[i]; if (j >= 0) oks[j] = newOks[j]; }
+                sc[i] = ni;
+                if (j >= 0) { sc[j] = nj; where.set(out.info.pid, j); } else where.delete(out.info.pid);
+                where.set(c.pid, i);
+                improved = true;
+                break;
+              }
+              mems[i][a] = out;
+              mems[i].forEach((m, k) => { m.oi = snapI[k]; });
+              if (j >= 0) { mems[j][b] = oldJ; mems[j].forEach((m, k) => { m.oi = snapJ[k]; }); }
             }
-            const snapI = mems[i].map(m => m.oi);
-            const snapJ = j >= 0 ? mems[j].map(m => m.oi) : null;
-            const oldJ = j >= 0 ? mems[j][b] : null;
-            const before = sc[i] + (j >= 0 ? sc[j] : 0) - unevenCost(oks);
-            mems[i][a] = { info: c, oi: 0 };
-            if (j >= 0) mems[j][b] = { info: prep[j].cands.get(out.info.pid), oi: 0 };
-            const ni = reopt(mems[i]);
-            const nj = j >= 0 ? reopt(mems[j]) : 0;
-            const newOks = oks.slice();
-            if (BAL) { newOks[i] = covered(mems[i]); if (j >= 0) newOks[j] = covered(mems[j]); }
-            if (ni + nj - unevenCost(newOks) > before + 1e-6) {
-              if (BAL) { oks[i] = newOks[i]; if (j >= 0) oks[j] = newOks[j]; }
-              sc[i] = ni;
-              if (j >= 0) { sc[j] = nj; where.set(out.info.pid, j); } else where.delete(out.info.pid);
-              where.set(c.pid, i);
-              improved = true;
-              break;
-            }
-            mems[i][a] = out;
-            mems[i].forEach((m, k) => { m.oi = snapI[k]; });
-            if (j >= 0) { mems[j][b] = oldJ; mems[j].forEach((m, k) => { m.oi = snapJ[k]; }); }
           }
         }
       }
