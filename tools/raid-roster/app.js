@@ -584,6 +584,14 @@ function renderRaid(w, def, sub) {
           const [n] = teamCore(roster, teams);
           return `<span class="pill" title="The largest group in this roster that played in the same ${esc(typeCfg.size)}-man last time. The weight Fixed teams under Settings keeps teams together.">${n}/${roster.length} same team</span>`;
         })()}
+        ${(() => {
+          // Team preferences: how many of the players with one got it.
+          if (!sub || !roster.length) return '';
+          const { wanted, away } = teamPrefs(roster, def);
+          if (!wanted) return '';
+          const tip = away.length ? `Prefer another team: ${away.map(e => charOf(e.p)).join(', ')}.` : 'Everyone with a team preference is on their team.';
+          return `<span class="pill ${away.length ? 'warn' : ''}" title="${esc(tip)} Buffs and roles go first. Set under Players.">${wanted - away.length}/${wanted} on preferred team</span>`;
+        })()}
         ${raid.updatedAt ? `<span class="small muted" title="${esc(new Date(raid.updatedAt).toLocaleString('en-GB'))}">Edited by ${esc(nameOf(raid.updatedBy))} · ${esc(new Date(raid.updatedAt).toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' }))}</span>` : ''}
         <div class="acts">${(() => {
           const lk = Object.values(raid.locks || {}).filter(Boolean);
@@ -1850,6 +1858,7 @@ function explainRoster(w, rid) {
   if (others.length) {
     const teams = lastTeams(def.type, w.id, S.weeks, S.settings);
     if (Object.keys(teams).length) add('Team', [`${teamCore(roster, teams)[0]} of ${roster.length} played together in one ${typeCfg.size}-man last time`]);
+    add('Team preference', teamPrefs(roster, def).away.map(e => `${nm(e)} prefers ${raidDef(S.players[e.p].teamPref).name}`));
   }
   const bench = explainBench(w, rid, S.settings, S.players, S.weeks);
   add(`Bench on ${dayName}`, bench.map(x => `${charOf(x.p)}: ${x.why}`));
@@ -2031,6 +2040,7 @@ function renderCard() {
     Number(p.prio) ? `priority ${p.prio > 0 ? '+' : ''}${p.prio}` : '',
     p.noBench ? 'never bench' : '',
     Array.isArray(p.tankFor) && p.tankFor.length ? `tank in ${p.tankFor.join(' and ')}-man` : '',
+    teamRaids().some(r => r.id === p.teamPref) ? `prefers ${esc(raidDef(p.teamPref).name)}` : '',
     p.active === false ? 'inactive' : '',
   ].filter(Boolean).map(t => `<span class="pill">${t}</span>`).join('');
   el.hidden = false;
@@ -2080,6 +2090,17 @@ function renderCard() {
 }
 
 // ---------- Players view ----------
+// Raids that share their size with another raid, so players are split between them.
+const teamRaids = () => S.settings.raids.filter(r => S.settings.raids.some(o => o !== r && o.type === r.type));
+function teamOptions(cur) {
+  return `<option value="">None</option>${teamRaids().map(r => `<option value="${r.id}" ${r.id === cur ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}`;
+}
+// A roster's players with a team preference in this lockout: how many, and those in the other raid.
+function teamPrefs(roster, def) {
+  const rids = S.settings.raids.filter(r => r.type === def.type).map(r => r.id);
+  const inLockout = roster.filter(e => prefTeam(S.players[e.p], rids));
+  return { wanted: inLockout.length, away: inLockout.filter(e => S.players[e.p].teamPref !== def.id) };
+}
 function renderPlayers() {
   if (S.loaded < 3) return loadingHtml();
   const list = Object.entries(S.players).sort((a, b) => (b[1].active !== false) - (a[1].active !== false) || String(a[1].cls).localeCompare(String(b[1].cls)) || charOf(a[0]).localeCompare(charOf(b[0])));
@@ -2093,6 +2114,7 @@ function renderPlayers() {
       <td><select id="p-prio-${pid}" data-act="p-field" data-pid="${pid}" data-f="prio" aria-label="Priority">${[2, 1, 0, -1, -2].map(v => `<option value="${v}" ${Number(p.prio || 0) === v ? 'selected' : ''}>${v > 0 ? '+' + v : v}${v === -2 ? ' trial' : v === 2 ? ' core' : ''}</option>`).join('')}</select></td>
       <td><input id="p-parse-${pid}" data-act="p-field" data-pid="${pid}" data-f="parse" type="number" min="0" max="100" step="1" value="${p.parse ?? ''}" class="w-parse" aria-label="Average parse"></td>
       <td>${Object.values(CLASSES[p.cls] || {}).includes('Tank') ? `<span class="tankbox">${Object.keys(S.settings.types).sort((x, y) => Number(y) - Number(x)).map(t => `<label><input type="checkbox" id="p-tank-${t}-${pid}" data-act="p-tank" data-pid="${pid}" data-t="${t}" ${isDesignatedTank(p, t) ? 'checked' : ''}>${esc(t)}</label>`).join('')}</span>` : '<span class="muted small">–</span>'}</td>
+      <td><select id="p-team-${pid}" data-act="p-field" data-pid="${pid}" data-f="teamPref" aria-label="Preferred team">${teamOptions(p.teamPref)}</select></td>
       <td><input type="checkbox" id="p-nobench-${pid}" data-act="p-field" data-pid="${pid}" data-f="noBench" ${p.noBench ? 'checked' : ''} aria-label="Never bench"></td>
       <td><input type="checkbox" id="p-active-${pid}" data-act="p-field" data-pid="${pid}" data-f="active" ${p.active !== false ? 'checked' : ''} aria-label="Active"></td>
       <td><input id="p-notes-${pid}" data-act="p-field" data-pid="${pid}" data-f="notes" value="${esc(p.notes || '')}" class="w-notes" title="${esc(p.notes || '')}" aria-label="Notes"></td>
@@ -2102,7 +2124,7 @@ function renderPlayers() {
   return `
     <section class="panel">
       ${panelHead('Players', `Signups add new players automatically. The addon invites by character name (Firstname-Lastname), so check the names.${noSpec ? ` <b>${noSpec} player${noSpec > 1 ? 's have' : ' has'} no class or main spec</b> and can only be planned when they sign up with one.` : ''}`)}
-      ${list.length ? `<div class="scroll-x"><table class="ptable"><thead><tr><th>Character</th><th>Discord</th><th>Class</th><th>Main spec</th><th>Off-spec</th><th title="Extra weight when picking DPS spots">Priority</th><th title="Average parse from Warcraft Logs, 0-100">Avg parse</th><th title="Designated tank for these raid sizes: they get the tank spots first">Tanks in</th><th title="Always plays when signed up. Only tank and healer rules can overrule it.">Never bench</th><th>Active</th><th>Notes</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+      ${list.length ? `<div class="scroll-x"><table class="ptable"><thead><tr><th>Character</th><th>Discord</th><th>Class</th><th>Main spec</th><th>Off-spec</th><th title="Extra weight when picking DPS spots">Priority</th><th title="Average parse from Warcraft Logs, 0-100">Avg parse</th><th title="Designated tank for these raid sizes: they get the tank spots first">Tanks in</th><th title="The raid this player prefers when raids of the same size split the players. Set it for friends who want to play together. Buffs and roles go first.">Team</th><th title="Always plays when signed up. Only tank and healer rules can overrule it.">Never bench</th><th>Active</th><th>Notes</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
       : '<div class="empty">No players yet. Import a Raid-Helper event on the Week tab, or add players below.</div>'}
       <div class="row">
         <input id="np-char" placeholder="Firstname-Lastname" data-draft="np-char" value="${esc(S.drafts['np-char'] || '')}" maxlength="30" aria-label="New character name">
@@ -2110,7 +2132,7 @@ function renderPlayers() {
         <select id="np-main" aria-label="New player main spec">${specOptions(S.drafts['np-cls'] || '', '', 'Main spec…')}</select>
         <button data-act="p-add">Add player</button>
       </div>
-      <div class="small muted">Tanks in: tick the raid sizes a player is a set tank for (for example 20 and 10 for main tanks, only 10 for 10-man tanks); they get the tank spots first. Priority +2 is core, -2 is trial. Never bench players always play when they sign up. Inactive players are ignored when planning.</div>
+      <div class="small muted">Tanks in: tick the raid sizes a player is a set tank for (for example 20 and 10 for main tanks, only 10 for 10-man tanks); they get the tank spots first. Priority +2 is core, -2 is trial. Team: the 10-man a player prefers, to keep friends together; buffs and roles still go first. Never bench players always play when they sign up. Inactive players are ignored when planning.</div>
     </section>
     ${renderAway()}
     <section class="panel">
@@ -2258,6 +2280,7 @@ function renderSettings() {
     ['raidBalance', 'Raid balance', 'Cost per buff of difference between raids of the same size, so both 10-mans get about as many buffs. At 1500 it may trade the lowest-priority buff for balance, never a higher one. 0 turns it off.'],
     ['reliability', 'Reliability', 'Per no-show in the last 8 weeks; a drop after the roster was made counts half. Players with 2 or more points get a warning either way. 0 only warns.'],
     ['teams', 'Fixed teams', 'Per player kept with their teammates from last time when raids of the same size split the players, so the 10-mans stay roughly the same teams week to week. At 400 moving one player costs about 800, less than the lowest buff. 0 turns it off.'],
+    ['teamPref', 'Team preference', 'Cost per player in another raid than the Team set on the Players tab, which replaces Fixed teams for that player. At 450 a swap costs 900, less than the lowest buff, and less than one bench of fairness per player. 0 turns it off.'],
     ['specSpread', 'Spec spread', 'Cost per extra player of the same spec (the 4th Fury warrior costs 3×). All Mage, Warlock, Hunter and Rogue specs count as one. Makes rosters lean towards a mix when all else is equal. 0 turns it off.'],
   ];
   return `
@@ -2283,7 +2306,7 @@ function renderSettings() {
     </div>
     <section class="panel">
       ${panelHead('Optimizer weights', 'Roles and buffs always come first. These decide who gets the DPS spots.')}
-      ${[['Who gets the DPS spots', ['fair', 'prio', 'parse', 'offspec', 'tentative', 'late', 'benchSignup', 'reliability']], ['How raids of one size are shaped', ['raidBalance', 'teams', 'specSpread']]].map(([h, keys]) => `
+      ${[['Who gets the DPS spots', ['fair', 'prio', 'parse', 'offspec', 'tentative', 'late', 'benchSignup', 'reliability']], ['How raids of one size are shaped', ['raidBalance', 'teams', 'teamPref', 'specSpread']]].map(([h, keys]) => `
         <div class="stack"><span class="eyebrow">${h}</span>
         <div class="weights">${weightInfo.filter(([k]) => keys.includes(k)).map(([k, l, d]) => `<label class="f">${esc(l)}<input id="w-${k}" data-act="w-field" data-f="${k}" type="number" value="${W[k]}" style="width:110px"><span class="small">${esc(d)}</span></label>`).join('')}</div></div>`).join('')}
       <div class="row"><button class="danger" data-act="s-reset">${S.confirm === 's-reset' ? 'Confirm reset' : 'Reset all settings to defaults'}</button></div>
@@ -2629,8 +2652,9 @@ document.addEventListener('change', e => {
       p[f] = v;
       if (f === 'cls') { if (!CLASSES[v] || !CLASSES[v][p.main]) p.main = ''; if (!CLASSES[v] || !CLASSES[v][p.off]) p.off = ''; }
       if (f === 'parse') p.parseUpdated = Date.now();
-      const FIELD = { char: 'character name', cls: 'class', main: 'main spec', off: 'off-spec', prio: 'priority', parse: 'parse', notes: 'notes', active: 'active', noBench: 'never bench' };
-      savePlayer(pid, p, `Changed ${charOf(pid)}: ${FIELD[f] || f}${typeof v === 'boolean' ? (v ? ' on' : ' off') : f === 'notes' ? '' : ` to ${v === null || v === '' ? 'nothing' : v}`}`);
+      const FIELD = { char: 'character name', cls: 'class', main: 'main spec', off: 'off-spec', prio: 'priority', parse: 'parse', notes: 'notes', active: 'active', noBench: 'never bench', teamPref: 'team' };
+      const shown = f === 'teamPref' && v ? raidDef(v).name : v;
+      savePlayer(pid, p, `Changed ${charOf(pid)}: ${FIELD[f] || f}${typeof v === 'boolean' ? (v ? ' on' : ' off') : f === 'notes' ? '' : ` to ${v === null || v === '' ? 'nothing' : shown}`}`);
       break;
     }
     case 'b-field': {

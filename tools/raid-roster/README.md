@@ -78,6 +78,8 @@ Raids af samme størrelse er samme lockout: ingen kommer med i begge 10-mænd. O
 
 **Faste 10-mands-hold:** optimeringen prøver at holde spillere, der var på samme 10-mand sidste gang, sammen igen (vægten **Fixed teams**). Det er par af spillere, der tæller, ikke navnet A eller B, så holdene følger med, også når de to 10-mænd bytter dag. Buffs og roller går stadig forud. Hver 10-mand viser fx **8/10 same team**: hvor mange i rosteret der spillede sammen sidste gang. I en simulering på det nuværende roster (12 uger, 90 % fremmøde) steg andelen fra 51 % uden vægten til 80 % med standardvægten 400.
 
+**Holdønsker:** under Players kan en spiller få et ønske om **Team** (fx 10-man A), så venner kan spille sammen. Spilleren holdes så på det hold, og ønsket afløser Fixed teams for dem. Prisen er vægten **Team preference** pr. spiller på det andet hold. Buffs og roller går forud: et enkelt byt mellem holdene koster mindre end den laveste buff. Et ønske giver ingen fordel i kampen om pladserne. **Suggest plan** prøver begge holds placering på raiddagene, så flest kan komme på deres hold. Lockout-kortet viser fx **7/8 on preferred team**, og **Explain** nævner dem, der står på det andet hold.
+
 **Bænk-retfærdighed:** hver uge inden for de sidste 8, hvor en spiller sad på bænken i en raidstørrelse, giver et "tilgodehavende", der vægter mindre, jo længere det er siden (×0,85 pr. uge). En uge, hvor de spillede, trækker en smule fra. En lockout tæller én gang pr. uge. Kun uger, der er markeret final, eller raids med registreret fremmøde tæller med.
 
 ### Raids
@@ -215,6 +217,7 @@ Spillere oprettes, når de tilmelder sig, og kan også tilføjes i hånden neder
 | Priority | +2 (core) til -2 (trial). Ekstra vægt, når DPS-pladserne fordeles. |
 | Avg parse | Gennemsnitlig parse 0-100, skrives i hånden indtil videre. |
 | Tanks in | De raidstørrelser, spilleren er fast tank i (fx 20 og 10 for main tanks, kun 10 for 10-mands-tanks). De får tank-pladserne først; ellers spiller de deres DPS-spec. |
+| Team | Det raid, spilleren helst vil spille i, når raids af samme størrelse deler spillerne (se Holdønsker). |
 | Never bench | Spiller altid, når de er tilmeldt. Kun tank- og healer-reglerne går forud. |
 | Active | Inaktive spillere ignoreres i planlægningen og i fremmødet. |
 | Notes | Fri tekst. Vises også på spillerkortet. |
@@ -278,6 +281,7 @@ Alle ændringer på tværs af uger (rosters, flyt, bænk, tilmeldinger, import, 
 | Raid balance | Pr. buff i forskel mellem raids af samme størrelse. Ved 1500 kan den bytte den lavest prioriterede buff for balance, aldrig en højere. 0 slår det fra. |
 | Reliability | Pr. no-show de sidste 8 uger (et afbud efter roster tæller halvt). 0 = kun advarsel. |
 | Fixed teams | Pr. spiller, der holdes sammen med sidste uges holdkammerater, når raids af samme størrelse deler spillerne. Ved 400 koster det ca. 800 at flytte én spiller, mindre end den lavest prioriterede buff. 0 slår det fra. |
+| Team preference | Pr. spiller på et andet raid end sit **Team** under Players. Ved 450 koster et byt mellem holdene 900, mindre end den lavest prioriterede buff. 0 slår det fra. |
 | Spec spread | Pr. ekstra spiller af samme spec (den 4. Fury warrior koster 3×). 0 slår det fra. |
 
 Standardværdierne (Bench fairness 600, Player priority 300, Fixed teams 400, Raid balance 1500) er valgt ud fra en simulering af 12 uger med 90 % fremmøde på det nuværende roster. Med dem kom ingen på bænken mere end 4–5 uger i træk, mens buffs og faste hold holdt sig som før. Hvert trin i Priority flytter en DPS' chance for at spille med ca. 7–10 procentpoint (−2: ca. 60 %, 0: ca. 80 %, +2: ca. 93 %). Player priority over ca. 400 kan holde en spiller med −2 på bænken i mange uger i træk.
