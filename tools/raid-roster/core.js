@@ -75,9 +75,12 @@ function mergeCritBuffs(buffs) {
 function withDefaults(s) {
   const d = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
   if (!s) return d;
+  // Each raid size field by field, so a saved size missing a field (e.g. healTarget) gets the default.
+  const types = { ...d.types };
+  for (const [k, t] of Object.entries(s.types || {})) types[k] = { ...(d.types[k] || {}), ...(t || {}) };
   return {
     ...d, ...s,
-    types: { ...d.types, ...(s.types || {}) },
+    types,
     weights: { ...d.weights, ...(s.weights || {}) },
     buffs: Array.isArray(s.buffs) ? mergeCritBuffs(s.buffs) : d.buffs,
     raids: Array.isArray(s.raids) ? s.raids : d.raids,
@@ -201,6 +204,25 @@ function eventIdFrom(text) {
   return m ? m[1] : '';
 }
 
+// ---------- Memo ----------
+// One page render asks for the same bench order, debts and availability many times over data that
+// does not change while it runs. Inside withMemo those results are worked out once; outside it nothing
+// is kept. Results are shared, so callers must not change them.
+let MEMO = null;
+const NO_ARG = {};
+function memo(objs, key, fn) {
+  if (!MEMO) return fn();
+  let m = MEMO;
+  for (const o of objs) { const k = o ?? NO_ARG; if (!m.has(k)) m.set(k, new Map()); m = m.get(k); }
+  if (!m.has(key)) m.set(key, fn());
+  return m.get(key);
+}
+function withMemo(fn) {
+  if (MEMO) return fn();
+  MEMO = new Map();
+  try { return fn(); } finally { MEMO = null; }
+}
+
 // ---------- Availability ----------
 // The options a player can bring on a day: what they signed up as first, then their registered specs.
 function playerOpts(player, signup) {
@@ -221,6 +243,9 @@ function awayOn(pl, date) {
 }
 
 function availability(week, dayId, players) {
+  return memo([week, players], 'av|' + dayId, () => dayAvailability(week, dayId, players));
+}
+function dayAvailability(week, dayId, players) {
   const m = new Map();
   const list = (week.signups && week.signups[dayId]) || [];
   const date = ((week.days || {})[dayId] || {}).date;
@@ -237,11 +262,16 @@ function availability(week, dayId, players) {
   return m;
 }
 
-// How much a player is "owed" a spot: recent benches count most, recent raids pay it back a little.
-// The last `n` weeks before weekId, newest first: true where the player sat on the bench in a raid of this size.
-function benchHistory(pid, type, weekId, weeks, settings, n = 8) {
-  const prev = Object.values(weeks).filter(w => w && w.id < weekId).sort((a, b) => b.id.localeCompare(a.id)).slice(0, n);
-  return prev.map(w => {
+// The last `n` weeks before weekId, newest first.
+function weeksBefore(weekId, weeks, n) {
+  return memo([weeks], `before|${weekId}|${n}`, () => Object.values(weeks || {}).filter(w => w && w.id < weekId).sort((a, b) => b.id.localeCompare(a.id)).slice(0, n));
+}
+
+// Per week of the last `n` before weekId, newest first: {played, benched} in the raids of this size.
+// Raids of one size share a lockout, so a week counts once: played in any of them, else benched in any.
+// Attendance wins; without it only final weeks count.
+function lockoutWeeks(pid, type, weekId, weeks, settings, n = 8) {
+  return memo([weeks, settings], `lw|${pid}|${type}|${weekId}|${n}`, () => weeksBefore(weekId, weeks, n).map(w => {
     let played = false, benched = false;
     for (const [rid, raid] of Object.entries(w.raids || {})) {
       const def = settings.raids.find(r => r.id === rid);
@@ -250,26 +280,21 @@ function benchHistory(pid, type, weekId, weeks, settings, n = 8) {
       if ((att ? (att.present || []) : (w.status === 'final' ? (raid.roster || []).map(e => e.p) : [])).includes(pid)) played = true;
       else if ((att ? (att.bench || []) : (w.status === 'final' ? (raid.bench || []) : [])).includes(pid)) benched = true;
     }
-    return benched && !played;
-  });
+    return { played, benched };
+  }));
 }
 
+// True where the player sat on the bench in a raid of this size, newest first.
+function benchHistory(pid, type, weekId, weeks, settings, n = 8) {
+  return lockoutWeeks(pid, type, weekId, weeks, settings, n).map(x => x.benched && !x.played);
+}
+
+// How much a player is "owed" a spot: recent benches count most, recent raids pay it back a little.
 function benchDebt(pid, type, weekId, weeks, settings) {
-  const prev = Object.values(weeks).filter(w => w && w.id < weekId).sort((a, b) => b.id.localeCompare(a.id)).slice(0, 8);
   let debt = 0;
-  // Raids of one size share a lockout, so a week counts once: played in any of them, else benched in any.
-  prev.forEach((w, age) => {
-    let played = false, benched = false;
-    for (const [rid, raid] of Object.entries(w.raids || {})) {
-      if (!raid) continue;
-      const def = settings.raids.find(r => r.id === rid);
-      if (!def || def.type !== type) continue;
-      const att = w.attendance && w.attendance[rid];
-      if ((att ? (att.present || []) : (w.status === 'final' ? (raid.roster || []).map(e => e.p) : [])).includes(pid)) played = true;
-      else if ((att ? (att.bench || []) : (w.status === 'final' ? (raid.bench || []) : [])).includes(pid)) benched = true;
-    }
-    if (played) debt -= 0.15 * Math.pow(0.85, age);
-    else if (benched) debt += Math.pow(0.85, age);
+  lockoutWeeks(pid, type, weekId, weeks, settings, 8).forEach((x, age) => {
+    if (x.played) debt -= 0.15 * Math.pow(0.85, age);
+    else if (x.benched) debt += Math.pow(0.85, age);
   });
   return Math.max(0, debt);
 }
@@ -291,7 +316,10 @@ function attendanceCellOf(w, rid, pid) {
 // No-shows (once per lockout per week) and drops (pulling out of a raid day after a roster with them
 // was made) over the last `n` weeks before weekId, or up to and including it with `include`.
 function reliability(pid, weekId, weeks, settings, opts = {}) {
-  const list = Object.values(weeks).filter(w => w && (opts.include ? w.id <= weekId : w.id < weekId))
+  return memo([weeks, settings], `rel|${pid}|${weekId}|${!!opts.include}|${opts.n ?? 8}`, () => countReliability(pid, weekId, weeks, settings, opts));
+}
+function countReliability(pid, weekId, weeks, settings, opts) {
+  const list =Object.values(weeks).filter(w => w && (opts.include ? w.id <= weekId : w.id < weekId))
     .sort((a, b) => b.id.localeCompare(a.id)).slice(0, opts.n ?? 8);
   const types = [...new Set(settings.raids.map(r => r.type))];
   let noShows = 0, drops = 0;
@@ -312,8 +340,7 @@ const UNRELIABLE_POINTS = 2;
 // "<week>:<raid>". Players with the same key played together; attendance wins over the plan.
 function lastTeams(type, weekId, weeks, settings, n = 4) {
   const out = {};
-  const prev = Object.values(weeks || {}).filter(w => w && w.id < weekId).sort((a, b) => b.id.localeCompare(a.id)).slice(0, n);
-  for (const w of prev) {
+  for (const w of weeksBefore(weekId, weeks, n)) {
     for (const def of settings.raids) {
       const raid = (w.raids || {})[def.id];
       if (def.type !== type || !raid || !raid.dayId) continue;
@@ -409,11 +436,15 @@ function optimizeType(raids, typeCfg, ctx) {
     return { ...rd, locks, cands, target: Math.min(typeCfg.size, cands.size) };
   });
   // Not enough players for every raid of the lockout: split them evenly instead of filling one first.
+  // A raid with fewer candidates than its share leaves the rest of its share to the others.
   if (prep.length > 1) {
     const union = new Set(prep.flatMap(P => [...P.cands.keys()])).size;
     if (union < prep.reduce((n, P) => n + P.target, 0)) {
-      const base = Math.floor(union / prep.length), extra = union % prep.length;
-      prep.forEach((P, i) => { P.target = Math.min(P.cands.size, typeCfg.size, base + (i < extra ? 1 : 0)); });
+      let left = union;
+      prep.slice().sort((a, b) => a.target - b.target).forEach((P, i, arr) => {
+        P.target = Math.min(P.target, Math.ceil(left / (arr.length - i)));
+        left -= P.target;
+      });
     }
   }
 
@@ -721,6 +752,9 @@ function benchFor(week, rid, settings, players) {
 // of their rosters plus the shared bench. A player is "needed" when the lockout cannot cover a buff or a
 // tank/healer minimum (per raid, times the number of raids) without them.
 function benchCandidates(week, rid, settings, players, weeks) {
+  return memo([week, settings, players, weeks], 'bc|' + rid, () => lockoutCandidates(week, rid, settings, players, weeks));
+}
+function lockoutCandidates(week, rid, settings, players, weeks) {
   const raid = week.raids && week.raids[rid];
   const def = settings.raids.find(r => r.id === rid);
   if (!raid || !raid.dayId || !def) return null;
@@ -946,6 +980,9 @@ function benchByTurn(week, rid, settings, players, weeks) {
 
 // Each player is "Name:Class:Spec" so the addon can show class icons and colours.
 function exportAddon(week, settings, players, weeks) {
+  return memo([week, settings, players, weeks], 'addon', () => addonString(week, settings, players, weeks));
+}
+function addonString(week, settings, players, weeks) {
   const lines = ['!NPR1!', `W;${week.id}`];
   const tag = (p, o) => `${charName(players, p, null, o && o.c)}${o ? `:${o.c}:${o.s}` : ''}`;
   for (const def of settings.raids) {
@@ -965,6 +1002,9 @@ function exportAddon(week, settings, players, weeks) {
 
 // opts.mentions: write players as Discord @mentions (players imported from Raid-Helper have their Discord ID).
 function exportDiscord(week, settings, players, opts = {}) {
+  return memo([week, settings, players, opts.weeks], 'discord|' + !!opts.mentions, () => discordText(week, settings, players, opts));
+}
+function discordText(week, settings, players, opts) {
   const tag = (p, c) => (opts.mentions && /^\d{15,22}$/.test(p) ? `<@${p}>` : charName(players, p, null, c));
   const fmtDay = iso => parseIso(iso).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
   const out = [`**Raid roster, ${weekName(week.id).toLowerCase()} (${weekSpan(week.id)})**`];
@@ -995,6 +1035,8 @@ function parseAttendance(text, players) {
   for (const [pid, pl] of Object.entries(players)) {
     if (pl && pl.char) byName[nameKey(pl.char)] = pid;
     for (const a of (pl && Array.isArray(pl.alts) ? pl.alts : [])) if (a && a.char) byName[nameKey(a.char)] = pid;
+    // Other in-game names an officer matched to the player on an earlier import.
+    for (const n of (pl && Array.isArray(pl.otherChars) ? pl.otherChars : [])) if (n) byName[nameKey(n)] = pid;
   }
   // unknown: in-game names no player has yet, with the list each came from, so officers can match them.
   const res = { weekId: '', rid: '', date: '', present: [], bench: [], late: [], unknown: [], unknownIn: {} };
@@ -1006,7 +1048,7 @@ function parseAttendance(text, players) {
       (res.unknownIn[name] ||= []).push(where);
     }
     return pid;
-  }).filter(Boolean);
+  }).filter((pid, i, all) => pid && all.indexOf(pid) === i);
   for (const l of lines.slice(1)) {
     // The addon writes ';' (WoW edit boxes treat '|' as an escape), '|' is accepted too.
     const [k, ...rest] = l.replace(/\|\|/g, '|').split(/[;|]/);
@@ -1022,6 +1064,6 @@ function parseAttendance(text, players) {
 if (typeof module !== 'undefined') {
   module.exports = {
     CLASSES, DEFAULT_SETTINGS, withDefaults, spreadKey, isoWeek, weekName, weekSpan, parseRaidHelper, parseRaidHelperMany, splitJsonObjects, benchByTurn, guessChar, nameKey, availability, playerOpts, optimizeType, planWeek,
-    makeGroups, coverage, roleCounts, benchFor, attendanceCellOf, lastTeams, prefTeam, awayOn, benchStats, charName, teamCore, reliability, UNRELIABLE_POINTS, explainBench, benchCandidates, sharedBench, sharedBenchList, benchDayTag, benchLabel, benchHistory, playerValue, isDesignatedTank, exportAddon, exportDiscord, parseAttendance, resetOf, addDays, benchDebt,
+    makeGroups, coverage, roleCounts, benchFor, attendanceCellOf, lastTeams, prefTeam, awayOn, benchStats, charName, teamCore, reliability, UNRELIABLE_POINTS, explainBench, benchCandidates, sharedBench, sharedBenchList, benchDayTag, benchLabel, benchHistory, playerValue, isDesignatedTank, exportAddon, exportDiscord, parseAttendance, resetOf, addDays, benchDebt, withMemo,
   };
 }

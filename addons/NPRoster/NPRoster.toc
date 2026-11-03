@@ -1,6 +1,6 @@
 ## Interface: 16001
 ## Title: NP Roster
-## Notes: Imports the raid roster for Holdet: invite, sort groups, bench whispers and attendance.
+## Notes: Imports the raid roster from NP Roster: invite, sort groups, bench whispers and attendance.
 ## Author: Nordens Paris
 ## IconTexture: Interface\AddOns\NPRoster\emblem
 ## Version: 1.1.0

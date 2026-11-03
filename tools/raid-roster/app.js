@@ -11,6 +11,7 @@ const view = document.getElementById('view');
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const ST_TEXT = { yes: 'Signed up', tentative: 'Tentative', late: 'Late', bench: 'Bench', absence: 'Absent', none: 'Not signed up' };
 const ST_ORDER = ['yes', 'tentative', 'late', 'bench', 'absence', 'none'];
+const MAX_BUFFS = 30;
 
 const ICON = {
   sun: '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5v1.5m0 10v1.5M1.5 8H3m10 0h1.5M3.4 3.4l1.1 1.1m7 7 1.1 1.1m0-9.2-1.1 1.1m-7 7-1.1 1.1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
@@ -149,8 +150,12 @@ function deletePlayer(pid, text) {
   record([{ p: 'p/' + pid, b: old, a: null }], text || `Deleted ${name}`);
 }
 let settingsTimer;
+// A patch that clears a field, which a merge cannot do.
+const clearsField = v => v === null || (isObj(v) && Object.values(v).some(clearsField));
 function saveSettings(next, text) {
   record([{ p: 's', b: S.settingsRaw, a: next }], text || 'Changed the settings');
+  // The settings as they were before the changes still waiting to be written.
+  if (!S.settingsDirty) S.settingsBase = S.settingsRaw;
   S.settingsRaw = next;
   S.settings = withDefaults(next);
   schedule();
@@ -160,7 +165,14 @@ function saveSettings(next, text) {
   saveState();
   settingsTimer = setTimeout(() => {
     S.settingsDirty = false;
-    enqueueTracked({ kind: 'settings', id: 'main', op: 'set', data: clone(next) }, () => S.db.doc('settings/main').set(clone(next)));
+    // Only the fields that changed, so two officers changing different settings at once keep both.
+    // A new document, or a cleared field, writes the whole document.
+    const base = S.settingsBase;
+    S.settingsBase = null;
+    const patch = base ? diffPatch(base, next) : null;
+    if (patch && !Object.keys(patch).length) { saveState(); return; }
+    if (!patch || clearsField(patch)) enqueueTracked({ kind: 'settings', id: 'main', op: 'set', data: clone(next) }, () => S.db.doc('settings/main').set(clone(next)));
+    else enqueueTracked({ kind: 'settings', id: 'main', op: 'merge', data: clone(patch) }, () => S.db.doc('settings/main').update(clone(patch)));
   }, 400);
 }
 function settingsCopy() { return clone(S.settingsRaw ? withDefaults(S.settingsRaw) : S.settings); }
@@ -196,7 +208,9 @@ async function connect() {
   }, fail);
   db.collection('history').orderBy('at', 'desc').limit(HIST_MAX).onSnapshot(snap => {
     S.history = Object.fromEntries(snap.docs.map(d => [d.id, d.data()]));
-    for (const id of Object.keys(S.histLocal)) if (S.history[id]) delete S.histLocal[id];
+    // Once the database has an entry, its old values are there too (they are written first), so
+    // undo reads them back from there instead of this tab keeping every one in memory.
+    for (const id of Object.keys(S.histLocal)) if (S.history[id]) { delete S.histLocal[id]; delete S.histData[id]; }
     for (const d of snap.docs) S.historyLast = Math.max(S.historyLast, d.data().at || 0);
     const first = !S.histReady;
     S.histReady = true;
@@ -224,7 +238,9 @@ function schedule() {
   setTimeout(run, 60);
 }
 
-function render() {
+// Bench orders, debts and exports are worked out once per render (see withMemo in core.js).
+function render() { withMemo(renderPage); }
+function renderPage() {
   document.getElementById('team-name').textContent = S.settings.teamName || '';
   const ae = document.activeElement;
   // Waiting only makes sense while the same tab stays open.
@@ -621,8 +637,8 @@ function renderRaid(w, def, sub) {
         ${sub ? '' : (() => {
           const sb = sharedBench(w, S.settings, def.id);
           if (!sb.show) {
-            const last = raidDef(sb.with[sb.with.length - 1]);
-            return `<div class="zone bench" data-rid="${def.id}" data-zone="bench"><div class="zt"><span>Bench · shared with ${esc(last.name)}</span></div><span class="small muted" style="padding:0 4px 4px">Same lockout, so the raids share one bench. It is shown under ${esc(last.name)}. Drop a player here to bench them.</span></div>`;
+            const last = (raidDef(sb.with[sb.with.length - 1]) || {}).name || 'the other raid';
+            return `<div class="zone bench" data-rid="${def.id}" data-zone="bench"><div class="zt"><span>Bench · shared with ${esc(last)}</span></div><span class="small muted" style="padding:0 4px 4px">Same lockout, so the raids share one bench. It is shown under ${esc(last)}. Drop a player here to bench them.</span></div>`;
           }
           const sbl = sharedBenchList(w, S.settings, S.players, S.weeks, sb);
           const chips = sbl.list.map(e => {
@@ -1263,7 +1279,7 @@ async function buildImage(w) {
       for (const p of benchFor(w, def.id, S.settings, S.players)) { const o = av.get(p) && av.get(p).opts[0]; if (o) urls.add(iconUrl(o.c, o.s)); }
     }
     await Promise.all([...urls].map(loadIcon));
-    const canvas = drawRoster(w);
+    const canvas = withMemo(() => drawRoster(w));
     const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
     if (blob) {
       if (IMG.url) URL.revokeObjectURL(IMG.url);
@@ -1424,10 +1440,11 @@ function renderDecide(w, def) {
 function renderSelbar() {
   const bar = document.getElementById('selbar');
   const w = week();
-  if (S.view !== 'week' || !S.sel || !w || !w.raids || !w.raids[S.sel.rid]) { bar.hidden = true; return; }
+  // A raid removed under Settings can still be in an old week.
+  const def = S.sel && raidDef(S.sel.rid);
+  if (S.view !== 'week' || !S.sel || !def || !w || !w.raids || !w.raids[S.sel.rid]) { bar.hidden = true; return; }
   const { rid, pid } = S.sel;
   const raid = w.raids[rid];
-  const def = raidDef(rid);
   const entry = (raid.roster || []).find(e => e.p === pid);
   const info = availability(w, raid.dayId, S.players).get(pid);
   const opts = info ? info.opts : playerOpts(S.players[pid], null);
@@ -1626,7 +1643,7 @@ function applyRosters(w, rosters, assign, msg, note) {
 
 function suggest() {
   const w = week();
-  const list = planWeek(w, ctx());
+  const list = withMemo(() => planWeek(w, ctx()));
   S.suggestions = { wid: w.id, list };
   schedule();
 }
@@ -1679,6 +1696,11 @@ function moveChip(fromRid, pid, toRid, zone, targetPid) {
     if (!raid.roster.some(e => e.p === pid)) return;
     removeFrom(raid, pid);
     raid.locks[pid] = 'out';
+    // The lockout shares one bench, so they are kept out of its other raids too, as Apply bench does.
+    for (const other of sameTypeRaids(S.settings, toRid)) {
+      const o = w.raids[other];
+      if (o) { o.locks ||= {}; o.locks[pid] = 'out'; }
+    }
   } else {
     const gi = Number(zone.slice(1));
     while (raid.groups.length <= gi) raid.groups.push([]);
@@ -1693,6 +1715,8 @@ function moveChip(fromRid, pid, toRid, zone, targetPid) {
     for (const other of sameTypeRaids(S.settings, toRid)) {
       const o = w.raids[other];
       if (o && (o.roster || []).some(e => e.p === pid)) { removeFrom(o, pid); o.locks ||= {}; o.locks[pid] = null; }
+      // Back from the shared bench: the keep-out it set in the other raids goes too.
+      else if (o && o.locks && o.locks[pid] === 'out') o.locks[pid] = null;
     }
     const from = posOf(raid, pid);
     const g = raid.groups[gi];
@@ -1763,14 +1787,18 @@ function saveAttendance(res) {
   toast(`Imported: ${res.present.length} played, ${res.bench.length} bench.`);
 }
 
-// Unknown in-game names matched to players: the name becomes their confirmed character name.
+// Unknown in-game names matched to players: the name becomes their confirmed character name, or,
+// when they already have one (the name may be an alt), one of their other in-game names.
 function saveMatchedAttendance() {
   const res = clone(S.attPending);
   logged(`Imported attendance for ${(raidDef(res.rid) || {}).name || res.rid}`, () => {
     for (const name of res.unknown) {
       const pid = S.drafts['match:' + name] || (document.getElementById('match-' + name) || {}).value;
       if (!pid) continue;
-      savePlayer(pid, { ...clone(S.players[pid]), char: name, charSource: 'manual' });
+      const p = clone(S.players[pid]);
+      if (p.charSource !== 'manual' || !p.char) Object.assign(p, { char: name, charSource: 'manual' });
+      else if (nameKey(p.char) !== nameKey(name) && !(p.otherChars || []).some(n => nameKey(n) === nameKey(name))) p.otherChars = [...(p.otherChars || []), name];
+      savePlayer(pid, p);
       for (const where of res.unknownIn[name] || []) if (!res[where].includes(pid)) res[where].push(pid);
     }
     S.attPending = null;
@@ -2079,6 +2107,7 @@ function renderCard() {
       return `<div class="stack"><b>Characters</b>
         <div class="row small">${classIcon(p.cls, p.main)}<b>${esc(charOf(pid))}</b><span class="muted">${esc(p.main || '')} ${esc(p.cls || '')}${p.off ? ` / ${esc(p.off)}` : ''} · main</span></div>
         ${alts.map((a, i) => `<div class="row small">${classIcon(a.cls, a.main)}<b>${esc(a.char)}</b><span class="muted">${esc(a.main || '')} ${esc(a.cls)}${a.off ? ` / ${esc(a.off)}` : ''} · alt</span>${S.canWrite ? `<button class="ghost danger sm icon" data-act="alt-del" data-pid="${pid}" data-i="${i}" aria-label="Remove alt">${ICON.x}</button>` : ''}</div>`).join('')}
+        ${(Array.isArray(p.otherChars) ? p.otherChars : []).map((n, i) => `<div class="row small"><b>${esc(n)}</b><span class="muted">· matched on an attendance import</span>${S.canWrite ? `<button class="ghost danger sm icon" data-act="oc-del" data-pid="${pid}" data-i="${i}" aria-label="Remove name">${ICON.x}</button>` : ''}</div>`).join('')}
         ${form}
         <div class="small muted">An alt is another character of the same player. When they sign up as that class, the roster, the Discord post and the addon use the alt's name. A player still plays only one raid per lockout.</div>
       </div>`;
@@ -2152,6 +2181,9 @@ const attendanceCell = attendanceCellOf;
 // Each week, each lockout (the 20-man, the pair of 10-mans) is one chance per player:
 // played in any of its raids, else bench, else a no-show if they were planned, else absent.
 function attendanceStats() {
+  return memo([S.weeks, S.players, S.settings], 'attStats', countAttendance);
+}
+function countAttendance() {
   const stats = {};
   const ensure = pid => (stats[pid] ||= { raids: 0, present: 0, bench: 0, late: 0, missed: 0 });
   const types = [...new Set(S.settings.raids.map(r => r.type))];
@@ -2185,7 +2217,7 @@ function renderMatch() {
     <select id="match-${esc(name)}" data-act="match" data-name="${esc(name)}" aria-label="Player for ${esc(name)}"><option value="">Not one of our raiders</option>${opts.map(([pid, p]) => `<option value="${pid}" ${S.drafts['match:' + name] === pid ? 'selected' : ''}>${esc(p.name || p.char)}${p.charSource === 'manual' ? ` (${esc(p.char)})` : ' (no character yet)'}</option>`).join('')}</select></div>`).join('');
   return `<div class="stack" style="border-top:1px solid var(--line);padding-top:14px">
     <b>Match ${res.unknown.length} in-game name${res.unknown.length > 1 ? 's' : ''}</b>
-    <div class="sub">These names are not on any player yet. Pick who each one is, and the name is saved as their character, so the addon and future imports know them.</div>
+    <div class="sub">These names are not on any player yet. Pick who each one is, and the name is saved as their character, or as another of their in-game names if they already have one, so the addon and future imports know them.</div>
     ${rows}
     <div class="row"><button class="primary" data-act="att-match-save">Save attendance</button><button class="ghost" data-act="att-match-cancel">Cancel</button></div>
   </div>`;
@@ -2462,7 +2494,7 @@ document.addEventListener('click', e => {
     case 'unfinal': if (guard()) saveWeek(w.id, { status: 'draft' }, 'Reopened the week as a draft'); break;
     case 'del-week': if (guard() && confirmTwice('del-week')) { deleteWeek(w.id); store('week', ''); } break;
     case 'att-from-plan': if (guard()) recordFromPlan(el.dataset.rid); break;
-    case 'sel-move': if (guard()) moveChip(S.sel.rid, S.sel.pid, S.sel.rid, el.dataset.zone, null); break;
+    case 'sel-move': if (S.sel && guard()) moveChip(S.sel.rid, S.sel.pid, S.sel.rid, el.dataset.zone, null); break;
     case 'sel-close': S.sel = null; schedule(); break;
     case 'p-del': if (guard() && confirmTwice('p-' + el.dataset.pid)) deletePlayer(el.dataset.pid); break;
     case 'card': S.card = el.dataset.pid; schedule(); break;
@@ -2516,6 +2548,13 @@ document.addEventListener('click', e => {
       savePlayer(pid, p, `Removed ${gone.char} as an alt of ${charOf(pid)}`);
       break;
     }
+    case 'oc-del': {
+      if (!guard()) return;
+      const pid = el.dataset.pid, p = clone(S.players[pid]);
+      const [gone] = p.otherChars.splice(Number(el.dataset.i), 1);
+      savePlayer(pid, p, `Removed ${gone} as an in-game name of ${charOf(pid)}`);
+      break;
+    }
     case 'h-undo': if (guard()) undoEntry(el.dataset.id); break;
     case 'h-restore': if (guard() && confirmTwice('rs-' + el.dataset.id)) restoreBefore(el.dataset.id); break;
     case 'log-more': S.logLimit += 200; schedule(); break;
@@ -2549,6 +2588,8 @@ document.addEventListener('click', e => {
     case 'b-up': case 'b-down': case 'b-del': case 'b-add': {
       if (!guard()) return;
       const s = settingsCopy(); const i = Number(el.dataset.i); const lbl = (s.buffs[i] || {}).label;
+      // The optimizer keeps buffs as bits of a 32-bit number.
+      if (a === 'b-add' && s.buffs.length >= MAX_BUFFS) { toast(`At most ${MAX_BUFFS} buffs. Remove one first.`); return; }
       if (a === 'b-add') s.buffs.push({ id: 'b' + Date.now(), label: 'New buff', cls: 'Warrior', specs: [], min: 1 });
       else if (a === 'b-del') s.buffs.splice(i, 1);
       else { const j = a === 'b-up' ? i - 1 : i + 1; [s.buffs[i], s.buffs[j]] = [s.buffs[j], s.buffs[i]]; }
