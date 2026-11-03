@@ -139,6 +139,64 @@ function apply(rules: Rule[], auras: AuraUptime[], target: Record<string, unknow
   }
 }
 
+/** When a boss debuff was up, as shares of the fight; WoWSims' Debuffs.uptimeWindows (our patch). */
+export interface DebuffWindow {
+  debuff: string;
+  start: number;
+  end: number;
+}
+
+// Debuffs the sim can switch on and off by window. ISB and Expose Weakness have their own uptime.
+const WINDOWED = new Set([...DEBUFFS.map((r) => r.field), 'shadowWeaving']);
+
+/**
+ * A debuff's logged bands as merged windows. None when it was up (nearly) all fight, so the sim
+ * keeps its own ramp-up (Sunder stacks, Expose Armor at 10 s) there.
+ */
+function windowsOf(field: string, aura: AuraUptime, durationSec: number): DebuffWindow[] {
+  const share = (sec: number) => {
+    const s = Math.min(1, Math.max(0, sec / durationSec));
+    return s < 0.005 ? 0 : s > 0.995 ? 1 : Math.round(s * 10000) / 10000;
+  };
+  const out: DebuffWindow[] = [];
+  for (const [from, to] of [...(aura.bands ?? [])].sort((a, b) => a[0] - b[0])) {
+    const start = share(from);
+    const end = share(to);
+    if (end <= start) continue;
+    const last = out[out.length - 1];
+    // A gap under a second is a refresh, not a drop.
+    if (last && start <= last.end + 1 / durationSec) last.end = Math.max(last.end, end);
+    else out.push({ debuff: field, start, end });
+  }
+  return uptimeOfWindows(out) >= 0.98 ? [] : out;
+}
+
+const uptimeOfWindows = (windows: DebuffWindow[]) => windows.reduce((s, w) => s + w.end - w.start, 0);
+
+/**
+ * Boss debuffs. With the log's bands (and the fight length), any debuff that was up at all goes in,
+ * for the windows it was up; without them (older saved results), those up 40% of the fight or more
+ * go in for all of it.
+ */
+function applyDebuffs(auras: AuraUptime[], env: SimEnvironment, durationSec?: number) {
+  const windowed = (a: AuraUptime) => !!durationSec && a.bands !== undefined;
+  // Blood Frenzy has two rules (its debuff and Mortal Strike); the one up longest wins.
+  const best = new Map<string, { rule: Rule; aura: AuraUptime }>();
+  for (const rule of DEBUFFS) {
+    const aura = auras.find((a) => rule.names.includes(a.name) && a.uptimePct >= (windowed(a) ? 1 : rule.minUptime) && (a.uptimePct > 0 || a.uses > 0));
+    const prev = best.get(rule.field);
+    if (aura && (!prev || aura.uptimePct > prev.aura.uptimePct)) best.set(rule.field, { rule, aura });
+  }
+  for (const [field, { rule, aura }] of best) addDebuff(env, field, rule.value, rule.label, aura, durationSec);
+}
+
+function addDebuff(env: SimEnvironment, field: string, value: unknown, label: string, aura: AuraUptime, durationSec?: number) {
+  env.debuffs[field] = value;
+  const windows = durationSec && aura.bands ? windowsOf(field, aura, durationSec) : [];
+  if (windows.length) env.debuffs.uptimeWindows = [...((env.debuffs.uptimeWindows as DebuffWindow[] | undefined) ?? []), ...windows];
+  env.detected.push(windows.length ? `${label} (${Math.round(uptimeOfWindows(windows) * 100)}%)` : label);
+}
+
 /** Every aura name this module turns into a sim setting (for the audit script). */
 export const HANDLED_AURA_NAMES = new Set([
   ...[...RAID, ...PARTY, ...INDIVIDUAL, ...DEBUFFS].flatMap((r) => r.names),
@@ -164,7 +222,8 @@ export function buildEnvironment(
   // consumableBuffs: whose consumable stat buffs (Power Core...) to use; defaults to `buffs`.
   // isbHitPct: share of the player's shadow hits that had Improved Shadow Bolt, if measured.
   // shadowPriestDps: a shadow priest in the party (Vampiric Touch mana).
-  opts: { consumableBuffs?: AuraUptime[]; isbHitPct?: number; shadowPriestDps?: number } = {},
+  // durationSec: the fight's length, to turn boss debuff bands into windows.
+  opts: { consumableBuffs?: AuraUptime[]; isbHitPct?: number; shadowPriestDps?: number; durationSec?: number } = {},
 ): SimEnvironment {
   const env: SimEnvironment = { raidBuffs: {}, partyBuffs: {}, individualBuffs: {}, debuffs: {}, bonusStats: {}, detected: [] };
   apply(RAID, buffs, env.raidBuffs, env.detected);
@@ -189,7 +248,7 @@ export function buildEnvironment(
     env.detected.push(`${sb.name} (${Math.round(b.uptimePct)}%)`);
   }
   apply(INDIVIDUAL, buffs, env.individualBuffs, env.detected);
-  apply(DEBUFFS, bossDebuffs, env.debuffs, env.detected);
+  applyDebuffs(bossDebuffs, env, opts.durationSec);
   // WoWSims puts the raid's Expose Armor up at 10 s; raids sunder until it lands (5 Sunders by
   // ~6 s in the logs), and Sunder loses its uptime to it. Both in the sim: Sunder ramps up as in
   // the game and Expose Armor, the stronger, replaces it at 10 s.
@@ -203,10 +262,7 @@ export function buildEnvironment(
     env.detected.push('Drums');
   }
   const weaving = bossDebuffs.find((a) => a.id === SHADOW_WEAVING_ID);
-  if (weaving && weaving.uptimePct >= 40) {
-    env.debuffs.shadowWeaving = true;
-    env.detected.push('Shadow Weaving');
-  }
+  if (weaving && weaving.uptimePct >= (opts.durationSec && weaving.bands ? 1 : 40)) addDebuff(env, 'shadowWeaving', true, 'Shadow Weaving', weaving, opts.durationSec);
   // ISB from all warlocks in the raid. In WoWSims the raid's fixed-uptime ISB and a player's own
   // ISB procs are the same aura, so they merge (up if either is) like the real shared debuff.
   // WoWSims applies the fixed uptime as a chance per hit, so the share of the player's own hits
@@ -275,6 +331,8 @@ export function withTopRaidBuffs(base: SimEnvironment, others: SimEnvironment[])
     for (const key of keys) {
       // Drums are a consumable (see the consumes scenario); the hunter's agility goes with Expose Weakness.
       if (key === 'drums' || key === 'exposeWeaknessHunterAgility') continue;
+      // Windowed debuffs go by uptime, below.
+      if (section === 'debuffs' && (key === 'uptimeWindows' || WINDOWED.has(key))) continue;
       const values = others.map((o) => o[section][key]).filter((v) => v !== undefined);
       if (UPTIME_FIELDS[key]) {
         const theirs = median(others.map((o) => Number(o[section][key] ?? 0)));
@@ -298,6 +356,26 @@ export function withTopRaidBuffs(base: SimEnvironment, others: SimEnvironment[])
       env[section][key] = JSON.parse([...counts].sort((a, b) => b[1] - a[1])[0][0]);
       added.push(LABELS[key] ?? key);
     }
+  }
+  // Boss debuffs: the median top player's uptime (0 without it, all fight without windows), with
+  // that player's windows, where it's more than yours.
+  const windowsIn = (e: SimEnvironment) => (e.debuffs.uptimeWindows as DebuffWindow[] | undefined) ?? [];
+  const uptimeIn = (e: SimEnvironment, key: string) => {
+    if (e.debuffs[key] === undefined) return 0;
+    const w = windowsIn(e).filter((x) => x.debuff === key);
+    return w.length ? uptimeOfWindows(w) : 1;
+  };
+  for (const key of WINDOWED) {
+    const ups = others.map((o) => uptimeIn(o, key));
+    const theirs = median(ups);
+    const mine = uptimeIn(env, key);
+    if (theirs <= mine + 0.02) continue;
+    const from = others[ups.indexOf(theirs)];
+    env.debuffs[key] ??= from.debuffs[key];
+    const windows = [...windowsIn(env).filter((w) => w.debuff !== key), ...windowsIn(from).filter((w) => w.debuff === key)];
+    if (windows.length) env.debuffs.uptimeWindows = windows;
+    else delete env.debuffs.uptimeWindows;
+    added.push(mine ? `${LABELS[key] ?? key} ${Math.round(mine * 100)}% → ${Math.round(theirs * 100)}%` : (LABELS[key] ?? key));
   }
   // Uptime-weighted zone/NPC buffs (Rallying Cry...).
   const idxs = new Set(others.flatMap((o) => Object.keys(o.bonusStats).map(Number)));

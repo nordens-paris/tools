@@ -609,8 +609,9 @@ export async function collectPlayerFight(
   }
   const buffs = [...buffsTable.auras.map((a) => toUptime(a, buffsTable.totalTime)), ...partyTotems(fights, fight, spec.caster, party, source, spec.totems, logEvents)]
     .sort((a, b) => b.uptimePct - a.uptimePct);
+  // Boss debuffs keep when they were up, for the sim's debuff windows.
   const bossDebuffs = bossDebuffsTable.auras
-    .map((a) => toUptime(a, bossDebuffsTable.totalTime))
+    .map((a): AuraUptime => ({ ...toUptime(a, bossDebuffsTable.totalTime), bands: a.bands?.map((b) => [Math.max(0, (b.startTime - start) / 1000), Math.max(0, (b.endTime - start) / 1000)]) }))
     .sort((a, b) => b.uptimePct - a.uptimePct);
 
   // Casts per ability (ranks grouped by name), counted from the cast events.

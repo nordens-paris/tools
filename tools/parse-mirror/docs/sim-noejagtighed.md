@@ -124,7 +124,13 @@ mere, rogues det samme.
 
 ## Rettelser i WoWSims (`wowsims-patches/`)
 
-Bygges ind af `scripts/build-wowsims.mjs`:
+Bygges ind af `scripts/build-wowsims.mjs` på tbc-new `91f869a2c` (26. oktober 2026; nyere upstream
+er ikke afprøvet):
+
+- **Debuffs i tidsrum** (`Debuffs.uptime_windows`): en boss-debuff kan sættes til kun at være oppe
+  i bestemte dele af kampen, med fulde stacks fra starten af hvert tidsrum. Upstream er de fleste
+  debuffs enten oppe hele kampen eller slet ikke. Curse of the Elements oppe den første halvdel gav
+  en destruction warlock 2.354 DPS mod 2.493 hele kampen og 2.207 uden.
 
 - **Recklessness rammer også hvide slag** i TBC; upstream gjaldt det kun special attacks (+6
   point hvid crit på et 100-sekunders kill).

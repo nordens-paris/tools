@@ -1,0 +1,225 @@
+diff --git a/proto/common.proto b/proto/common.proto
+index 74f0b1680..9cd9df547 100644
+--- a/proto/common.proto
++++ b/proto/common.proto
+@@ -577,6 +577,17 @@ message Debuffs {
+ 	bool shadow_embrace = 25;
+ 	bool screech = 26;
+ 	double hemorrhage_uptime = 27;
++
++	// When each debuff was up in a log, as shares of the fight (0..1). A debuff with windows is
++	// up only inside them, at full stacks, instead of all fight.
++	repeated DebuffWindow uptime_windows = 100;
++}
++
++message DebuffWindow {
++	// The Debuffs field it belongs to, by its JSON name (curseOfElements, sunderArmor...).
++	string debuff = 1;
++	double start = 2;
++	double end = 3;
+ }
+ 
+ message ConsumesSpec {
+diff --git a/sim/core/debuffs.go b/sim/core/debuffs.go
+index c18f26ab7..2180a2470 100644
+--- a/sim/core/debuffs.go
++++ b/sim/core/debuffs.go
+@@ -13,24 +13,24 @@ import (
+ func applyDebuffEffects(target *Unit, targetIdx int, debuffs *proto.Debuffs, raid *proto.Raid) {
+ 
+ 	if debuffs.BloodFrenzy {
+-		MakePermanent(BloodFrenzyAura(target, 2))
++		withWindows(MakePermanent(BloodFrenzyAura(target, 2)), debuffs, "bloodFrenzy")
+ 	}
+ 
+ 	if debuffs.CurseOfElements != proto.TristateEffect_TristateEffectMissing {
+ 		ranks := GetTristateValueInt32(debuffs.CurseOfElements, 0, 3)
+-		MakePermanent(CurseOfElementsAura(target, -1, ranks))
++		withWindows(MakePermanent(CurseOfElementsAura(target, -1, ranks)), debuffs, "curseOfElements")
+ 	}
+ 
+ 	if debuffs.CurseOfRecklessness {
+-		MakePermanent(CurseOfRecklessnessAura(target, -1))
++		withWindows(MakePermanent(CurseOfRecklessnessAura(target, -1)), debuffs, "curseOfRecklessness")
+ 	}
+ 
+ 	if debuffs.DemoralizingRoar != proto.TristateEffect_TristateEffectMissing {
+-		MakePermanent(DemoralizingRoarAura(target, GetTristateValueInt32(debuffs.DemoralizingRoar, 0, 5)))
++		withWindows(MakePermanent(DemoralizingRoarAura(target, GetTristateValueInt32(debuffs.DemoralizingRoar, 0, 5))), debuffs, "demoralizingRoar")
+ 	}
+ 
+ 	if debuffs.DemoralizingShout != proto.TristateEffect_TristateEffectMissing {
+-		MakePermanent(DemoralizingShoutAura(target, 5, GetTristateValueInt32(debuffs.DemoralizingShout, 0, 5)))
++		withWindows(MakePermanent(DemoralizingShoutAura(target, 5, GetTristateValueInt32(debuffs.DemoralizingShout, 0, 5))), debuffs, "demoralizingShout")
+ 	}
+ 
+ 	if debuffs.ExposeWeaknessUptime > 0.0 {
+@@ -41,7 +41,7 @@ func applyDebuffEffects(target *Unit, targetIdx int, debuffs *proto.Debuffs, rai
+ 	}
+ 
+ 	if debuffs.FaerieFire != proto.TristateEffect_TristateEffectMissing {
+-		MakePermanent(FaerieFireAura(target, TernaryFloat64(IsImproved(debuffs.FaerieFire), 3, 0)))
++		withWindows(MakePermanent(FaerieFireAura(target, TernaryFloat64(IsImproved(debuffs.FaerieFire), 3, 0))), debuffs, "faerieFire")
+ 	}
+ 
+ 	if debuffs.HemorrhageUptime > 0.0 {
+@@ -49,12 +49,15 @@ func applyDebuffEffects(target *Unit, targetIdx int, debuffs *proto.Debuffs, rai
+ 	}
+ 
+ 	if debuffs.GiftOfArthas {
+-		MakePermanent(GiftOfArthasAura(target))
++		withWindows(MakePermanent(GiftOfArthasAura(target)), debuffs, "giftOfArthas")
+ 	}
+ 
+ 	if debuffs.HuntersMark != proto.TristateEffect_TristateEffectMissing {
+ 		aura := HuntersMarkAura(target, GetTristateValueInt32(debuffs.HuntersMark, 0, 5))
+-		ApplyFixedUptimeAura(aura, 1, aura.Duration, 1)
++		if len(debuffWindows(debuffs, "huntersMark")) == 0 {
++			ApplyFixedUptimeAura(aura, 1, aura.Duration, 1)
++		}
++		defer withWindows(aura, debuffs, "huntersMark")
+ 
+ 		ScheduledAura(aura, PeriodicActionOptions{
+ 			Period:   time.Second * 1,
+@@ -71,6 +74,7 @@ func applyDebuffEffects(target *Unit, targetIdx int, debuffs *proto.Debuffs, rai
+ 
+ 	if debuffs.ImprovedScorch {
+ 		aura := MakePermanent(ImprovedScorchAura(target))
++		defer withWindows(aura, debuffs, "improvedScorch")
+ 
+ 		ScheduledAura(aura, PeriodicActionOptions{
+ 			Period:          time.Millisecond * 1200,
+@@ -88,11 +92,11 @@ func applyDebuffEffects(target *Unit, targetIdx int, debuffs *proto.Debuffs, rai
+ 	}
+ 
+ 	if debuffs.ImprovedSealOfTheCrusader != proto.TristateEffect_TristateEffectMissing {
+-		MakePermanent(ImprovedSealOfTheCrusaderAura(target, -1, GetTristateValueInt32(debuffs.ImprovedSealOfTheCrusader, 0, 3), 0.0, Ternary(debuffs.JocRetribution_2Pt4, 1.15, 1.0)))
++		withWindows(MakePermanent(ImprovedSealOfTheCrusaderAura(target, -1, GetTristateValueInt32(debuffs.ImprovedSealOfTheCrusader, 0, 3), 0.0, Ternary(debuffs.JocRetribution_2Pt4, 1.15, 1.0))), debuffs, "improvedSealOfTheCrusader")
+ 	}
+ 
+ 	if debuffs.InsectSwarm {
+-		MakePermanent((InsectSwarmAura(target)))
++		withWindows(MakePermanent((InsectSwarmAura(target))), debuffs, "insectSwarm")
+ 	}
+ 
+ 	if debuffs.IsbUptime > 0.0 {
+@@ -100,35 +104,36 @@ func applyDebuffEffects(target *Unit, targetIdx int, debuffs *proto.Debuffs, rai
+ 	}
+ 
+ 	if debuffs.JudgementOfLight {
+-		MakePermanent(JudgementOfLightAura(target))
++		withWindows(MakePermanent(JudgementOfLightAura(target)), debuffs, "judgementOfLight")
+ 	}
+ 
+ 	if debuffs.JudgementOfWisdom {
+-		MakePermanent(JudgementOfWisdomAura(target))
++		withWindows(MakePermanent(JudgementOfWisdomAura(target)), debuffs, "judgementOfWisdom")
+ 	}
+ 
+ 	if debuffs.Mangle {
+-		MakePermanent(MangleAura(target))
++		withWindows(MakePermanent(MangleAura(target)), debuffs, "mangle")
+ 	}
+ 
+ 	if debuffs.Misery {
+-		MakePermanent(MiseryAura(target, 5))
++		withWindows(MakePermanent(MiseryAura(target, 5)), debuffs, "misery")
+ 	}
+ 
+ 	if debuffs.ScorpidSting {
+-		MakePermanent(ScorpidStingAura(target))
++		withWindows(MakePermanent(ScorpidStingAura(target)), debuffs, "scorpidSting")
+ 	}
+ 
+ 	if debuffs.Screech {
+-		MakePermanent(ScreechAura(target))
++		withWindows(MakePermanent(ScreechAura(target)), debuffs, "screech")
+ 	}
+ 
+ 	if debuffs.ShadowEmbrace {
+-		MakePermanent(ShadowEmbraceAura(target, 5))
++		withWindows(MakePermanent(ShadowEmbraceAura(target, 5)), debuffs, "shadowEmbrace")
+ 	}
+ 
+ 	if debuffs.ShadowWeaving {
+ 		aura := MakePermanent(ShadowWeavingAura(target))
++		defer withWindows(aura, debuffs, "shadowWeaving")
+ 
+ 		ScheduledAura(aura, PeriodicActionOptions{
+ 			Period:          time.Millisecond * 1500,
+@@ -146,6 +151,7 @@ func applyDebuffEffects(target *Unit, targetIdx int, debuffs *proto.Debuffs, rai
+ 
+ 	if debuffs.ExposeArmor != proto.TristateEffect_TristateEffectMissing {
+ 		aura := MakePermanent(ExposeArmorAura(target, func() int32 { return 5 }, GetTristateValueInt32(debuffs.ExposeArmor, 0, 2)))
++		defer withWindows(aura, debuffs, "exposeArmor")
+ 
+ 		ScheduledAura(aura, PeriodicActionOptions{
+ 			Period:   time.Second * 10,
+@@ -158,6 +164,7 @@ func applyDebuffEffects(target *Unit, targetIdx int, debuffs *proto.Debuffs, rai
+ 
+ 	if debuffs.SunderArmor {
+ 		aura := MakePermanent(SunderArmorAura(target))
++		defer withWindows(aura, debuffs, "sunderArmor")
+ 
+ 		ScheduledAura(aura, PeriodicActionOptions{
+ 			Period:          GCDDefault,
+@@ -174,12 +181,57 @@ func applyDebuffEffects(target *Unit, targetIdx int, debuffs *proto.Debuffs, rai
+ 	}
+ 
+ 	if debuffs.WintersChill {
+-		MakePermanent(WintersChillAura(target, 5))
++		withWindows(MakePermanent(WintersChillAura(target, 5)), debuffs, "wintersChill")
+ 	}
+ 
+ 	if debuffs.ThunderClap != proto.TristateEffect_TristateEffectMissing {
+-		MakePermanent(ThunderClapAura(target, GetTristateValueInt32(debuffs.ThunderClap, 0, 3)))
++		withWindows(MakePermanent(ThunderClapAura(target, GetTristateValueInt32(debuffs.ThunderClap, 0, 3))), debuffs, "thunderClap")
++	}
++}
++
++// The windows a debuff was up in a log (Debuffs.uptime_windows), by the debuff's JSON name.
++func debuffWindows(debuffs *proto.Debuffs, name string) []*proto.DebuffWindow {
++	var out []*proto.DebuffWindow
++	for _, w := range debuffs.UptimeWindows {
++		if w.Debuff == name {
++			out = append(out, w)
++		}
++	}
++	return out
++}
++
++// With windows, the aura is up only inside them (scaled to each iteration's duration) instead of
++// all fight, at full stacks from the start of each: this replaces its always-on reset and ramp-up,
++// so it goes on after ScheduledAura (deferred in applyDebuffEffects).
++func withWindows(aura *Aura, debuffs *proto.Debuffs, name string) *Aura {
++	windows := debuffWindows(debuffs, name)
++	if len(windows) == 0 {
++		return aura
++	}
++	aura.OnReset = func(aura *Aura, sim *Simulation) {
++		aura.Duration = NeverExpires
++		for _, w := range windows {
++			atShareOfFight(sim, w.Start, func(sim *Simulation) {
++				// A stronger effect of the same kind (Expose Armor over Sunder...) keeps it off.
++				aura.Activate(sim)
++				if aura.IsActive() && aura.MaxStacks > 0 {
++					aura.SetStacks(sim, aura.MaxStacks)
++				}
++			})
++			if w.End < 1 {
++				atShareOfFight(sim, w.End, aura.Deactivate)
++			}
++		}
+ 	}
++	return aura
++}
++
++func atShareOfFight(sim *Simulation, share float64, action func(*Simulation)) {
++	pa := sim.GetConsumedPendingActionFromPool()
++	pa.NextActionAt = time.Duration(share * float64(sim.Duration))
++	pa.Priority = ActionPriorityDOT
++	pa.OnAction = action
++	sim.AddPendingAction(pa)
+ }
+ 
+ func ScheduledAura(aura *Aura, options PeriodicActionOptions, raid *proto.Raid) {

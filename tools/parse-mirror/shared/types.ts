@@ -33,6 +33,8 @@ export interface AuraUptime {
   uses: number;
   /** Seconds into the fight each time the aura was gained. */
   starts?: number[];
+  /** Seconds into the fight the aura was up, [from, to] per band (saved results before v0.3.7 have none). */
+  bands?: [number, number][];
   /** Not in the log; a totem from a shaman in the player's party. */
   fromPartyShaman?: boolean;
   /** A party shaman's usual totem, assumed up all fight because pre-pull casts aren't logged. */

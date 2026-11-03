@@ -9,6 +9,28 @@ version udgives under
 [Releases](https://github.com/nordens-paris/tools/releases?q=parse-mirror&expanded=true); de er
 markeret med **Windows-pakke** her.
 
+## v0.3.7 (3. november 2026) · Windows-pakke
+
+### Forbedret
+
+- **Boss-debuffs simmes med deres rigtige uptime.** Før var en debuff oppe hele kampen, hvis den var
+  oppe mindst 40 % af den, og ellers slet ikke. Nu er den oppe i de tidsrum, loggen viser, så en
+  Curse of the Elements oppe 70 % tæller som 70 %. Huller i raidets debuffs flytter dermed fra Play
+  til Gear & buffs, hvor de hører til. "Top 10 raid buffs" løfter en debuff til top 10's median-uptime,
+  hvis den er højere end din. Det kræver en ny WoWSims-rettelse, så simmen er bygget om
+  (`wowsim.wasm.gz`). Gemte resultater bruger den gamle regel, til kampen hentes igen.
+
+## v0.3.6 (3. november 2026)
+
+### Rettet
+
+- **Play i "Where the DPS difference comes from"** tog simmens generelle afvigelse med. Ramte
+  simmen fx 3 % for højt for alle, så top-spillere med bedre gear ud til at spille dårligere.
+  Simmens tal skaleres nu med medianen af, hvor meget af deres simmede DPS top-spillerne fik ud af
+  det uden held, så Play og "Execution, luck removed" måler det samme. Gear & buffs og Kill time er
+  skaleret med samme tal, og de fire dele lægger sig stadig præcist sammen. Gemte resultater bruger
+  også den nye opdeling.
+
 ## v0.3.5 (31. oktober 2026) · Windows-pakke
 
 ### Rettet
