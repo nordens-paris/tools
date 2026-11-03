@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { gapParts, simScale, type GapPart } from '../../../shared/dpsGap.ts';
 import type { SimPlayerResult } from '../../../shared/types.ts';
 import { downloadCsv } from '../csv.ts';
 import { fmt, fmtSigned, fmtTime } from '../format.ts';
@@ -68,26 +69,15 @@ const PARTS = [
   { key: 'play', label: 'Play', cls: 'play', hint: 'How much more of their setup’s simmed DPS they turned into real DPS than you did, with luck taken out.' },
   { key: 'luck', label: 'Luck', cls: 'luck', hint: 'Their crits, hits, resists and procs compared with average, minus yours.' },
 ] as const;
-type PartKey = (typeof PARTS)[number]['key'];
-
-function parts(e: SimPlayerResult, you: SimPlayerResult): Record<PartKey, number> {
-  const play = (p: SimPlayerResult) => p.actualDps - p.luck.luckDps - p.simDps;
-  // Older saved results have no sim on your kill time; then kill time stays inside "gear & buffs".
-  const onYourTime = e.simDpsOnYourTime ?? e.simDps;
-  return {
-    gear: onYourTime - you.simDps,
-    kill: e.simDps - onYourTime,
-    play: play(e) - play(you),
-    luck: e.luck.luckDps - you.luck.luckDps,
-  };
-}
+type PartKey = GapPart;
 
 function GapView({ rows, you }: { rows: SimPlayerResult[]; you: SimPlayerResult }) {
   const G = useGroup();
   // Clicking a tile highlights that part in the bars.
   const [focus, setFocus] = useState<PartKey | undefined>();
   const others = rows.filter((e) => e.rank);
-  const split = others.map((e) => ({ e, p: parts(e, you) }));
+  const k = simScale(rows);
+  const split = others.map((e) => ({ e, p: gapParts(e, you, k) }));
   const extent = Math.max(
     50,
     ...split.flatMap(({ p }) => {
@@ -106,6 +96,7 @@ function GapView({ rows, you }: { rows: SimPlayerResult[]; you: SimPlayerResult 
       <p className="sub">
         How much more DPS each of {G.noun} did than you ({fmt(you.actualDps)} DPS on the boss), split into four parts that add up to the real difference.
         Kill time is taken out on its own: each player is simmed on their kill time and on yours.
+        Sim numbers are scaled to the {fmt(k * 100)}% of simmed DPS the median player in {G.noun} turned into real DPS without luck, so a sim that reads high or low for everyone doesn’t count as play.
       </p>
       <div className="gap-tiles">
         {PARTS.map((part) => {

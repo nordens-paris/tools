@@ -74,7 +74,7 @@ export async function runScenarios(
     // Their own class buffs (Trueshot Aura...) are left out, as for you: your sim gives you yours.
     top.map((t) => {
       const auras = raidAurasOf(t, spec);
-      return buildEnvironment(auras.buffs, auras.bossDebuffs, undefined, { consumableBuffs: you.fight.buffs, isbHitPct: t.fight.isbHitPct, shadowPriestDps: t.fight.partyShadowPriestDps });
+      return buildEnvironment(auras.buffs, auras.bossDebuffs, undefined, { consumableBuffs: you.fight.buffs, isbHitPct: t.fight.isbHitPct, shadowPriestDps: t.fight.partyShadowPriestDps, durationSec: t.fight.durationSec });
     }),
   );
 

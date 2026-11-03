@@ -53,6 +53,7 @@ export function environmentOf(raw: PlayerFightRaw, spec: SpecConfig) {
   return buildEnvironment(buffs, bossDebuffs, raw.consumes.drums, {
     isbHitPct: raw.fight.isbHitPct,
     shadowPriestDps: raw.fight.partyShadowPriestDps,
+    durationSec: raw.fight.durationSec,
   });
 }
 

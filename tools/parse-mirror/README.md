@@ -118,6 +118,9 @@ lægger sig præcist sammen:
   fjernet. En grøn bjælke til venstre betyder, at du spillede dit setup bedre, end de spillede deres.
 - **Luck** (skraveret): deres held minus dit.
 
+Simmens tal skaleres med, hvor meget af deres simmede DPS top-spillerne i medianen fik ud af det
+uden held, så en sim, der rammer lidt for højt eller lavt for alle, ikke tæller som play.
+
 Bjælker til højre for "You" er grunde til, at de lavede mere; til venstre grunde til, at de lavede
 mindre. Den tynde lodrette streg er den rigtige forskel. Klik på en af de fire bokse for at
 fremhæve den del.

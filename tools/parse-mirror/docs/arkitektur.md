@@ -268,7 +268,10 @@ gav de samme tal; kun rankings (rang ±1) var friskere end serverens cachede.
   buffs og debuffs, plus mana fra andre (Innervate, Mana Tide, Vampiric Touch). Buffs WoWSims ikke
   kender (Rallying Cry, Power Core...) lægges til som stats vægtet med uptime. Trinkets' on-use buffs
   (Dark Iron Pipeweed fra Dark Iron Smoking Pipe, Dire Drunkard fra Empty Mug of Direbrew, Hopped Up fra Direbrew Hops) gør ikke: WoWSims
-  simmer selve trinket'en fra gearet.
+  simmer selve trinket'en fra gearet. Boss-debuffs går ind med de tidsrum, de var oppe i loggen
+  (`uptimeWindows`, andele af kampen, så de passer på enhver kill-tid); en debuff oppe 98 % eller
+  mere er oppe hele kampen med simmens egen opbygning. Gemte resultater uden tidsrum bruger den
+  gamle regel: oppe mindst 40 % = oppe hele kampen.
 - **`scenarios.ts`** kører what-ifs og execution:
   - *Your setup* (dit eget), *consumes* (gruppens mest brugte, byttet ind pr. kategori; flask og
     battle/guardian elixirs udelukker hinanden), *raid buffs* (det flertallet af gruppen havde; der
