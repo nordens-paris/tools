@@ -255,16 +255,25 @@ def _mouse_input(flags):
     return INPUT(type=0, u=_INPUTUNION(mi=MOUSEINPUT(0, 0, 0, flags, 0, 0)))
 
 
+def is_foreground(hwnd):
+    return user32.GetForegroundWindow() == hwnd
+
+
 def focus(hwnd):
+    """Bring the window to the front. Returns False if Windows refused, so callers never send
+    keys or clicks into whatever other window is in front."""
     if user32.IsIconic(hwnd):
         user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-    if user32.GetForegroundWindow() != hwnd:
+    for _ in range(2):
+        if is_foreground(hwnd):
+            return True
         # Windows only lets a background process take focus right after keyboard input;
         # a lone Alt tap satisfies that without doing anything in the game.
         _send(_key_input(SCANCODES["alt"]), _key_input(SCANCODES["alt"], up=True))
         user32.BringWindowToTop(hwnd)
         user32.SetForegroundWindow(hwnd)
         time.sleep(0.4)
+    return is_foreground(hwnd)
 
 
 def click(hwnd, x, y, double=False):

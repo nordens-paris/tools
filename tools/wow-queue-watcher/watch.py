@@ -49,11 +49,15 @@ def load_cfg(args, log=None):
     if not os.path.exists(path):
         sys.exit(f"Config file not found: {path}")
     cfg = C.load(path)
-    if C.ensure_topic(cfg, path):
+    saved = C.ensure_topic(cfg, path)
+    if saved is not None:
         line = "=" * 64
+        where = (f"saved in {os.path.basename(path)} - keep it to yourself" if saved else
+                 f"COULDN'T SAVE IT to {path} - put  topic = \"{cfg.ntfy.topic}\"  under [ntfy] yourself, "
+                 "or you'll get a new topic next time")
         print(f"\n{line}\n  FIRST RUN - your private phone topic is:  {cfg.ntfy.topic}\n"
               f"  In the ntfy app: + > Subscribe to topic > {cfg.ntfy.topic}\n"
-              f"  (saved in {os.path.basename(path)} - keep it to yourself)\n{line}\n")
+              f"  ({where})\n{line}\n")
     say = log.info if log else print
     if getattr(args, "beta", False):
         # Same settings and phone topic, but aimed at the Forever beta client.

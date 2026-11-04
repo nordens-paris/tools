@@ -151,12 +151,18 @@ class LocalAlarm:
         stop = self._stop = threading.Event()
         custom = self.sound_file if self.sound_file and os.path.isfile(self.sound_file) else None
         soft, louder = (None, None) if custom else (chime_wav(0.25), chime_wav(0.5))
+        custom_len = _wav_seconds(custom) if custom else None
 
         def loop():
             started = time.time()
             while not stop.is_set():
-                if custom:
+                if custom and custom_len is None:
+                    # Not a file the wave module can measure: play it blocking (can't be cut short).
                     winsound.PlaySound(custom, winsound.SND_FILENAME)
+                elif custom:
+                    # Asynchronous, so stop() can cut a long sound off right away.
+                    winsound.PlaySound(custom, winsound.SND_FILENAME | winsound.SND_ASYNC)
+                    stop.wait(custom_len)
                 else:
                     winsound.PlaySound(soft if time.time() - started < 60 else louder, winsound.SND_MEMORY)
                 stop.wait(1.5)
@@ -166,6 +172,20 @@ class LocalAlarm:
 
     def stop(self):
         self._stop.set()
+        if self.enabled and self.sound_file:
+            try:
+                import winsound
+                winsound.PlaySound(None, 0)  # stop a custom sound that is still playing
+            except (ImportError, RuntimeError):
+                pass
+
+
+def _wav_seconds(path):
+    try:
+        with wave.open(path, "rb") as w:
+            return w.getnframes() / float(w.getframerate())
+    except (wave.Error, EOFError, OSError, ZeroDivisionError):
+        return None
 
 
 class AlarmManager:

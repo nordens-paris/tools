@@ -63,6 +63,9 @@ realm_name = ""
 account_name = ""
 # Besked til telefonen hvis spillet står på en skærm programmet ikke kender (eller venter på dig) så længe.
 unknown_screen_minutes = 3
+# Genstart spillet hvis det står på en helt tom skærm (ingen tekst) så længe, mens du ikke er i
+# køen (spillet er gået i stå). 0 = aldrig.
+frozen_restart_minutes = 15
 # Tryk "Enter World" automatisk hvis ingen reagerer på alarmen, så du ikke bliver smidt
 # ud af character select. Din karakter står så AFK i spillet. Virker kun når enabled = true.
 auto_enter_world = false
@@ -71,6 +74,7 @@ auto_enter_world_after_minutes = 10
 [dashboard]
 enabled = true
 host = "127.0.0.1"            # "0.0.0.0" = kan også åbnes fra telefonen på dit hjemme-wifi
+# Andre enheder skal bruge linket med ?key=..., som programmet viser når det starter.
 port = 8765
 
 [health]

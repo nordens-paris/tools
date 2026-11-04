@@ -102,11 +102,11 @@ footer{margin-top:60px;color:var(--text-3);font-size:13px}
 <p>Du kan også åbne dashboardet på telefonen, når den er på <b>samme wifi</b> som PC'en:</p>
 <ol style="padding-left:20px">
  <li>Åbn <code>config.toml</code> og ret linjen under <code>[dashboard]</code> til <code>host = "0.0.0.0"</code>. Gem filen.</li>
- <li>Start programmet. Vinduet viser nu en linje som <code>Dashboard on your phone (same Wi-Fi): http://192.168.1.105:8765</code>.</li>
+ <li>Start programmet. Vinduet viser nu en linje som <code>Dashboard on your phone (same Wi-Fi): http://192.168.1.105:8765/?key=…</code>. Brug hele linket med <code>?key=</code> - uden nøglen afviser dashboardet telefonen.</li>
  <li>Spørger Windows Firewall om adgang, så vælg <b>Tillad</b> for <b>private netværk</b>.</li>
  <li>Åbn adressen i telefonens browser. Tip: "Føj til startskærm" giver en genvej som en app.</li>
 </ol>
-<div class="note">Alle på dit wifi kan åbne dashboardet, så brug det kun på dit eget hjemmenetværk. Når du er hjemmefra, styrer du programmet med kommandoer i ntfy i stedet.</div>
+<div class="note">Kun enheder med linket (inkl. nøglen) kan åbne dashboardet. Del det ikke, og brug det kun på dit eget hjemmenetværk. Når du er hjemmefra, styrer du programmet med kommandoer i ntfy i stedet.</div>
 
 <h3>Det får du på telefonen</h3>
 <table>

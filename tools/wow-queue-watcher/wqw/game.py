@@ -36,22 +36,31 @@ class GameSource:
             return None
         return winapi.capture(hwnd)
 
-    def click(self, x, y, double=False):
+    def _focused(self):
+        """The game window, brought to the front - or None if that didn't work."""
         hwnd = self._hwnd()
-        if hwnd:
-            winapi.focus(hwnd)
-            winapi.click(hwnd, x, y, double)
+        if not hwnd:
+            return None
+        if not winapi.focus(hwnd):
+            self.log.warning("Windows wouldn't bring WoW to the front - not sending any input")
+            return None
+        return hwnd
+
+    def click(self, x, y, double=False):
+        if not (hwnd := self._focused()):
+            return False
+        winapi.click(hwnd, x, y, double)
+        return True
 
     def show(self):
         hwnd = self._hwnd()
-        if hwnd:
-            winapi.focus(hwnd)
+        return bool(hwnd) and winapi.focus(hwnd)
 
     def key(self, name):
-        hwnd = self._hwnd()
-        if hwnd:
-            winapi.focus(hwnd)
-            winapi.press(name)
+        if not (hwnd := self._focused()):
+            return False
+        winapi.press(name)
+        return True
 
     def launch(self):
         if self.g.launch_method == "direct":
@@ -113,12 +122,17 @@ class GameSource:
             if winapi.is_minimized(hwnd):
                 winapi.focus(hwnd)
                 continue
-            reading = vision.Reading("", *vision.ocr(winapi.capture(hwnd), self.g.ocr_language, 1.5))
+            shot = winapi.capture(hwnd)
+            if shot is None:
+                continue
+            reading = vision.Reading("", *vision.ocr(shot, self.g.ocr_language, 1.5))
             if self.process_running():
                 self.log.info("Battle.net says the game is already running")
                 return True
             if pt := _play_button(reading):
-                winapi.focus(hwnd)
+                if not winapi.focus(hwnd):
+                    self.log.warning("Windows wouldn't bring Battle.net to the front - not clicking Play")
+                    continue
                 winapi.click(hwnd, *pt)
                 self.log.info("Clicked Play in Battle.net")
                 return True
@@ -131,7 +145,7 @@ class GameSource:
 
     def kill(self):
         for pid in self._pids():
-            self.log.info("Killing Wow.exe pid %s", pid)
+            self.log.info("Killing %s pid %s", self.g.process_name, pid)
             winapi.kill_pid(pid)
         time.sleep(3)
 
