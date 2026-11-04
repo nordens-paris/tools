@@ -113,6 +113,31 @@ export interface PetSummary {
   abilities: string[];
 }
 
+/** Gaps line up by boss health (phases, most mechanics) or by the clock (timer mechanics). */
+export type GapAlignment = 'hp' | 'time';
+
+/** One idle stretch, seconds into the fight. */
+export interface IdleGap {
+  start: number;
+  duration: number;
+  /** Boss health (0..100) at the hit before the gap and the hit after it. */
+  bossHpStart?: number;
+  bossHpEnd?: number;
+  /** How many of the players compared with had a gap at the same point (see idleShare). */
+  sharedBy?: number;
+}
+
+export interface IdleShare {
+  align: GapAlignment;
+  /** Players compared with; a gap is shared when at least half of them had one there. */
+  compared: number;
+  sharedSec: number;
+  /** Gap time most of the others didn't have. */
+  avoidableSec: number;
+  /** Casters: what the avoidable time cost at your DPS while casting. */
+  avoidableDps?: number;
+}
+
 export interface PlayerFight {
   name: string;
   server?: string;
@@ -142,8 +167,10 @@ export interface PlayerFight {
   /** Share of the fight spent casting or on the GCD, 0..100. */
   activePct: number;
   /** Idle stretches between casts/GCDs, longest first (seconds into the fight). */
-  gaps: { start: number; duration: number }[];
+  gaps: IdleGap[];
   idleSec: number;
+  /** Which idle time the comparison group had too, and how much was yours alone (since v0.4.0). */
+  idleShare?: IdleShare;
   /** Share of direct shadow hits that had Improved Shadow Bolt (0..100), when it can be told. */
   isbHitPct?: number;
   /** Rage classes: rage per minute from damage taken, and what most of that damage was. */
@@ -238,6 +265,8 @@ export interface SimScenarioResult {
   dps: number;
   stdev: number;
   deltaVsBaseline: number;
+  /** Standard error of deltaVsBaseline from the sims' own noise (paired by iteration). */
+  deltaSe?: number;
 }
 
 export interface LuckSummary {
@@ -255,6 +284,14 @@ export interface LuckSummary {
   expectedCritPct: number;
   /** Standard deviations from the expected crit count (|z| > 2 is unusual). */
   critZ: number;
+  /**
+   * How far direct crit and miss luck typically go by chance alone, in DPS (one standard deviation:
+   * binomial counts times the damage of one crit or one hit).
+   */
+  critSeDps?: number;
+  avoidSeDps?: number;
+  /** Standard error of luckDps from the sims' own noise (the knock-on and proc sims). */
+  estimateSeDps?: number;
   avoidPct: number;
   expectedAvoidPct: number;
   /** Spells: share of direct damage lost to partial resists, actual vs expected (0..100). */
@@ -288,6 +325,39 @@ export interface SimPlayerResult {
   luck: LuckSummary;
   /** relativePct with luck taken out of the actual DPS. */
   luckAdjustedPct: number;
+  /**
+   * The sims' own noise, in simmed DPS: standard error of simDps, and of the paired differences
+   * behind the gear part (simDpsOnYourTime − your simDps) and the kill part (simDps − simDpsOnYourTime).
+   */
+  noise?: {
+    simSe: number;
+    gearSe?: number;
+    killSe?: number;
+    /**
+     * Your row only: the standard error of the group's average gear, kill and play differences to
+     * you from the sims' noise, paired by iteration (server/sim/noise.ts groupGapSe). Unscaled.
+     */
+    group?: { gearSe: number; killSe: number; playSe: number };
+  };
+  /** Per-ability real and simmed DPS, for Play by ability (shared/dpsGap.ts playByAbility). */
+  abilities?: AbilityPlay[];
+}
+
+/** One ability of one player: what it did on the boss in the log and in the sim of their own setup. */
+export interface AbilityPlay {
+  name: string;
+  /** Damage on the boss ÷ kill length. */
+  realDps: number;
+  /** The sim's damage per iteration ÷ kill length (DoT ticks included). */
+  simDps: number;
+  /** Casts on the kill, and per sim iteration. With byHits, hits and misses instead (Melee, procs, pets). */
+  casts: number;
+  simCasts: number;
+  byHits?: boolean;
+  /** Direct crit, miss and resist luck on it (LuckSummary.abilities); 0 when it wasn't counted. */
+  luckDps: number;
+  /** The log's icon for it, when it was cast. */
+  icon?: string;
 }
 
 export interface SimResult {

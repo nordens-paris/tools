@@ -9,6 +9,81 @@ version udgives under
 [Releases](https://github.com/nordens-paris/tools/releases?q=parse-mirror&expanded=true); de er
 markeret med **Windows-pakke** her.
 
+## v0.4.0 (4. november 2026) · Windows-pakke
+
+Samler alt siden v0.3.8: hvor sikre tallene er, Play delt op pr. ability, og huller i rotationen,
+som alle havde, adskilt fra dem kun du havde. README'en har nye billeder.
+
+### Nyt
+
+- **Usikkerhed på sim-tallene.** What-ifs viser nu fx "+120 DPS · ±25": 95 %-intervallet fra
+  simmens egen tilfældighed. Alle sims bruger samme startværdi, så to sims kan trækkes fra hinanden
+  iteration for iteration, og det meste af støjen går ud. Flisene under "Where the DPS difference
+  comes from" (Gear & buffs, Kill time, Play, Luck) får også et ± fra det, der er målt med støj:
+  simmenes egen støj (parret iteration for iteration for hele gruppens gennemsnit) og støjen i
+  held-tallene. Hvem der er i top 10, tæller ikke med: de er sammenligningen, ikke en stikprøve. På
+  en warlock-kill blev Play ±17 og Gear ±10. En what-if eller flise inden for sit ± er grå.
+- **"Chance alone" under held:** hvor meget crits og misses alene typisk flytter DPS på en kill som
+  din (95 % af kills ligger inden for).
+- **Play by ability** på Sim-fanen, under "Where the DPS difference comes from": Play delt op pr. ability. Øverst tre
+  fliser: Play mod gruppen med ±, og dine casts og din skade pr. cast samlet som andel af simmen.
+  For hver ability (med ikon) to små plots: dine casts og din skade pr. cast som andel af simmen af
+  dit setup (100 % = som simmen, held trukket fra) som en prik, gruppens gennemsnit som en ring og
+  deres laveste til højeste som et bånd, så man kan se, hvad der er normalt. Sidste kolonne er,
+  hvad forskellen er værd i DPS, med samme fortegn som flisen (+ = gruppen fik mere ud af den);
+  rækkerne og "Other" (de mindre abilities, nævnt ved navn) giver tilsammen Play-flisen. Rød, hvor
+  gruppen fik mindst 1 % af din DPS mere, grøn, hvor du gjorde. Held er abilityens egne crits, misses og resists plus dens andel
+  (efter skade) af held fra følgevirkninger og procs, fx Flameshadow. Når Play-forskellen er uden
+  for støjen, og én ability koster mindst 3 % af din DPS, står den øverst og i Fix first, fx
+  "Bloodthirst: 120 DPS behind the top 10".
+- **Huller alle havde, og huller kun du havde.** Hvert hul mellem casts på Rotation-fanen er nu
+  rødt, hvis de fleste i gruppen ikke havde et hul samme sted, og gråt, hvis mindst halvdelen havde
+  (en mekanik eller bevægelse). Tooltip'en siger fx "Shared: 8 of 10 had a gap here" eller "Only
+  you", med bossens liv før og efter hullet. "Samme sted" er samme bosliv (±2 %), fordi faser og de
+  fleste mekanikker sker ved samme liv, ikke samme sekund, eller samme tid (±2 s) for mekanikker på
+  et ur (Supremus' faseskift, Air Burst). Gruppens egne huller afgør, hvilken af de to der bruges:
+  den, der lægger flest af deres huller sammen, så valget ikke læner sig mod at undskylde dine.
+  Bossens liv læses fra spillerens egne hits, så der er ingen ekstra kald. Bosser matches på
+  NPC-ID, ikke navn, så en kinesisk eller koreansk log lægges sammen med resten (på Reliquary blev
+  overgangene mellem essences ellers "kun dig").
+- **Undgåelig tomgang:** et nyt tal ved tidslinjen, tiden i huller kun du (eller få) havde. For
+  casters også hvad det kostede: de sekunder ved din DPS, mens du caster. Melee og hunters slår
+  videre i et hul, så der står kun sekunder.
+
+### Ændret
+
+- **"Time not casting"** (casters) bruger nu den undgåelige tid i stedet for al tomgang, så det
+  ikke giver dig skylden for mekanikker. Det kommer, når din undgåelige tid er mindst 2 % af kampen
+  over gruppens median (de har også nogle huller alene), og nævner dine længste huller, som de
+  fleste ikke havde. De delte huller står i en linje for sig.
+- **Fix first** viser kun consumes-what-if'en, når gevinsten er over 2 standardfejl og over
+  0,5 % (før: over 1 %).
+
+### Rettet
+
+- **Abilities med kun DoT-ticks** (Curse of Doom, Curse of Agony) blev smidt væk fra loggens
+  skade, fordi de ingen direkte hits har. I Play by ability så det ud, som om de ikke gjorde skade,
+  mens simmen fik 90-220 DPS af dem. Nu tæller deres skade.
+- **Destruction-warlocks' sim castede Immolate,** som top-spillere med Shadow Bolt ikke gør. Nu
+  caster simmen den kun, hvis spilleren gjorde (som for Affliction). Fire-warlocks beholder den.
+- **Fury-simmens execute-fase** spiller nu som top-spillerne: Execute på hvert GCD i stedet for
+  Bloodthirst og Whirlwind, og Heroic Strike bliver ved. WoWSims' APL holdt Bloodthirst og
+  Whirlwind først og stoppede Heroic Strike under 20 %, mens alle top 10 på Rage Winterchill
+  castede Execute 22-41 gange i minuttet i execute-fasen og næsten aldrig Bloodthirst eller
+  Whirlwind. Simmen giver det cirka 1 % mindre DPS end sin egen rækkefølge; til gengæld passer
+  Play by ability nu (Bloodthirst 82 % og Execute 105 % af simmens casts mod 71 % og 145 % før).
+- **Arcane Mage: potion og trinkets sammen med Arcane Power.** Simmen brugte Destruction Potion og
+  on-use trinkets ved 10 s, mens Arcane Power kom, når spilleren brugte den (ofte 20-30 s).
+  Spillerne lægger dem sammen, så deres Arcane Blasts under Arcane Power var op til 26 % større end
+  simmens. Nu venter simmen med potion og trinkets til første gang spilleren brugte Arcane Power
+  eller Destruction Potion. Top 10's skade pr. Arcane Blast på Rage Winterchill gik fra 104 % til
+  103 % af deres sims, og spredningen mellem spillerne blev mindre.
+- **Adept's Elixir i oversatte logs.** Buffen hedder "Spellpower Elixir" i logs fra ikke-engelske
+  klienter og blev ikke genkendt, så simmen manglede 24 spell power. Den findes nu på buffens ID.
+
+Gemte resultater får ± på flisene, men ikke på what-ifs, og ingen Play by ability, til simmen
+køres igen.
+
 ## v0.3.8 (4. november 2026)
 
 ### Rettet

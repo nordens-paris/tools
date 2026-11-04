@@ -14,7 +14,8 @@ function slim(player) {
   const TARGET = ['casts', 'hits', 'crits', 'glances', 'misses', 'dodges', 'parries', 'damage', 'tickDamage', 'critDamage', 'glanceDamage', 'resistedHits', 'resistedCrits', 'resistedDamage', 'resistedTickDamage'];
   const actionsOf = (unit) => (unit.actions ?? []).map((a) => ({ id: a.id, targets: (a.targets ?? []).map((t) => pick(t, TARGET)) }));
   return {
-    dps: { avg: player.dps.avg, stdev: player.dps.stdev },
+    // Every iteration's DPS when the request asked for them, rounded to 0.1 to keep the upload small.
+    dps: { avg: player.dps.avg, stdev: player.dps.stdev, ...(player.dps.allValues ? { allValues: player.dps.allValues.map((v) => Math.round(v * 10) / 10) } : {}) },
     // Tank sims: threat and damage taken per second.
     ...(player.threat ? { threat: { avg: player.threat.avg ?? 0, stdev: player.threat.stdev ?? 0 } } : {}),
     ...(player.dtps ? { dtps: { avg: player.dtps.avg ?? 0, stdev: player.dtps.stdev ?? 0 } } : {}),

@@ -5,10 +5,13 @@
 // knock-on effects and proc luck by re-running the sim as if it had rolled like the player.
 import type { LuckSummary } from '../../shared/types.ts';
 import type { AbilityOutcome, PlayerFightRaw } from '../analysis/collect.ts';
-import { spellName } from '../data/db.ts';
+import { itemInfo, spellName } from '../data/db.ts';
 import type { SimPlayerMetrics } from './runner.ts';
 
-interface SimRates {
+export interface SimRates {
+  /** All damage (DoT ticks included), and casts: the most any one of the ability's actions had (main- and off-hand hits both count the cast). Totals over all iterations. */
+  damage: number;
+  casts: number;
   landed: number;
   crits: number;
   avoided: number;
@@ -37,7 +40,15 @@ function simResistShare(r: SimRates): number {
   return lost / (r.resistedDmg + r.unresistedDmg + lost);
 }
 
-function simRatesByName(player: SimPlayerMetrics): Map<string, SimRates> {
+/** Damage the sim books under an item ID that isn't gear (so not in the item list), by the log's name. */
+const ITEM_ACTIONS: Record<number, string> = { 23827: 'Super Sapper Charge', 10646: 'Goblin Sapper Charge' };
+
+/**
+ * The sim's abilities by the names the log uses, with their totals over all iterations.
+ * `allDamage` (Play by ability) also names what the luck analysis leaves out: extra white attacks
+ * (Windfury Totem), which the log counts as Melee, and item actions (sappers), by the item's name.
+ */
+export function simRatesByName(player: SimPlayerMetrics, allDamage = false): Map<string, SimRates> {
   const rates = new Map<string, SimRates>();
   // Pets' and guardians' abilities are "Pet: <name>", like the log side (see collect.ts).
   const actions = [
@@ -47,13 +58,17 @@ function simRatesByName(player: SimPlayerMetrics): Map<string, SimRates> {
   for (const { a, prefix } of actions) {
     const isWhite = a.id.otherId === 'OtherActionAttack';
     // White MH/OH swings are "Melee" in the log; skip other attack tags (e.g. Windfury) here.
-    if (isWhite && a.id.tag !== 1 && a.id.tag !== 2) continue;
+    if (isWhite && a.id.tag !== 1 && a.id.tag !== 2 && !allDamage) continue;
     // The ranged auto attack (bow, gun) is "Auto Shot" in the log.
-    const base = isWhite ? 'Melee' : a.id.otherId === 'OtherActionShoot' ? 'Auto Shot' : spellName(a.id.spellId ?? a.id.itemId ?? -1, '');
+    const item = allDamage && !a.id.spellId && a.id.itemId ? (ITEM_ACTIONS[a.id.itemId] ?? itemInfo(a.id.itemId)?.n) : undefined;
+    const base = isWhite ? 'Melee' : a.id.otherId === 'OtherActionShoot' ? 'Auto Shot' : (item ?? spellName(a.id.spellId ?? a.id.itemId ?? -1, ''));
     if (!base) continue;
     const name = prefix + base;
-    const r = rates.get(name) ?? { landed: 0, crits: 0, avoided: 0, resistedDmg: 0, resistedHits: 0, unresistedDmg: 0, unresistedHits: 0, normalDmg: 0, normalHits: 0, critDmg: 0 };
+    const r = rates.get(name) ?? { damage: 0, casts: 0, landed: 0, crits: 0, avoided: 0, resistedDmg: 0, resistedHits: 0, unresistedDmg: 0, unresistedHits: 0, normalDmg: 0, normalHits: 0, critDmg: 0 };
+    // White swings and Auto Shot have no casts to compare (Windfury Totem's extra swings count some).
+    if (!isWhite && a.id.otherId !== 'OtherActionShoot') r.casts = Math.max(r.casts, a.targets.reduce((s, t) => s + (t.casts ?? 0), 0));
     for (const t of a.targets) {
+      r.damage += t.damage ?? 0;
       // WoWSims "hits" excludes crits and glancing blows; resisted hits are a subset of hits/crits.
       r.landed += (t.hits ?? 0) + (t.crits ?? 0) + (t.glances ?? 0);
       r.crits += t.crits ?? 0;
@@ -77,7 +92,7 @@ function simRatesByName(player: SimPlayerMetrics): Map<string, SimRates> {
 }
 
 /** Main- and off-hand hits of one ability (e.g. Whirlwind) are separate log entries; merge them. */
-function mergeByName(outcomes: AbilityOutcome[]): AbilityOutcome[] {
+export function mergeByName(outcomes: AbilityOutcome[]): AbilityOutcome[] {
   const byName = new Map<string, AbilityOutcome>();
   for (const o of outcomes) {
     const m = byName.get(o.name);
@@ -129,6 +144,9 @@ export function computeLuck(raw: PlayerFightRaw, sim: SimPlayerMetrics): DirectL
   const totalDamage = raw.outcomes.reduce((s, o) => s + o.total, 0) || 1;
   let critExcess = 0;
   let critVariance = 0;
+  // Variance of the luck in damage, pets included: binomial counts times the damage per crit or hit.
+  let critDmgVariance = 0;
+  let avoidDmgVariance = 0;
   let critsActual = 0;
   let critsExpected = 0;
   let landedAll = 0;
@@ -180,6 +198,8 @@ export function computeLuck(raw: PlayerFightRaw, sim: SimPlayerMetrics): DirectL
       luckDps: dmgFromLuck / raw.fight.durationSec,
     });
     luckDamage += dmgFromLuck;
+    critDmgVariance += o.landed * pCrit * (1 - pCrit) * perCrit ** 2;
+    avoidDmgVariance += attempts * pAvoid * (1 - pAvoid) * avgLanded ** 2;
     // A pet's rolls come from its own stats, so they count as luck but not towards the player's crit
     // and hit (which the knock-on sim re-rolls with the player's rating).
     if (o.pet) continue;
@@ -208,6 +228,8 @@ export function computeLuck(raw: PlayerFightRaw, sim: SimPlayerMetrics): DirectL
     critPct: landedAll ? (critsActual / landedAll) * 100 : 0,
     expectedCritPct: landedAll ? (critsExpected / landedAll) * 100 : 0,
     critZ: critVariance ? critExcess / Math.sqrt(critVariance) : 0,
+    critSeDps: Math.sqrt(critDmgVariance) / raw.fight.durationSec,
+    avoidSeDps: Math.sqrt(avoidDmgVariance) / raw.fight.durationSec,
     avoidPct: attemptsAll ? (avoidActual / attemptsAll) * 100 : 0,
     expectedAvoidPct: attemptsAll ? (avoidExpected / attemptsAll) * 100 : 0,
     ...(resistPotential

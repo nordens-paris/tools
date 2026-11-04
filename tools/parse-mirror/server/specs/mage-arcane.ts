@@ -67,6 +67,9 @@ export const mageArcane: SpecConfig = {
       // Keeps the APL's checks, so Cold Snap's second Icy Veins waits for the first to end.
       { spellId: 12472, name: 'Icy Veins', keepCondition: true },
     ],
+    // The APL starts the potion and on-use trinkets at a fixed 10 s; players stack them with Arcane
+    // Power (often at 20-30 s), which is worth about 4% on each Arcane Blast in a short kill.
+    cooldownDelay: { variable: 'Delay Major CDs', cooldowns: ['Arcane Power', 'Destruction'] },
     distanceFromTarget: 20,
     defaultRace: { horde: 'RaceBloodElf', alliance: 'RaceGnome' },
   },

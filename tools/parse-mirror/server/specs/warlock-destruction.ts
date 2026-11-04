@@ -85,11 +85,15 @@ export const warlockDestruction: SpecConfig = {
       const casts = new Map(raw.fight.casts.map((c) => [c.name, c.casts]));
       return (casts.get('Incinerate') ?? 0) > (casts.get('Shadow Bolt') ?? 0) ? 'warlock-destro-fire.apl.json' : 'warlock-destruction.apl.json';
     },
+    // Shadow Bolt warlocks in Anniversary don't weave Immolate; WoWSims' APL does. Fire warlocks
+    // (Incinerate) cast it, so it stays in their rotation.
+    onlyIfCast: [{ spellId: 27215, name: 'Immolate' }],
     unmodeledDamage: ['Inferno', 'Immolation'],
     notes: [
       'Talents come from the armory when the spec there matches the log; otherwise a WoWSims preset with the same tree split.',
       'Fel Armor and Demonic Sacrifice don\'t show up in Anniversary logs, so Fel Armor is assumed, and Demonic Sacrifice is up all fight when talented.',
       "The sim doesn't summon an Infernal; Infernal damage is left out of real DPS for the execution score.",
+      'The sim casts Immolate only if you did: most top Shadow Bolt warlocks skip it.',
     ],
     knockOn: 'Improved Shadow Bolt',
     distanceFromTarget: 30,

@@ -9,6 +9,7 @@ import type { WclActor, WclFight, WclFightsResponse, WclRanking } from '../wcl/t
 import { parseOf, parsesFor } from './characters.ts';
 import { collectPlayerFight, findFight, type PlayerFightRaw } from './collect.ts';
 import { buildFindings } from './findings.ts';
+import { markSharedGaps } from './gaps.ts';
 import { median } from './stats.ts';
 
 export interface StoredAnalysis {
@@ -80,6 +81,8 @@ export async function analyze(
     collectTopPlayers(client, spec, candidates, TOP_N, exclude, warnings, log),
   ]);
   if (!fight.kill) warnings.push(`This fight was a wipe; the ${group.players} are compared on kills, so expect differences.`);
+  // Before the findings: "Time not casting" counts only the gaps most of the group didn't have.
+  markSharedGaps(you, top, spec.caster);
 
   const metrics = buildMetrics(spec, you.fight, top.map((t) => t.fight));
   const findings = buildFindings(spec, you.fight, top.map((t) => t.fight), metrics, group);

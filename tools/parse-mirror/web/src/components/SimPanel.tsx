@@ -1,8 +1,10 @@
+import { NOISE_Z } from '../../../shared/dpsGap.ts';
 import type { SimResult } from '../../../shared/types.ts';
 import { fmt, fmtSigned } from '../format.ts';
 import { game } from '../game.ts';
 import { ExecutionChart } from './ExecutionChart.tsx';
 import { LuckPanel } from './LuckPanel.tsx';
+import { PlayByAbilityPanel } from './PlayByAbility.tsx';
 import { useGroup } from '../group.ts';
 
 interface Props {
@@ -57,42 +59,51 @@ export function SimPanel({ sim, loading, progress, error, onRetry }: Props) {
             <h2>What would change your DPS?</h2>
             <p className="sub">
               Your character simmed with one thing swapped for what {G.players} had ({fmt(sim.iterations)} iterations each). Bars show the DPS gained over your own setup.
+              {sim.scenarios.some((s) => s.deltaSe !== undefined) && ' ± is the 95% range from the sims’ own randomness; a greyed-out row is within it.'}
             </p>
           </div>
           <span className="pill acc">Your setup: {fmt(base.dps)} DPS</span>
         </div>
         <div>
-          {sim.scenarios.slice(1).map((s) => (
-            <div key={s.key} className="scenario">
-              <div>
-                <div className="strong">{s.label}</div>
-                <div className="muted small">{s.description}</div>
-                {s.changes && (
-                  <details className="changes">
-                    <summary>{s.changes.length ? `What changed (${s.changes.length})` : 'Nothing to change: you already had all of it'}</summary>
-                    {s.changes.length > 0 && (
-                      <ul>
-                        {s.changes.map((c) => (
-                          <li key={c}>{c}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </details>
-                )}
+          {sim.scenarios.slice(1).map((s) => {
+            const half = s.deltaSe !== undefined ? NOISE_Z * s.deltaSe : undefined;
+            const inNoise = half !== undefined && Math.abs(s.deltaVsBaseline) <= half;
+            return (
+              <div key={s.key} className={`scenario ${inNoise ? 'in-noise' : ''}`} title={inNoise ? 'Within the sims’ own noise: not a real difference.' : undefined}>
+                <div>
+                  <div className="strong">{s.label}</div>
+                  <div className="muted small">{s.description}</div>
+                  {s.changes && (
+                    <details className="changes">
+                      <summary>{s.changes.length ? `What changed (${s.changes.length})` : 'Nothing to change: you already had all of it'}</summary>
+                      {s.changes.length > 0 && (
+                        <ul>
+                          {s.changes.map((c) => (
+                            <li key={c}>{c}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </details>
+                  )}
+                </div>
+                <div className="bar-track">
+                  <div className={`bar ${s.deltaVsBaseline < 0 ? 'neg' : ''}`} style={{ width: `${(Math.abs(s.deltaVsBaseline) / maxGain) * 100}%` }} />
+                </div>
+                <div className="num">
+                  <div className={`strong ${inNoise ? '' : s.deltaVsBaseline >= 0 ? 'tone-good' : 'tone-bad'}`}>{fmtSigned(s.deltaVsBaseline)} DPS</div>
+                  <div className="muted small">
+                    {fmtSigned((s.deltaVsBaseline / base.dps) * 100, 1)}%{half !== undefined && half >= 0.5 && <> · ±{fmt(half)}</>}
+                  </div>
+                </div>
               </div>
-              <div className="bar-track">
-                <div className={`bar ${s.deltaVsBaseline < 0 ? 'neg' : ''}`} style={{ width: `${(Math.abs(s.deltaVsBaseline) / maxGain) * 100}%` }} />
-              </div>
-              <div className="num">
-                <div className={`strong ${s.deltaVsBaseline >= 0 ? 'tone-good' : 'tone-bad'}`}>{fmtSigned(s.deltaVsBaseline)} DPS</div>
-                <div className="muted small">{fmtSigned((s.deltaVsBaseline / base.dps) * 100, 1)}%</div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 
       <ExecutionChart execution={sim.execution} />
+
+      <PlayByAbilityPanel execution={sim.execution} />
 
       {you && <LuckPanel you={you} top={sim.execution.filter((e) => e.rank)} knockOn={sim.knockOn ?? 'crit-triggered effects'} />}
 

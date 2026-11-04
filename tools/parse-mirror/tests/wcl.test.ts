@@ -65,6 +65,13 @@ test('every potion counts, simmed or not', () => {
   assert.deepEqual(found.map((c) => [c.category, c.name, c.simulated]), [['Potion', 'Fel Mana Potion', false], ['Potion', 'Something', false]]);
 });
 
+test("Adept's Elixir is found by its buff ID whatever the log calls it", () => {
+  for (const name of ["Adept's Elixir", 'Spellpower Elixir']) {
+    const found = detectConsumes({ buffs: [{ id: 33721, name }], casts: [] }).list;
+    assert.deepEqual(found.map((c) => [c.category, c.name, c.simId]), [['Battle Elixir', "Adept's Elixir", 28103]]);
+  }
+});
+
 test('both conjured items are kept', () => {
   const found = detectConsumes({ buffs: [], casts: [{ id: 1, name: 'Flame Cap' }, { id: 2, name: 'Dark Rune' }] });
   assert.deepEqual(found.conjuredIds, [22788, 12662]);

@@ -9,7 +9,9 @@ import { median, mostCommon } from '../analysis/stats.ts';
 
 import { bossArmor, buildRequest, encounterOf, environmentOf, raidAurasOf, setupFromRaw, unknownItems, type SimPlayerSetup } from './request.ts';
 import { buildEnvironment, withConsumablesFrom, withTopRaidBuffs, type SimEnvironment } from './environment.ts';
+import { abilityRows } from './abilities.ts';
 import { computeLuck, simRollRates } from './luck.ts';
+import { groupGapSe, meanSe, pairedSe } from './noise.ts';
 import { procLuck } from './procs.ts';
 import type { SimDps } from './runner.ts';
 
@@ -83,8 +85,10 @@ export async function runScenarios(
   // Results don't depend on the order (every sim has a fixed seed).
   const runLimited = limited(run, parallel);
   // A player's own kill is their length and their execute phase; "your kill time" is both of yours.
+  // Every iteration's DPS comes back too, for the noise of differences between sims (noise.ts); it
+  // isn't kept in the result.
   const sim = (player: SimPlayerSetup, env = yourEnv, duration = durationSec, fight = encounter) =>
-    runLimited(buildRequest({ spec, player, env, durationSec: duration, encounter: fight, iterations }));
+    runLimited(buildRequest({ spec, player, env, durationSec: duration, encounter: fight, iterations, allValues: true }));
 
   const scenarios: { key: string; label: string; description: string; changes?: string[]; player: SimPlayerSetup; env?: SimEnvironment }[] = [
     {
@@ -139,16 +143,19 @@ export async function runScenarios(
 
   // Execution: actual DPS vs what the sim says each player's own setup can do on their own kill
   // time, with luck worked out against that same setup.
+  const groupValues: { own?: number[]; onYourTime?: number[] }[] = [];
   const executionPromise = Promise.all(
     players.map(async (raw): Promise<SimPlayerResult> => {
       const setup = setupFromRaw(raw, spec);
       const env = envOf(raw);
       const own = await ownSims.get(raw)!;
       // The same setup on your kill time splits "setup" into gear and buffs vs kill length.
-      const [luck, onYourTime] = await Promise.all([
+      const [luck, onYourTime, yours] = await Promise.all([
         luckOf(raw, own, spec.caster, (bonus) => sim(setup, withBonusStats(env, bonus), raw.fight.durationSec, encounterOf(raw))),
         raw === you ? own : sim(setup, env, durationSec),
+        baseline,
       ]);
+      if (raw !== you) groupValues.push({ own: own.values, onYourTime: onYourTime.values });
       return {
         name: raw.fight.name,
         rank: raw.fight.rank,
@@ -160,20 +167,39 @@ export async function runScenarios(
         relativePct: 0,
         luck,
         luckAdjustedPct: own.avg ? ((raw.fight.simComparableDps - luck.luckDps) / own.avg) * 100 : 0,
+        ...(own.values
+          ? {
+              noise: {
+                simSe: meanSe(own.values) ?? 0,
+                // Your own row: both differences are of a sim with itself.
+                gearSe: raw === you ? 0 : pairedSe(yours.values, onYourTime.values),
+                killSe: raw === you ? 0 : pairedSe(onYourTime.values, own.values),
+              },
+            }
+          : {}),
+        abilities: abilityRows(raw, own.player, iterations, luck),
       };
     }),
   );
   const [scenarioSims, execution] = await Promise.all([scenarioPromise, executionPromise]);
   const baselineSim = scenarioSims[0];
-  const results: SimScenarioResult[] = scenarios.map((s, i) => ({
-    key: s.key,
-    label: s.label,
-    description: s.description,
-    changes: s.changes,
-    dps: scenarioSims[i].avg,
-    stdev: scenarioSims[i].stdev,
-    deltaVsBaseline: scenarioSims[i].avg - baselineSim.avg,
-  }));
+  // The sims' noise in the tiles' group averages goes on your row (the tiles are against you).
+  const groupSe = groupGapSe(baselineSim.values, groupValues);
+  const yourRow = execution.find((e) => !e.rank);
+  if (groupSe && yourRow?.noise) yourRow.noise.group = groupSe;
+  const results: SimScenarioResult[] = scenarios.map((s, i) => {
+    const deltaSe = i > 0 ? pairedSe(baselineSim.values, scenarioSims[i].values) : undefined;
+    return {
+      key: s.key,
+      label: s.label,
+      description: s.description,
+      changes: s.changes,
+      dps: scenarioSims[i].avg,
+      stdev: scenarioSims[i].stdev,
+      deltaVsBaseline: scenarioSims[i].avg - baselineSim.avg,
+      ...(deltaSe !== undefined ? { deltaSe } : {}),
+    };
+  });
 
   // Any systematic sim offset affects everyone equally; comparing against the top players'
   // median cancels it out. Same for the luck-adjusted version.
@@ -243,6 +269,8 @@ async function luckOf(
 
   const directRolls = direct.critDps + direct.avoidDps;
   let rollDps = directRolls;
+  // Sim noise in the parts that come from differences of sims (paired by iteration).
+  let rollSe = 0;
   if (rolled) {
     // Rating can't push past caps (spell hit, crit vs. glancing blows), so check how much of each
     // gap the sim reproduced and add the direct value of the part it couldn't.
@@ -253,8 +281,12 @@ async function luckOf(
     const avoidShare = share(before.avoidPct - after.avoidPct, avoidGap);
     const simmed = rolled.avg - base.avg + direct.critDps * (1 - critShare) + direct.avoidDps * (1 - avoidShare);
     // Knock-on effects point the same way as the rolls that cause them; if not, it's sim noise.
-    if (Math.sign(simmed) === Math.sign(directRolls) || Math.abs(directRolls) < 5) rollDps = simmed;
+    if (Math.sign(simmed) === Math.sign(directRolls) || Math.abs(directRolls) < 5) {
+      rollDps = simmed;
+      rollSe = pairedSe(base.values, rolled.values) ?? 0;
+    }
   }
+  const procSe = procced ? (pairedSe(procBase.values, procced.values) ?? 0) : 0;
   const knockOnDps = rollDps - directRolls;
   const procLuckDps = procced ? procced.avg - procBase.avg : 0;
   const luckDps = summary.directDps + knockOnDps + procLuckDps;
@@ -265,6 +297,7 @@ async function luckOf(
     knockOnDps,
     procLuckDps,
     procs: procs.procs,
+    ...(base.values ? { estimateSeDps: Math.sqrt(rollSe ** 2 + procSe ** 2) } : {}),
   };
 }
 

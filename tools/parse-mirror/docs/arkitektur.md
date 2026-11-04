@@ -76,15 +76,30 @@ web (React)  ──/api──▶  server (Express)  ──▶  Warcraft Logs v1 
    party-buffs (simmen sætter dem selv), og spillerens egne auras (`ownAuras`) bruges til
    `sim.selfProvided`. Våben-enchants: rogue-gifte er consumes, som WoWSims tager som imbue;
    shamanernes egne imbues (Windfury Weapon osv.) er klasse-spells og gives til simmen som options.
-3. **`findings.ts`** laver den rangerede liste af fund (rotation, cooldowns, consumables, gear,
+   `collect.ts` gemmer også alle huller (`allGaps`; browseren får kun de 25 længste) og bossens liv
+   over tid fra spillerens egne hits (`bossHp`, ét punkt pr. sekund, med bossen som NPC-ID, fordi
+   navnene er oversat i kinesiske og koreanske logs). `hitPoints` er en procent på
+   nogle logs og absolut på andre: med `maxHitPoints` regnes forholdet, ellers skaleres absolutte
+   tal (over 100) med det højeste, der er set på den boss.
+3. **`gaps.ts`** (`markSharedGaps`, kaldt fra `analyze.ts` før fundene) markerer hvert hul som delt
+   eller ej: delt, når mindst halvdelen af dem, der sammenlignes med, havde et hul samme sted. "Samme
+   sted" er samme bosliv (±2 %; et hul hen over et boss-skift matcher slutningen af den ene og
+   starten af den næste) eller samme tid (±2 s). Gruppens egne huller afgør, hvilken der bruges: den
+   der lægger flest af deres huller sammen. Faser og de fleste mekanikker sker ved samme liv, nogle
+   (Supremus' faseskift, Air Burst) på et ur. Dine huller sammenlignes med hele gruppen, hver
+   top-spillers med resten af gruppen. `idleShare.avoidableSec` er tiden i huller, de fleste ikke
+   havde; for casters er `avoidableDps` de sekunder ved din DPS, mens du caster (melee og hunters
+   slår videre i et hul, så der er ingen DPS). Ren funktion uden kald: `tests/gaps.test.ts`.
+4. **`findings.ts`** laver den rangerede liste af fund (rotation, cooldowns, consumables, gear,
    hit, talenter, raid buffs, kill-tid). Teksterne følger gruppen ("top players" / "players a step
-   ahead").
-4. `raid.ts`, `guild.ts` og `progress.ts` laver de billige oversigter. `raid.ts` (én spillers raid)
+   ahead"). For casters bruger "Time not casting" kun den undgåelige tid, og kun det, der er over
+   gruppens median af deres egen undgåelige tid (mindst 2 % af kampen).
+5. `raid.ts`, `guild.ts` og `progress.ts` laver de billige oversigter. `raid.ts` (én spillers raid)
    og `guild.ts` (hele raidet) bruger de samme kald pr. boss (skadetabel, combatant info,
    debuff-tabel og én event-forespørgsel), så de deles gennem cachen, plus cachede rankings og
    parses. Consumables, gear, parties og debuffs kommer fra fælles funktioner i `raidAudit.ts`. Parses matches til kills på boss og pull-tid, fordi Warcraft Logs
    kun ranker én rapport, når flere logger samme raid.
-5. `raidAudit.ts` laver officer-tjekkene på hele-raidet-siden ud fra fire kald pr. boss-kill
+6. `raidAudit.ts` laver officer-tjekkene på hele-raidet-siden ud fra fire kald pr. boss-kill
    (skadetabel, combatant info, debuff-tabel og én event-forespørgsel for drums, Vampiric
    Touch-mana og potions):
    - *Parties:* spillere samles (union-find) når de fik samme drum-brug, mana fra samme shadow
@@ -297,6 +312,19 @@ gav de samme tal; kun rankings (rang ±1) var friskere end serverens cachede.
     otte `wowsimcli`-processer på serveren (`SIM_PARALLEL`), én analyse ad gangen; hver proces
     bruger selv alle kerner.
 - **`luck.ts`** og **`procs.ts`**: held i tre dele, se [sim-noejagtighed.md](sim-noejagtighed.md).
+- **`noise.ts`**: standardfejl på sim-tal. Alle DPS-sims beder om hver iterations DPS
+  (`saveAllValues`, `SimDps.values`); to sims parres iteration for iteration (samme startværdi), så
+  `deltaSe` på what-ifs og `noise` (gear, kill-tid) på hver spiller får den lille fælles støj, og
+  `groupGapSe` giver simmens støj i flisernes gruppe-gennemsnit (`noise.group` på din række).
+  Værdierne bruges kun på serveren og gemmes ikke i resultatet. Browserens worker runder dem til
+  0,1 DPS for at holde uploaden lille (ca. 15 KB pr. sim ved 2.500 iterationer).
+- **`abilities.ts`**: pr. ability rigtig DPS på bossen, simmens DPS og casts (eller hits for Melee,
+  procs og pets), med navnene matchet som i `luck.ts`. Bruges af Play by ability.
+
+`shared/dpsGap.ts` deler forskellen til hver top-spiller i gear & buffs, kill-tid, play og held
+(`gapParts`), giver flisernes ± (`gapNoise`: kun det målte, simmens støj og held-tallenes) og deler
+Play pr. ability (`playByAbility`). Det kører i browseren, så det testes
+uden sims (`tests/dpsGap.test.ts`).
 
 ## Web-UI'et (`web/src/`)
 

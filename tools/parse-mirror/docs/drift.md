@@ -83,7 +83,8 @@ kommandolinje-simmen `bin/wowsimcli.exe` (sims på pc'ens egne kerner).
 - Byg pakken fra et committet træ med `node scripts/package-windows.mjs parse-mirror-vX.Y` (skriver
   `dist-windows/parse-mirror-windows.zip`, cirka 23 MB) og læg den på releasen som asset.
 
-Hver ændring på `main` får et nyt tredje tal i `package.json` (`0.3.1`, `0.3.2`) og sit eget afsnit i
+Hver ændring på `main` får et nyt tredje tal i `package.json` (`0.3.1`, `0.3.2`), eller et nyt andet tal ved
+en større udgivelse (`0.4.0`), og sit eget afsnit i
 [CHANGELOG.md](../CHANGELOG.md), i samme commit. Pakken følger ikke med af sig selv: **Opdater Parse
 Mirror** henter kun den nyeste release, så guildmates får ændringer, når der laves en release med
 samme nummer (`parse-mirror-v0.3.2`). Marker versionen med **Windows-pakke** i changeloggen, og tag

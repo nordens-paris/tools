@@ -1,3 +1,4 @@
+import { NOISE_Z } from '../../../shared/dpsGap.ts';
 import type { SimPlayerResult } from '../../../shared/types.ts';
 import { fmt, fmtSigned } from '../format.ts';
 import { Hint } from './Hint.tsx';
@@ -9,6 +10,8 @@ export function LuckPanel({ you, top, knockOn }: { you: SimPlayerResult; top: Si
   const l = you.luck;
   const topLuck = top.length ? top.reduce((s, t) => s + t.luck.luckPct, 0) / top.length : 0;
   const z = l.critZ;
+  // How far crit and miss rolls alone move DPS on 95% of kills like this one.
+  const chance = l.critSeDps !== undefined ? NOISE_Z * Math.hypot(l.critSeDps, l.avoidSeDps ?? 0) : undefined;
   // Spells can be partially resisted, and full resists count as misses.
   const spells = l.resistPct !== undefined;
   const showResists = l.abilities.some((a) => a.resistPct !== undefined);
@@ -60,11 +63,12 @@ export function LuckPanel({ you, top, knockOn }: { you: SimPlayerResult; top: Si
         <div className="luck-stat">
           <span className="eyebrow">
             DPS from luck
-            <Hint text="Crits, misses, resists and trinket/enchant procs compared with what the sim expects for your setup, turned into DPS. The best parses usually have +5-15%: they're each player's luckiest kill." />
+            <Hint text="Crits, misses, resists and trinket/enchant procs compared with what the sim expects for your setup, turned into DPS. The best parses usually have +5-15%: they're each player's luckiest kill. 'Chance alone' is how far crit and miss rolls by themselves move DPS on 95% of kills like this one (before knock-on effects and procs)." />
           </span>
           <span className={`v ${l.luckDps >= 0 ? 'tone-good' : 'tone-bad'}`}>{fmtSigned(l.luckDps)}</span>
           <span className="muted small">
             {fmtSigned(l.luckPct, 1)}% of your DPS
+            {chance !== undefined && <> · chance alone ±{fmt(chance)}</>}
             {parts.length > 1 && <> · {parts.map((p) => `${fmtSigned(p.v)} ${p.label}`).join(', ')}</>}
           </span>
         </div>

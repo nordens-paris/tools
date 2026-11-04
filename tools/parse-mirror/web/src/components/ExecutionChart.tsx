@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { gapParts, simScale, type GapPart } from '../../../shared/dpsGap.ts';
+import { useMemo, useState } from 'react';
+import { gapNoise, gapParts, simScale, type GapPart } from '../../../shared/dpsGap.ts';
 import type { SimPlayerResult } from '../../../shared/types.ts';
 import { downloadCsv } from '../csv.ts';
 import { fmt, fmtSigned, fmtTime } from '../format.ts';
@@ -17,7 +17,7 @@ const byRank = (a: SimPlayerResult, b: SimPlayerResult) => (a.rank ?? 0) - (b.ra
  */
 export function ExecutionChart({ execution }: { execution: SimPlayerResult[] }) {
   const [view, setView] = useState<View>('gap');
-  const rows = [...execution].sort(byRank);
+  const rows = useMemo(() => [...execution].sort(byRank), [execution]);
   const you = rows.find((e) => !e.rank);
   return (
     <section className="panel">
@@ -77,6 +77,7 @@ function GapView({ rows, you }: { rows: SimPlayerResult[]; you: SimPlayerResult 
   const [focus, setFocus] = useState<PartKey | undefined>();
   const others = rows.filter((e) => e.rank);
   const k = simScale(rows);
+  const noise = useMemo(() => gapNoise(rows, you), [rows, you]);
   const split = others.map((e) => ({ e, p: gapParts(e, you, k) }));
   const extent = Math.max(
     50,
@@ -96,15 +97,18 @@ function GapView({ rows, you }: { rows: SimPlayerResult[]; you: SimPlayerResult 
       <p className="sub">
         How much more DPS each of {G.noun} did than you ({fmt(you.actualDps)} DPS on the boss), split into four parts that add up to the real difference.
         Kill time is taken out on its own: each player is simmed on their kill time and on yours.
-        Sim numbers are scaled to the {fmt(k * 100)}% of simmed DPS the median player in {G.noun} turned into real DPS without luck, so a sim that reads high or low for everyone doesn’t count as play.
+        Sim numbers are scaled to the {fmt(k * 100)}% of simmed DPS the median player in {G.noun} turned into real DPS without luck, so a sim that reads high or low for everyone
+        doesn’t count as play. The ± on each tile is a 95% range from what is measured with noise: the sims’ own noise and the luck estimates. A greyed-out tile is within it.
       </p>
       <div className="gap-tiles">
         {PARTS.map((part) => {
           const v = avg(part.key);
+          const half = noise.parts[part.key].half;
+          const inNoise = Math.abs(v) <= half;
           return (
             <button
               key={part.key}
-              className={`luck-stat gap-tile ${focus === part.key ? 'on' : ''}`}
+              className={`luck-stat gap-tile ${focus === part.key ? 'on' : ''} ${inNoise ? 'in-noise' : ''}`}
               aria-pressed={focus === part.key}
               onClick={() => setFocus(focus === part.key ? undefined : part.key)}
             >
@@ -113,8 +117,13 @@ function GapView({ rows, you }: { rows: SimPlayerResult[]; you: SimPlayerResult 
                 {part.label}
                 <Hint text={part.hint} />
               </span>
-              <span className="v">{fmtSigned(v, 0)}</span>
-              <span className="muted small">avg DPS vs you · {Math.abs(v) < 10 ? 'about even' : MEANING[part.key][v > 0 ? 0 : 1]}</span>
+              <span className="v">
+                {fmtSigned(v, 0)}
+                {half >= 0.5 && <span className="noise-pm"> ±{fmt(half)}</span>}
+              </span>
+              <span className="muted small">
+                avg DPS vs you · {inNoise ? 'within the noise' : Math.abs(v) < 10 ? 'about even' : MEANING[part.key][v > 0 ? 0 : 1]}
+              </span>
             </button>
           );
         })}

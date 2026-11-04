@@ -15,6 +15,8 @@ export interface WclActor {
   type: string;
   icon: string;
   server?: string;
+  /** Enemies: the NPC's game ID, the same in every log language. */
+  guid?: number;
   fights: { id: number }[];
 }
 

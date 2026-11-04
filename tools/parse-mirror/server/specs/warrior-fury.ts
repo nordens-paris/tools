@@ -1,4 +1,26 @@
-import type { SpecConfig } from './types.ts';
+import type { AplListItem, SpecConfig } from './types.ts';
+
+const BLOODTHIRST = 30335;
+const EXECUTE = 25236;
+const HEROIC_STRIKE = 29707;
+
+/**
+ * The execute phase as top players play it: Execute on every GCD instead of Bloodthirst and
+ * Whirlwind, and Heroic Strike kept going. The WoWSims APL keeps Bloodthirst and Whirlwind first and
+ * stops Heroic Strike below 20%. On Rage Winterchill all top 10 Fury warriors cast Execute 22-41
+ * times a minute in the execute phase and Bloodthirst and Whirlwind almost never; the sim gives this
+ * about 1% less DPS than its own order.
+ */
+function executeLikeTopPlayers(list: AplListItem[]) {
+  const castId = (i: AplListItem) => i.action.castSpell?.spellId.spellId;
+  const at = list.findIndex((i) => castId(i) === EXECUTE);
+  const bt = list.findIndex((i) => castId(i) === BLOODTHIRST);
+  if (at > bt && bt >= 0) list.splice(bt, 0, ...list.splice(at, 1));
+  // Heroic Strike's "not in the execute phase" condition goes.
+  const hs = list.find((i) => castId(i) === HEROIC_STRIKE);
+  const and = (hs?.action.condition as { and?: { vals: unknown[] } } | undefined)?.and;
+  if (and) and.vals = and.vals.filter((v) => !JSON.stringify(v).includes('isExecutePhase'));
+}
 
 export const warriorFury: SpecConfig = {
   key: 'warrior-fury',
@@ -79,11 +101,13 @@ export const warriorFury: SpecConfig = {
     notes: [
       'Talents come from the armory when the spec there matches the log; otherwise the standard Fury build.',
       'The rotation is the WoWSims Fury APL with Recklessness on and Overpower weaving off, to match how top players play.',
+      'Below 20% the sim casts Execute instead of Bloodthirst and Whirlwind and keeps using Heroic Strike, as top players do.',
       'Recklessness makes white hits crit too, as in game (our fix to WoWSims).',
     ],
     // The default APL has Recklessness switched off and weaves Overpower (with stance swaps).
     // Top players use Recklessness and don't Overpower, so match that.
     aplGroups: { enable: ['Recklessness ON/OFF'], disable: ['Overpower Weaving'] },
+    aplEdit: executeLikeTopPlayers,
     // The APL pops Recklessness with Bloodlust on pull; real players mostly save it for later.
     knockOn: 'extra rage and Flurry',
     timedCooldowns: [{ spellId: 1719, name: 'Recklessness' }],
