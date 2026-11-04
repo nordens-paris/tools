@@ -11,7 +11,7 @@ self.wasmready = () => markReady();
 /** Only what the server's luck and diagnostics use, to keep the upload small. */
 function slim(player) {
   const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
-  const TARGET = ['casts', 'hits', 'crits', 'glances', 'misses', 'dodges', 'parries', 'damage', 'tickDamage', 'resistedHits', 'resistedCrits', 'resistedDamage', 'resistedTickDamage'];
+  const TARGET = ['casts', 'hits', 'crits', 'glances', 'misses', 'dodges', 'parries', 'damage', 'tickDamage', 'critDamage', 'glanceDamage', 'resistedHits', 'resistedCrits', 'resistedDamage', 'resistedTickDamage'];
   const actionsOf = (unit) => (unit.actions ?? []).map((a) => ({ id: a.id, targets: (a.targets ?? []).map((t) => pick(t, TARGET)) }));
   return {
     dps: { avg: player.dps.avg, stdev: player.dps.stdev },

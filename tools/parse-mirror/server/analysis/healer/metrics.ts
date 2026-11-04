@@ -435,7 +435,7 @@ export function healerDeaths(m: FightModel): HealerDeath[] {
     const before = m.hpAt(id, (last?.timestamp ?? t) - 1);
     const points = m.hpPoints(id, t - 8000, t);
     // Time from the first reading under 50% (after the last one at 50%+) to the death; 0 when
-    // the killing blow came straight from 50%+.
+    // the killing blow came straight from 50%+. Under 50% for all 8 s: at least that long.
     let secBelow50: number | undefined;
     for (let i = points.length - 1; i >= 0; i--) {
       if (points[i][1] >= 50) {
@@ -444,6 +444,7 @@ export function healerDeaths(m: FightModel): HealerDeath[] {
         break;
       }
     }
+    if (secBelow50 === undefined && points.length && points[0][0] < t) secBelow50 = (t - points[0][0]) / 1000;
     const kind: HealerDeath['kind'] = before >= 60 && (secBelow50 ?? 0) < 1.5 ? 'burst' : (secBelow50 ?? 0) < 2 ? 'fast' : 'window';
     const dmg = new Map<string, number>();
     for (const e of m.damage) {

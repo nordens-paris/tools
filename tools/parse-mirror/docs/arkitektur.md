@@ -132,8 +132,8 @@ kommer fra loggen og en sammenligning med andre healere.
    bossens melee pr. spiller (finder tanks). Ét hent dækker alle healere i raidet.
 2. **`model.ts`** (`FightModel`) bygger det fælles billede: HP over tid for alle (HP står i *procent*
    på events, for den aktør `resourceActor` peger på), maksimalt liv (store hits delt med det
-   procenttal, de tog, ellers `10 × stamina + 4000`), dødsfald (Feign Death logges som død ved fuldt
-   liv og springes over), tanks (tank-spec med en reel del af bossens melee, eller over 20 % af den,
+   procenttal, de tog, ellers klassens base-liv fra WoWSims plus `10 × stamina`), dødsfald (Feign
+   Death logges som død ved fuldt liv og springes over), tanks (tank-spec med en reel del af bossens melee, eller over 20 % af den,
    f.eks. Bloodboils Fel Rage-mål) og healere (healer-spec og mindst 5 % af raidets healing).
    Mana læses i to layouts: `amount/max/type 0/cost`, eller forskudt ét felt (`amount` = max,
    `max` = pris, `type` = nuværende), som nogle loggere skriver, også guildens.
@@ -211,7 +211,9 @@ gav de samme tal; kun rankings (rang ±1) var friskere end serverens cachede.
      DPS-analysens egne debuff-rækker, som før altid var tomme.
 2. **`specs/tanks.ts`** har threat-værdierne fra WoWSims med kildefil for hver;
    `scripts/check-threat.ts` tjekker dem mod en WoWSims-klon. Formlen er WoWSims':
-   `(skade × spellens multiplier + flat bonus) × spillerens multiplier`, kun for slag der lander.
+   `(skade × spellens multiplier + flat bonus) × spillerens multiplier`, kun for slag der lander,
+   plus 5 threat pr. rage og 0,5 pr. mana, tanken får (Bloodrage, Spiritual Attunement...), uden
+   multiplier. Healing giver ingen threat, som i WoWSims.
 3. **`metrics.ts`** regner: hvem tanken tankede (den fjende, der slog dem mest) og rollen (main ≥ 40 %
    af dens slag), effektivt liv (armor er medianen fra slagene, fordi combatant info kun har den fra
    pull'et), defense fra gear (`data/wowsims/tank-stats.json`, udtrukket fra WoWSims' database) plus
@@ -276,9 +278,9 @@ gav de samme tal; kun rankings (rang ±1) var friskere end serverens cachede.
   - *Your setup* (dit eget), *consumes* (gruppens mest brugte, byttet ind pr. kategori; flask og
     battle/guardian elixirs udelukker hinanden), *raid buffs* (det flertallet af gruppen havde; der
     fjernes aldrig noget, du havde), *gear* (rank 1's gear) og *alt det ovenstående*.
-  - *Execution:* rigtig DPS ÷ simmen af spillerens eget setup på deres egen kill-tid, skaleret så
-    gruppens median er 100 %. Hver spiller simmes også på din kill-tid, så forskellen kan deles i
-    gear & buffs, kill-tid, spil og held.
+  - *Execution:* rigtig DPS ÷ simmen af spillerens eget setup på deres egen kill (længde og, for
+    warriors, execute-fasen fra deres første Execute), skaleret så gruppens median er 100 %. Hver
+    spiller simmes også på din kill, så forskellen kan deles i gear & buffs, kill-tid, spil og held.
   - **Rækkefølge:** alle sims deler én grænse for, hvor mange der kører på én gang, og sættes i kø,
     så snart de kan: scenarierne og hver spillers egen sim med det samme, held- og kill-tid-sims
     når spillerens egen sim er tilbage. Hver sim har en fast startværdi, så rækkefølgen ændrer

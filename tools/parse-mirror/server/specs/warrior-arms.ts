@@ -26,8 +26,9 @@ export const warriorArms: SpecConfig = {
     { name: 'Sunder Armor', higherIsBetter: null },
   ],
   efficiency: [
-    { name: 'Mortal Strike', cooldownSec: 6 },
-    { name: 'Whirlwind', cooldownSec: 10 },
+    // Improved Mortal Strike: 0.2 s per point; Improved Whirlwind (Fury): 1 s per point.
+    { name: 'Mortal Strike', cooldownSec: 6, talents: [{ name: 'Improved Mortal Strike', secPerPoint: 0.2 }] },
+    { name: 'Whirlwind', cooldownSec: 10, talents: [{ name: 'Improved Whirlwind', secPerPoint: 1 }] },
   ],
   gcdAbilities: [...warriorFury.gcdAbilities, 'Sweeping Strikes'],
   cooldowns: ['Death Wish', 'Recklessness', 'Sweeping Strikes', 'Bloodrage', 'Berserker Rage', 'Blood Fury', 'Berserking', 'Haste', 'Insane Strength', 'Dire Drunkard'],
@@ -53,7 +54,7 @@ export const warriorArms: SpecConfig = {
     notes: [
       'Talents come from the armory when the spec there matches the log; otherwise the Kebab build (dual-wield Arms), or WoWSims’ two-handed Arms build for a closer tree split.',
       'The rotation is the WoWSims Arms APL with Recklessness on and Overpower weaving off, to match how top players play. With two weapons it spams Heroic Strike and uses Hamstring between Mortal Strikes; with a two-hander it weaves Slam.',
-      "In game, Recklessness also makes white hits crit; the sim doesn't. The luck analysis therefore counts some white crits during Recklessness as luck — that affects every warrior equally.",
+      'Recklessness makes white hits crit too, as in game (our fix to WoWSims).',
     ],
     // Blood Frenzy comes from your own Mortal Strikes in the sim (the talent), not as a raid debuff.
     selfProvided: ['Mortal Strike', 'Blood Frenzy'],

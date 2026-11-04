@@ -22,7 +22,8 @@ export const warriorFury: SpecConfig = {
   ],
   efficiency: [
     { name: 'Bloodthirst', cooldownSec: 6 },
-    { name: 'Whirlwind', cooldownSec: 10 },
+    // Improved Whirlwind: 1 s per point.
+    { name: 'Whirlwind', cooldownSec: 10, talents: [{ name: 'Improved Whirlwind', secPerPoint: 1 }] },
   ],
   gcdAbilities: [
     'Bloodthirst',
@@ -78,7 +79,7 @@ export const warriorFury: SpecConfig = {
     notes: [
       'Talents come from the armory when the spec there matches the log; otherwise the standard Fury build.',
       'The rotation is the WoWSims Fury APL with Recklessness on and Overpower weaving off, to match how top players play.',
-      "In game, Recklessness also makes white hits crit; the sim doesn't. The luck analysis therefore counts some white crits during Recklessness as luck — that affects every warrior equally.",
+      'Recklessness makes white hits crit too, as in game (our fix to WoWSims).',
     ],
     // The default APL has Recklessness switched off and weaves Overpower (with stance swaps).
     // Top players use Recklessness and don't Overpower, so match that.

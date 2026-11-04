@@ -27,8 +27,8 @@ export const paladinRetribution: SpecConfig = {
   ],
   efficiency: [
     { name: 'Crusader Strike', cooldownSec: 6 },
-    // Improved Judgement takes the cooldown to 8 s.
-    { name: 'Judgement', cooldownSec: 8 },
+    // Improved Judgement: 1 s per point (8 s with both).
+    { name: 'Judgement', cooldownSec: 10, talents: [{ name: 'Improved Judgement', secPerPoint: 1 }] },
   ],
   // Seal of Command's procs are logged as casts too; only the seal itself counts.
   castIds: { 'Seal of Command': 20375 },

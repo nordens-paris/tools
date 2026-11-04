@@ -26,7 +26,14 @@ export interface SpecConfig {
   /** Abilities whose casts per minute are compared. */
   trackedCasts: { name: string; higherIsBetter: boolean | null }[];
   /** Core rotational abilities with cooldowns: casts vs max possible casts. */
-  efficiency: { name: string; cooldownSec: number; /** Damage lands this long after the cast (Curse of Doom). */ delaySec?: number }[];
+  efficiency: {
+    name: string;
+    cooldownSec: number;
+    /** Damage lands this long after the cast (Curse of Doom). */
+    delaySec?: number;
+    /** Talents that take seconds off the cooldown, per point. */
+    talents?: { name: string; secPerPoint: number }[];
+  }[];
   /** Instant abilities that trigger the global cooldown (cast-time spells count from begincast). */
   gcdAbilities: string[];
   /** Channelled spells and their unhasted length in seconds (one cast event, at the start). */

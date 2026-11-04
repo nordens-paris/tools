@@ -58,11 +58,13 @@ export async function fetchTankFightLite(client: WclReader, report: string, figh
   if (!tank) throw new Error(`${name} not found in report ${report}`);
   const [s, e] = [fight.start_time, fight.end_time];
   const range = { start: s, end: e };
+  const quoted = tank.name.replace(/"/g, '\\"');
   const [taken, done, log, deaths, buffs, bossDebuffs, melee] = await Promise.all([
     client.events('damage-taken', report, s, e, { sourceid: tank.id }, FIELDS),
     client.events('damage-done', report, s, e, { sourceid: tank.id }, FIELDS),
-    // Casts and combatant info in one request; by name, as source.id doesn't work in a filter.
-    client.events('summary', report, s, e, { filter: `type="combatantinfo" or (source.name="${tank.name.replace(/"/g, '\\"')}" and type in ("cast", "begincast"))` }, FIELDS),
+    // Casts, rage and mana gains (threat) and combatant info in one request; by name, as source.id
+    // doesn't work in a filter.
+    client.events('summary', report, s, e, { filter: `type="combatantinfo" or (source.name="${quoted}" and type in ("cast", "begincast")) or (target.name="${quoted}" and type="resourcechange")` }, FIELDS),
     client.events('deaths', report, s, e, {}, FIELDS),
     client.buffs(report, s, e, tank.id),
     client.bossDebuffs(report, s, e, tank.name),
@@ -81,7 +83,7 @@ export async function fetchTankFightLite(client: WclReader, report: string, figh
     casts,
     buffs: [],
     deaths,
-    resources: [],
+    resources: log.filter((x) => x.type === 'resourcechange' && x.targetID === tank.id),
     combatants,
     healingDone: [],
     meleeTaken: melee.entries,
