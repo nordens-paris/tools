@@ -21,7 +21,7 @@ interface Job {
 /** What the browser sends back for one job: the player's metrics, or an error. */
 export interface JobOutcome {
   id: string;
-  player?: SimPlayerMetrics & { dps: { avg: number; stdev: number } };
+  player?: SimPlayerMetrics & { dps: { avg: number; stdev: number; allValues?: number[] } };
   error?: string;
 }
 
@@ -67,7 +67,8 @@ export class BrowserSims {
     const job = this.jobs.get(outcome.id);
     if (!job) return;
     this.jobs.delete(outcome.id);
-    if (outcome.player?.dps) job.resolve({ avg: outcome.player.dps.avg, stdev: outcome.player.dps.stdev, player: outcome.player });
+    const dps = outcome.player?.dps;
+    if (dps) job.resolve({ avg: dps.avg, stdev: dps.stdev, ...(Array.isArray(dps.allValues) && dps.allValues.length ? { values: dps.allValues } : {}), player: outcome.player! });
     else job.reject(new Error(`WoWSims failed: ${outcome.error ?? 'no result'}`));
   }
 

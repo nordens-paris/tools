@@ -9,6 +9,12 @@ export interface TalentPreset {
   talents: string;
 }
 
+/** One entry of a WoWSims APL priority list (the JSON as it is). */
+export interface AplListItem {
+  hide?: boolean;
+  action: { condition?: unknown; castSpell?: { spellId: { spellId?: number; tag?: number } }; [key: string]: unknown };
+}
+
 export interface SpecConfig {
   key: string;
   className: string;
@@ -119,6 +125,11 @@ export interface SpecConfig {
      */
     aplGroups?: { enable?: string[]; disable?: string[] };
     /**
+     * Change the APL's priority list in place, for rotation changes groups can't switch: e.g.
+     * moving an action up so the sim plays like top players. Runs after aplGroups.
+     */
+    aplEdit?: (priorityList: AplListItem[]) => void;
+    /**
      * Rotation spells the sim only casts when the player cast them in the log (by cast name): e.g.
      * Immolate or Siphon Life for warlocks who skip them. The APL's actions for them are switched off.
      */
@@ -146,6 +157,13 @@ export interface SpecConfig {
       /** A pet summon that shows it was used before the pull (Fire Elemental Totem): then it goes at 0 s. */
       pet?: string;
     }[];
+    /**
+     * An APL value variable holding when the rotation starts its other cooldowns (potions, on-use
+     * trinkets via autocastOtherCooldowns), set to the first time the player used any of
+     * `cooldowns` in the log, so they stack with the timed cooldowns as the player stacked them.
+     * Unset (the player used none of them) keeps the APL's own value.
+     */
+    cooldownDelay?: { variable: string; cooldowns: string[] };
     distanceFromTarget: number;
     defaultRace: { horde: string; alliance: string };
   };

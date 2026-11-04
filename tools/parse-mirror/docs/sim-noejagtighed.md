@@ -99,6 +99,115 @@ Held regnes i tre dele:
    simmes med den forskel i uptime. Item-procs fra WoWSims-databasen, enchant- og set-procs i
    hånden. Mongoose på begge våben springes over, fordi loggen slår de to buffs sammen.
 
+## Usikkerhed (`server/sim/noise.ts`, `shared/dpsGap.ts`)
+
+Alle ± i UI'et er 95 %-intervaller (1,96 standardfejl). Der er tre slags:
+
+- **What-ifs** (Sim-fanen): alle sims har `randomSeed: 1`, så iteration *i* i to sims starter med
+  de samme tilfældige tal. Forskellen regnes iteration for iteration: delta = middel(b − a),
+  standardfejl = sd(b − a) / √N. Tjekket med `wowsimcli`: samme request to gange giver præcis de
+  samme værdier, og en lille ændring (+88 spell crit på en warlock) gav sd(b − a) = 52 mod 151 for én
+  sim alene, så det parrede interval er omkring 4 gange smallere end for to uafhængige sims. Ved
+  andet gear eller en anden kill-længde følger simmene hinanden mindre (for Fury med top-spillerens
+  gear var sd(b − a) kun lidt under √2 × sd(a)), men intervallet er stadig korrekt. En Fury-kill med
+  500 og 2.000 iterationer: what-if-intervallerne gik fra ±25 til ±12,5, og deltaerne lå inden for
+  dem (raid buffs +74 og +60, rank 1-gear +344 og +333).
+- **Flisene** (Gear & buffs, Kill time, Play, Luck) er gennemsnit over gruppen. Gruppen er
+  sammenligningen, ikke en stikprøve: spørgsmålet er, hvordan du klarede dig mod netop de spillere,
+  ikke hvad en anden top 10 ville sige. Derfor kommer flisernes ± kun fra det, der er målt med støj.
+  Serveren regner simmens støj i gruppens gennemsnit parret iteration for iteration
+  (`groupGapSe`): for hver iteration gruppens gennemsnitlige forskel til dig (gear: deres setup på
+  din kill-tid − dit; kill: deres kill-tid − din; play: deres egen sim − din), og standardfejlen på
+  den. Den lægges på din række (`noise.group`) og ganges med k i browseren. Play og Luck får desuden
+  støjen i held-tallene (`estimateSeDps`, gruppens gennemsnit og dit lagt sammen i kvadrat). Gemte
+  resultater uden `noise.group` får en øvre grænse: gennemsnittet af spillernes standardfejl.
+  På warlock-killen (Kaz'rogal, 1.000 iterationer): Gear 494 ± 10, Kill 395 ± 5, Play −11 ± 17, Luck
+  167 ± 14. Med gruppe-spredningen (trukket om med tilbagelægning) var det ±111, ±78, ±114 og ±76:
+  top-spillerne er meget forskellige, og udvalgt på DPS, så play og held svinger modsat hinanden
+  (korrelation −0,71 for warlocks, −0,91 for Fury). Det siger noget om, hvor godt top 10 står for
+  "top-spillere" generelt, men ikke om sammenligningen med dem.
+- **Held:** "chance alone" er, hvor langt crits og misses alene typisk flytter DPS på en kill som
+  din: binomial-varians pr. ability (landede × p × (1 − p) for crits, forsøg × p × (1 − p) for
+  misses) gange skaden pr. crit eller pr. slag i anden, summeret, kvadratrod, delt med kill-længden.
+  Partial resists, følgevirkninger og procs er ikke med. Selve held-tallet er målt, ikke gættet,
+  så dets egen usikkerhed er kun simmens støj i følgevirknings- og proc-simmene (`estimateSeDps`),
+  typisk 3–15 DPS.
+
+Spil fra én kill har også tilfældighed, som held ikke fanger (skadesspænd, bevægelse, hvornår procs
+kommer). Den er ikke med i Play's ±, som handler om, hvor sikker sammenligningen på netop de kills
+er, ikke hvor godt én kill viser, hvordan du plejer at spille.
+
+## Play pr. ability (`server/sim/abilities.ts`, `playByAbility`)
+
+For hver ability og spiller: play = rigtig DPS − held − k × simmens DPS, som på flisen. Held er
+abilityens direkte held (crits, misses, resists) plus dens andel af resten af spillerens held
+(følgevirkninger og procs), fordelt efter rigtig skade: Flameshadow og Improved Shadow Bolt gør hver
+Shadow Bolt større, så den ekstra skade står i Shadow Bolts række, og heldet skal trækkes fra der.
+Forskellen pr. ability er gruppens gennemsnitlige play minus dit. Det, der er tilbage af en spillers
+play efter de viste abilities, er "Other": små abilities (under 2 %, nævnt ved navn) og skade simmen
+kalder noget andet. Rækkerne og Other giver præcis Play-flisen.
+
+Panelet viser ikke play-tallene selv, men hvorfor forskellen er der, som andele af simmen, der ikke
+afhænger af k: casts ÷ simmens casts og skade pr. cast (held trukket fra) ÷ simmens, dine, gruppens
+gennemsnit og gruppens laveste og højeste (over dem, hvis sim bruger abilityen). Et Curse of Doom
+mod simmens ét er 100 %. Samlet over alle abilities simmen bruger: casts = Σ casts × simmens skade
+pr. cast ÷ simmens skade, skade pr. cast = Σ (rigtig − held) ÷ Σ casts × simmens skade pr. cast.
+Ganget sammen er det rigtig DPS uden held ÷ simmens, så gruppens to tal giver omtrent k: på
+warlock-killen 95 % af casts og 100 % pr. cast, k = 96 %. k kommer altså fra casts, ikke fra skade
+pr. cast.
+
+Andelene og DPS-forskellen hænger sammen: på warlock-killen (k = 96 %) nåede du 97 % af simmens
+Shadow Bolt-casts og 98 % af skaden pr. cast, top 10 96 % og 100 %, og du var 8 DPS bagud på Shadow
+Bolt. Før stod "dit play" mod simmen i tabellen, med k i hver række: så gav ét Curse of Doom mod
+simmens ét +6, og Other fik −86 DPS af held, der ikke var trukket fra nogen række (Flameshadow oppe
+55 % af tiden mod forventet 27 %). Delingen i casts og per cast i DPS (mod simmen uden k) bruges kun
+til teksten i fundet. DoTs tæller casts (ikke ticks) og al skade (ticks med). Melee, procs og pets
+har ingen casts i loggen; der sammenlignes slag (hits og misses) i stedet. Windfury Totems ekstra
+slag er "Melee" i loggen og lægges derfor til Melee fra simmen; sappers matches på navn.
+
+Skade pr. cast kan være spil: cooldowns, trinkets og potions brugt sent eller ikke lagt sammen med
+casts, casts på adds, lavere ranks, klippede DoTs. Men den flytter sig også af buffs og debuffs,
+simmen ikke kopierer præcist, og af skadesspændet. Derfor viser panelet gruppens spænd: på
+warlock-killen lå top 10's Shadow Bolt pr. cast (held trukket fra) fra 98,2 % til 103,3 % af deres
+sims, og dine 98,3 % lå inden for.
+
+Arcane Mages på Rage Winterchill (Levmetté's top 10) lå på 104 % pr. Arcane Blast-cast
+(103-108 %). Undersøgt med `scripts/dev/ab-probe.ts`, der for hvert hit sammenligner loggens
+`unmitigatedAmount` (skaden efter spillerens egne modifiers, før crit og bossens debuffs) med
+WoWSims' `AfterAttackerMods` fra debug-loggen, delt efter Arcane Power:
+
+- **Cooldowns lagt sammen (rettet i v0.4.0).** Arcane-APL'en bruger potion og on-use trinkets ved
+  et fast 10 s ("Delay Major CDs"), mens Arcane Power bruges, når spilleren brugte den (top 10
+  omkring 22 s). Spillerne lægger Destruction Potion og trinkets oven i Arcane Power; simmen gjorde
+  ikke. Inden for Arcane Power var loggens hits 0,97-1,26 af simmens, og hos 트립 var simmens
+  grundskade under Arcane Power 8 % *lavere* end udenfor. Nu sættes "Delay Major CDs" til første
+  gang spilleren brugte Arcane Power eller Destruction Potion (`cooldownDelay` i spec'en), og
+  hits under Arcane Power ligger på 0,95-1,04 (snit 1,00).
+- **Adept's Elixir manglede (rettet i v0.4.0)** i oversatte logs: buffen (33721) hedder "Spellpower
+  Elixir" der og blev ikke genkendt på navnet. Nu findes den på ID. 24 spell power, cirka 1 % pr.
+  Arcane Blast for de spillere, der havde den.
+- **Ikke årsagen:** crit-multiplieren er ens (1,817 i både log og sim, målt hit for hit, så Spell
+  Power-talentet og Chaotic Skyfire Diamond regnes rigtigt), og Tirisfal 2pc er med (+20 %,
+  additivt med Arcane Powers +30 %, i begge). Brilliance Aura (31308, spillerens egen) flytter ikke
+  spell power. Arcane Madness (Tirisfal 4pc) er oppe på 92-96 % af hits i både log og sim.
+- **Tilbage:** på hits uden Arcane Power, potion eller trinket-procs ligger loggen 2-3 % over
+  simmen for seks af de ti (Mörti, Yeazy, Adb, 트립, Xzm, 팀탁헤), mens Levmetté, Anarim og Reglia
+  ligger på 1,00. Det svarer til cirka 40-50 spell power, simmen mangler fast. Loggens spell
+  power-tal (på casts) peger samme vej, men tæller ikke alle buffs med, så det kan ikke bruges til
+  at finde det enkelte item. Hos Mörti er Blessed Wizard Oil (+60 spell power mod undead, ikke i
+  WoWSims) cirka 2 %. Region, sprog, flask og talenter forklarer det ikke. Gættet er item-data
+  (Anniversary-stats, der afviger fra WoWSims), men det er ikke fundet.
+
+Efter de to rettelser ligger top 10 på 103 % pr. cast og du på 102 %. k (99 %) tager det samlede
+niveau, og båndet viser resten som normalt. Det rettes ikke med en faktor.
+
+Tjekket på en Fury (Rage Winterchill): Other var −70 DPS for dig (dine følgevirkninger og procs) og
++1 for gruppen. Bloodthirst 6,7 casts/min mod gruppens 7,3, som cast efficiency (64 % mod 67 %).
+Heroic Strike var den største forskel: top-spillerne bruger den oftere, end simmen af deres setup
+gør. På en Arcane Mage castede simmen Frostbolt som fyld, hvor spilleren castede Arcane Blast;
+de to rækker gik næsten lige op. Derfor fremhæves en ability kun, når Play-forskellen er uden for
+støjen.
+
 ## Armor
 
 Warcraft Logs giver hvert fysisk slag skade før armor (`unmitigatedAmount`) og hvad armor tog
@@ -148,8 +257,14 @@ er ikke afprøvet):
 
 ## Rettelser i hvordan loggen læses
 
-- **Fury:** Recklessness slået til og Overpower-weaving slået fra i APL'en; alle execute-andele
-  sat (ellers når simmen aldrig execute); potions og conjured items listet; Engineering sat for
+- **Fury:** Recklessness slået til og Overpower-weaving slået fra i APL'en. I execute-fasen
+  flyttes Execute op over Bloodthirst og Whirlwind, og Heroic Strike må bruges under 20 %
+  (`aplEdit`): på Rage Winterchill castede alle top 10 Execute 22-41 gange i minuttet i
+  execute-fasen og Bloodthirst og Whirlwind næsten aldrig (to af dem holdt Bloodthirst, én
+  Whirlwind), mens WoWSims' APL holder Bloodthirst og Whirlwind først. Simmen giver deres måde
+  cirka 1 % mindre DPS (3.520 mod 3.554 for Nuttý), men simmen skal spille som top-spillerne,
+  så Play by ability sammenligner det samme. Alle execute-andele sat (ellers når simmen aldrig
+  execute); potions og conjured items listet; Engineering sat for
   sappers. Warrior hit-cap er 8 % (WoWSims' miss mod en level 73-boss; top warriors stopper der).
 - **Arms:** top-spillerne i Anniversary kører dual-wield sværd med 33/28/0 ("Kebab"): Heroic
   Strike-spam, Mortal Strike, Whirlwind og Hamstring, ingen Slam eller Overpower. WoWSims' Arms-APL
@@ -161,6 +276,9 @@ er ikke afprøvet):
   curse og en pet ude, ofte uden Siphon Life og aldrig Immolate eller Unstable Affliction.
   WoWSims' Affliction-APL holder alle DoTs oppe, så DoTs spilleren ikke brugte, slås fra
   (`sim.onlyIfCast`). Dæmonen er den, spilleren havde ude.
+- **Destruction:** top-warlocks med Shadow Bolt caster ikke Immolate, men WoWSims' APL gør. Simmen
+  caster den kun, hvis spilleren gjorde (`sim.onlyIfCast`); fire-warlocks (Incinerate) caster den
+  altid og beholder den.
 - **Retribution:** WoWSims' APL twister Seal of Command og Seal of Blood som top-spillerne;
   Exorcism og Consecration simmes kun, hvis spilleren brugte dem. Seal of Command logger sine
   procs som casts, så kun selve seal'en tæller (`castIds`). Seal of the Martyr (Alliancens Seal of

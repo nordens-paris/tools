@@ -3,6 +3,7 @@ import { CONSUME_CATEGORIES, type AnalysisResult, type ComparisonGroup, type Fin
 import { ENCHANT_SLOTS, enchantable } from '../data/db.ts';
 import { talentPoints } from '../data/talents.ts';
 import { castLabel, type SpecConfig } from '../specs/types.ts';
+import { isShared } from './gaps.ts';
 import { median, mostCommon as mostCommonBy } from './stats.ts';
 
 const PERSONAL_RAID_BUFFS = [
@@ -77,7 +78,42 @@ export function buildFindings(
     // Casters should be casting all the time; every idle second is a lost cast.
     const idle = metrics.summary.find((m) => m.key === 'idle')!;
     const longest = you.gaps.slice(0, 3).map((g) => `${fmt(g.duration)}s at ${fmtClock(g.start)}`).join(', ');
-    if (active.you < active.median - 3) {
+    const idleShare = you.idleShare;
+    if (idleShare && idleShare.compared > 0) {
+      // Gaps most of the group had too are mechanics or movement; only the rest counts against you,
+      // and only what's more than the group's own unshared gaps (they have some too).
+      const groupAvoidable = median(top.map((p) => p.idleShare?.avoidableSec).filter((x): x is number => x !== undefined));
+      const excess = idleShare.avoidableSec - groupAvoidable;
+      const excessPct = you.durationSec ? (excess / you.durationSec) * 100 : 0;
+      const excessDps = idleShare.avoidableDps !== undefined && idleShare.avoidableSec > 0 ? (idleShare.avoidableDps * excess) / idleShare.avoidableSec : undefined;
+      const mine = you.gaps
+        .filter((g) => !isShared(g.sharedBy ?? 0, idleShare.compared))
+        .slice(0, 3)
+        .map((g) => `${fmt(g.duration)}s at ${fmtClock(g.start)}${g.bossHpStart !== undefined ? ` (boss ${fmt(g.bossHpStart, 0)}%)` : ''}`)
+        .join(', ');
+      const by = idleShare.align === 'hp' ? 'at the same boss health' : 'at the same time';
+      const sharedLine = idleShare.sharedSec >= 1 ? ` ${fmt(idleShare.sharedSec, 0)}s more were gaps most of them also had ${by} (mechanics, movement), so they don't count.` : '';
+      if (excessPct >= 2) {
+        findings.push({
+          severity: excessPct >= 5 ? 'high' : 'medium',
+          area: 'Rotation',
+          title: 'Time not casting',
+          detail:
+            `${fmt(idleShare.avoidableSec, 0)}s of your idle time was in gaps most of the ${G} didn't have, vs a median of ${fmt(groupAvoidable, 0)}s for them` +
+            `${excessDps !== undefined ? `: about ${fmt(excessDps, 0)} DPS` : ''}.` +
+            `${mine ? ` Longest: ${mine}.` : ''}${sharedLine}`,
+        });
+      } else if (you.gaps.length) {
+        findings.push({
+          severity: 'info',
+          area: 'Rotation',
+          title: 'Gaps between casts',
+          detail:
+            `Casting ${fmt(active.you, 0)}% of the fight (the ${G}: ${fmt(active.median, 0)}%). ` +
+            `Your gaps that most of them didn't have add up to ${fmt(idleShare.avoidableSec, 0)}s, about what they had (${fmt(groupAvoidable, 0)}s).${sharedLine}`,
+        });
+      }
+    } else if (active.you < active.median - 3) {
       findings.push({
         severity: active.you < active.median - 8 ? 'high' : 'medium',
         area: 'Rotation',

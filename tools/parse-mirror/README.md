@@ -63,8 +63,12 @@ raid buffs du ikke havde, Power Infusion fra en præst). Filtrér på område me
 ![Huller mellem casts](docs/billeder/04-huller.png)
 
 **Gaps between casts** viser hele kampen for dig og top 10 på samme tidsakse: grønt er tid, hvor
-du castede, rødt er huller. Noget er bevægelse og mekanik; resten er tabte casts. Dine længste
-huller står under grafen.
+du castede, og hullerne er farvet efter, om gruppen også havde dem. Et gråt hul havde mindst
+halvdelen af gruppen samme sted (en mekanik eller bevægelse); et rødt havde de fleste ikke. Hold
+musen over et hul for "Shared: 8 of 10 had a gap here" eller "Only you". "Samme sted" er samme
+bosliv, fordi faser og de fleste mekanikker sker ved samme liv, ikke samme sekund; for mekanikker
+på et ur (Supremus' faseskift, Air Burst) samme tid. **Avoidable idle** er tiden i huller, kun du
+(eller få) havde, og for casters hvad den kostede i DPS. Dine længste huller står under grafen.
 
 ![Casts pr. minut](docs/billeder/05-casts.png)
 
@@ -96,14 +100,16 @@ mange sims der er færdige, og prikken på fanen forsvinder, når den er klar.
 
 **Was it luck?** sammenligner dine crits, miss, resists og proc-uptimes med det, simmen forventer
 for præcis dit gear og dine buffs, og omregner det til DPS. De bedste parses er næsten altid
-heldige: rankings viser hver spillers *bedste* kill ud af mange.
+heldige: rankings viser hver spillers *bedste* kill ud af mange. **Chance alone** er, hvor meget
+crits og misses alene typisk flytter DPS på en kill som din: 95 % af kills ligger inden for.
 
 ![What-ifs](docs/billeder/07-whatif.png)
 
 **What would change your DPS?** simmer din karakter med én ting byttet ud ad gangen: top 10's
 consumables, deres raid buffs, rank 1's gear, og det hele samlet. "What changed" viser præcis hvad
 der blev byttet, så du ved hvad du skal skaffe. Consumables og raid buffs lægges kun til; der
-fjernes aldrig noget, du havde.
+fjernes aldrig noget, du havde. Hver what-if har et ± (fx "+120 DPS · ±25"): 95 %-intervallet fra
+simmens egen tilfældighed. En what-if inden for sit ± er grå, for den kan lige så godt være 0.
 
 ![Hvor kommer forskellen fra](docs/billeder/08-forskel.png)
 
@@ -123,7 +129,18 @@ uden held, så en sim, der rammer lidt for højt eller lavt for alle, ikke tæll
 
 Bjælker til højre for "You" er grunde til, at de lavede mere; til venstre grunde til, at de lavede
 mindre. Den tynde lodrette streg er den rigtige forskel. Klik på en af de fire bokse for at
-fremhæve den del.
+fremhæve den del. Boksene har også et ±: hvor meget af tallet kan være simmens støj og usikkerhed
+i held-tallene. En boks inden for sit ± er grå.
+
+![Play by ability](docs/billeder/34-play-ability.png)
+
+**Play by ability** (fold ud under forskellene) deler Play-boksen op pr. ability. For hver ability
+to små plots: hvor mange casts du fik af den, og hvor hårdt hvert cast ramte, begge som andel af
+simmen af dit eget setup (100 % = som simmen, held trukket fra). Prikken er dig, ringen gruppens
+gennemsnit og båndet deres laveste til højeste, så du kan se, hvad der er normalt. Sidste kolonne
+er, hvad forskellen er værd i DPS (+ = gruppen fik mere ud af den), og rækkerne plus "Other"
+lægger sig sammen til Play-boksen. Koster én ability mindst 3 % af din DPS, står den også i
+**Fix first**, fx "Bloodthirst: 120 DPS behind the top 10".
 
 ![Execution](docs/billeder/09-execution.png)
 

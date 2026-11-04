@@ -5,6 +5,7 @@ import { armoryTalents } from '../armory/talents.ts';
 import { enchantInfo, enchantable, gemInfo, itemInfo, spellName } from '../data/db.ts';
 import { talentRank } from '../data/talents.ts';
 import { closestTalentPreset } from '../sim/request.ts';
+import { bossHpTimeline, type BossHpPoint } from './gaps.ts';
 import { castLabel, type SpecConfig } from '../specs/types.ts';
 import type { WclClient } from '../wcl/client.ts';
 import type { WclActor, WclAura, WclCombatantInfo, WclEvent, WclFight, WclFightsResponse, WclTableEntry } from '../wcl/types.ts';
@@ -66,6 +67,10 @@ export interface PlayerFightRaw {
   outcomes: AbilityOutcome[];
   encounterId: number;
   encounterName: string;
+  /** Every idle gap; `fight.gaps` keeps only the 25 longest. */
+  allGaps: { start: number; duration: number }[];
+  /** The boss's health from the player's own hits, one point per second. */
+  bossHp: BossHpPoint[];
 }
 
 export interface AbilityOutcome {
@@ -81,6 +86,8 @@ export interface AbilityOutcome {
   avoided: number;
   normalAvg: number;
   critAvg: number;
+  /** The log's icon for it ("ability_meleedamage.jpg"). */
+  icon?: string;
   /** Spells only, direct hits (not DoT ticks): damage lost to partial resists, and the damage those hits would have done unresisted. */
   resists?: { resisted: number; potential: number };
 }
@@ -109,6 +116,7 @@ function outcomeOf(name: string, e: WclDamageEntry): AbilityOutcome {
       (e.hitCount && e.uses ? Math.max(0, e.uses - e.hitCount) : 0),
     normalAvg: normal?.count ? normal.total / normal.count : 0,
     critAvg: crit?.count ? crit.total / crit.count : 0,
+    ...(e.abilityIcon ? { icon: e.abilityIcon } : {}),
   };
 }
 
@@ -602,7 +610,10 @@ export async function collectPlayerFight(
 
   const totalDamage = damage.entries.reduce((sum, e) => sum + e.total, 0);
   // The sim has one target; damage on adds doesn't count when comparing with it.
-  const bosses = new Set((fights.enemies ?? []).filter((a) => a.type === 'Boss').map((a) => a.id));
+  const bossActors = (fights.enemies ?? []).filter((a) => a.type === 'Boss');
+  const bosses = new Set(bossActors.map((a) => a.id));
+  // By NPC ID, so fights in different reports (other actor IDs) and languages (localized names) line up.
+  const bossHp = bossHpTimeline(damageEvents, new Map(bossActors.map((a) => [a.id, a.guid ? `npc:${a.guid}` : a.name])), start);
   // Damage events by who did them and the ability, for each ability's outcome on the boss.
   const abilityKey = (actor: number | undefined, guid: number) => `${actor}:${guid === 1 || guid < 0 ? 1 : guid}`;
   const eventsBy = new Map<string, WclEvent[]>();
@@ -841,9 +852,12 @@ export async function collectPlayerFight(
           );
         }),
       ...pets.outcomes,
-    ].filter((o) => o.landed + o.avoided > 0),
+      // DoT-only abilities (Curse of Doom, Curse of Agony) have no hits, only ticks: keep their damage.
+    ].filter((o) => o.landed + o.avoided > 0 || o.total > 0),
     encounterId: fight.boss,
     encounterName: fight.name,
+    allGaps: gaps,
+    bossHp,
     fight: {
       name: actor.name,
       server: extra.server ?? actor.server,

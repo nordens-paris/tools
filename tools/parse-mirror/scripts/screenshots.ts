@@ -61,7 +61,7 @@ async function tab(name: string) {
 async function panel(file: string, heading: string) {
   const el = await page.evaluateHandle((h) => {
     const head = [...document.querySelectorAll('h2')].find((x) => x.textContent?.trim().startsWith(h));
-    return head?.closest('section') ?? null;
+    return head?.closest('section, details') ?? null;
   }, heading);
   const handle = el.asElement() as ElementHandle<Element> | null;
   if (!handle) throw new Error(`No panel "${heading}"`);
@@ -112,6 +112,8 @@ async function shots(page: Page) {
   await click('What changed', 'summary');
   await panel('07-whatif.png', 'What would change your DPS?');
   await panel('08-forskel.png', 'Where the DPS difference');
+  await click('Play by ability', 'summary');
+  await panel('34-play-ability.png', 'Play by ability');
   await click('Execution');
   await panel('09-execution.png', 'Where the DPS difference');
 

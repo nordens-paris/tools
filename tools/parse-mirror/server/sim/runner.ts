@@ -11,6 +11,11 @@ const TMP_DIR = path.resolve('.cache/sim');
 export interface SimDps {
   avg: number;
   stdev: number;
+  /**
+   * Every iteration's DPS, in iteration order, when the request asked for them (allValues). Two
+   * sims share their seed, so iteration i of each starts from the same random numbers (noise.ts).
+   */
+  values?: number[];
   /** Raw WoWSims player metrics (actions, auras...), for diagnostics. */
   player: SimPlayerMetrics;
 }
@@ -67,7 +72,8 @@ export async function runSim(cliPath: string, request: unknown): Promise<SimDps>
     const result = JSON.parse(await fs.readFile(outfile, 'utf8'));
     if (result.error) throw new Error(`WoWSims failed: ${String(result.error.message).split('\n')[0]}`);
     const player = result.raidMetrics.parties[0].players[0];
-    return { avg: player.dps.avg, stdev: player.dps.stdev, player };
+    const values = player.dps.allValues as number[] | undefined;
+    return { avg: player.dps.avg, stdev: player.dps.stdev, ...(values?.length ? { values } : {}), player };
   } finally {
     await Promise.all([fs.rm(infile, { force: true }), fs.rm(outfile, { force: true })]);
   }

@@ -28,7 +28,12 @@ export interface SimPlayerSetup {
   specOptions: unknown;
   aplFile: string;
   /** When Bloodlust and timed cooldowns happened in the log, in seconds (undefined = not used). */
-  timing: { bloodlustSec?: number; cooldowns: { spellId: number; atSec?: number; keepCondition?: boolean }[] };
+  timing: {
+    bloodlustSec?: number;
+    cooldowns: { spellId: number; atSec?: number; keepCondition?: boolean }[];
+    /** spec.sim.cooldownDelay: when the player first used one of its cooldowns. */
+    otherCooldownsSec?: number;
+  };
   /** Rotation spells the player never cast, which the sim skips too (spec.sim.onlyIfCast). */
   skipSpells?: number[];
   /** What the player did, for spec.sim.aplVariables: cast names and pet summons, and their own auras. */
@@ -87,8 +92,15 @@ export function setupFromRaw(raw: PlayerFightRaw, spec: SpecConfig): SimPlayerSe
         atSec: raw.fight.cooldowns.find((u) => u.name === c.name)?.times[0] ?? (c.pet && raw.fight.pets?.some((p) => p.summon === c.pet) ? 0 : undefined),
         keepCondition: c.keepCondition,
       })),
+      otherCooldownsSec: firstUse(raw, spec.sim.cooldownDelay?.cooldowns ?? []),
     },
   };
+}
+
+/** The first time the player used any of the named cooldowns in the log, in seconds. */
+function firstUse(raw: PlayerFightRaw, names: string[]): number | undefined {
+  const times = raw.fight.cooldowns.filter((u) => names.includes(u.name)).flatMap((u) => u.times.slice(0, 1));
+  return times.length ? Math.min(...times) : undefined;
 }
 
 /** Gear item IDs the sim leaves out because WoWSims doesn't have them. */
@@ -174,6 +186,9 @@ function loadRotation(spec: SpecConfig, player: SimPlayerSetup) {
     const variable = apl.valueVariables?.find((v) => v.name === name);
     if (variable) variable.value = value;
   }
+  // Potions and on-use trinkets go when the player started their cooldowns, not at the APL's fixed time.
+  const delay = spec.sim.cooldownDelay && apl.valueVariables?.find((v) => v.name === spec.sim.cooldownDelay!.variable);
+  if (delay && timing.otherCooldownsSec !== undefined) delay.value = { const: { val: `${timing.otherCooldownsSec.toFixed(1)}s` } };
   const { enable = [], disable = [] } = spec.sim.aplGroups ?? {};
   for (const item of apl.priorityList) {
     const group = item.action.groupReference?.groupName;
@@ -182,6 +197,7 @@ function loadRotation(spec: SpecConfig, player: SimPlayerSetup) {
     const spellId = item.action.castSpell?.spellId.spellId;
     if (spellId !== undefined && skipSpells.includes(spellId)) item.hide = true;
   }
+  spec.sim.aplEdit?.(apl.priorityList);
 
   // Use cooldowns when the player did. Without an APL action for it, WoWSims would use it on pull.
   const timed: { spellId: { spellId: number; tag?: number }; atSec?: number; keepCondition?: boolean }[] = timing.cooldowns.map((c) => ({
@@ -243,6 +259,8 @@ export function buildRequest(opts: {
   durationSec: number;
   encounter: { id: number; name: string; executeProportion?: number };
   iterations: number;
+  /** Return every iteration's DPS too (SimDps.values), for the noise of differences between sims. */
+  allValues?: boolean;
   /** Tank sims: the player tanks the boss, which swings like it did in the log (see sim/tank.ts). */
   tank?: BossMelee;
 }) {
@@ -329,6 +347,6 @@ export function buildRequest(opts: {
         },
       ],
     },
-    simOptions: { iterations: opts.iterations, randomSeed: 1 },
+    simOptions: { iterations: opts.iterations, randomSeed: 1, ...(opts.allValues ? { saveAllValues: true } : {}) },
   };
 }

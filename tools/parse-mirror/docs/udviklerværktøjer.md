@@ -7,7 +7,7 @@ bruger samme cache som serveren, så gentagne kørsler er gratis på Warcraft Lo
 tests og build på hver ændring (`.github/workflows/ci.yml`).
 
 Engangs-scripts ligger i `scripts/dev/` og køres derfra. Mappen hører kun til det private repo og
-kopieres ikke til guildets: `buff-list.ts`, `cd-timing.ts`, `ci-stats.ts`, `dump-request.ts`, `healer-analyze.ts`, `parse-probe.ts`, `party-probe.ts`, `pet-probe.ts`, `rage-probe.ts`, `raw-hits.ts`, `resist-check.ts`, `role-sweep.ts`, `sb-auras.ts`, `sb-gap.ts`, `sb-hits.ts`, `seal-procs.ts`, `show-detected.ts`, `show-env.ts`, `sim-timing-page.ts`, `sim-timing.ts`, `sim-vs-log.ts`, `target-probe.ts`, `temp-enchants.ts`, `totem-probe.ts`, `try-analysis.ts`, `unknown-ids.ts`, `wasm-timing.mjs`, `white-hits.ts`.
+kopieres ikke til guildets: `ab-probe.ts`, `buff-list.ts`, `cd-timing.ts`, `ci-stats.ts`, `dump-request.ts`, `healer-analyze.ts`, `parse-probe.ts`, `party-probe.ts`, `pet-probe.ts`, `rage-probe.ts`, `raw-hits.ts`, `resist-check.ts`, `role-sweep.ts`, `sb-auras.ts`, `sb-gap.ts`, `sb-hits.ts`, `seal-procs.ts`, `show-detected.ts`, `show-env.ts`, `sim-timing-page.ts`, `sim-timing.ts`, `sim-vs-log.ts`, `target-probe.ts`, `temp-enchants.ts`, `totem-probe.ts`, `try-analysis.ts`, `unknown-ids.ts`, `wasm-timing.mjs`, `white-hits.ts`.
 
 Scripts, der arbejder på tværs af mange spillere (`sim-vs-log`, `crit-unbiased`, `audit-auras`,
 `cd-timing`, `show-env`), vælger spec med `SPEC=<key>` (f.eks. `SPEC=warlock-destruction`,
@@ -81,6 +81,7 @@ Brugt til at finde konkrete fejl; beholdt som eksempler og til at gentage tjekke
 | Script | Undersøgte |
 |---|---|
 | `sb-gap.ts`, `sb-hits.ts`, `sb-auras.ts` | Shadow Bolt-skade i loggen mod simmen (Improved Shadow Bolt, spell power) |
+| `ab-probe.ts <rapport> <fight> <source> [kørsler]` | Arcane Blast pr. hit, log (`unmitigatedAmount`) mod simmens debug-log, med og uden Arcane Power, for dig og top 10: crit-multiplier, Arcane Madness og "rene" hits uden procs. `SPELL=<id>` for en anden spell |
 | `rage-probe.ts` | Rage fra modtaget skade (Death & Decay) |
 | `target-probe.ts` | Skade fordelt på mål (adds) |
 | `pet-probe.ts` | Pets og lokaliserede pet-navne |

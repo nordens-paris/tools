@@ -123,8 +123,9 @@ const OTHER_ELIXIRS: Record<string, 'Battle Elixir' | 'Guardian Elixir'> = {
 };
 
 // Elixirs whose buff is named unlike the item: buff ID -> item ID. Major Mageblood's buff is
-// "Greater Versatility" in the log.
-const ELIXIR_BUFFS: Record<number, number> = { 28509: 22840 };
+// "Greater Versatility" in the log; Adept's Elixir's is "Spellpower Elixir" in translated logs
+// (non-English clients) and "Adept's Elixir" in English ones.
+const ELIXIR_BUFFS: Record<number, number> = { 28509: 22840, 33721: 28103 };
 
 // Elixir buff names don't always match item names ("Major Agility" vs "Elixir of Major Agility").
 function findByBuffName(buffName: string, types: number[]) {
@@ -171,9 +172,10 @@ export function detectConsumes(input: ConsumeInput): DetectedConsumes {
     icon = b.icon;
     const flask = findByBuffName(b.name, [ConsumableType.Flask]);
     if (flask) add('Flask', flask.name, { simId: flask.id });
-    const battle = findByBuffName(b.name, [ConsumableType.BattleElixir]);
+    const byId = consumables.find((c) => c.id === ELIXIR_BUFFS[b.id]);
+    const battle = byId ? (byId.type === ConsumableType.BattleElixir ? byId : undefined) : findByBuffName(b.name, [ConsumableType.BattleElixir]);
     if (battle) add('Battle Elixir', battle.name, { simId: battle.id });
-    const guardian = consumables.find((c) => c.id === ELIXIR_BUFFS[b.id]) ?? findByBuffName(b.name, [ConsumableType.GuardianElixir]);
+    const guardian = byId ? (byId.type === ConsumableType.GuardianElixir ? byId : undefined) : findByBuffName(b.name, [ConsumableType.GuardianElixir]);
     if (guardian) add('Guardian Elixir', guardian.name, { simId: guardian.id });
     if (b.name === 'Scourgebane Draught' || b.name === 'Scourgebane Infusion') add('Battle Elixir', b.name);
     if (OTHER_ELIXIRS[b.name] && !battle && !guardian) add(OTHER_ELIXIRS[b.name], b.name);
