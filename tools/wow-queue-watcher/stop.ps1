@@ -6,10 +6,18 @@ $watchers = { Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='
 
 if (-not (& $watchers)) { "Watcheren koerer ikke."; exit }
 
-try {
-    Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8765/api/cmd -Body quit -TimeoutSec 5 | Out-Null
-    "Beder watcheren om at stoppe..."
-} catch { }
+# The dashboard port of every config next to this script (8765 is the default).
+$ports = @(8765)
+Get-ChildItem -Path $PSScriptRoot -Filter 'config*.toml' | ForEach-Object {
+    $m = Select-String -Path $_.FullName -Pattern '^\s*port\s*=\s*(\d+)' | Select-Object -First 1
+    if ($m) { $ports += [int]$m.Matches[0].Groups[1].Value }
+}
+foreach ($port in ($ports | Select-Object -Unique)) {
+    try {
+        Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$port/api/cmd" -Body quit -Headers @{ 'X-WQW' = '1' } -TimeoutSec 5 | Out-Null
+        "Beder watcheren om at stoppe..."
+    } catch { }
+}
 
 for ($i = 0; $i -lt 30 -and (& $watchers); $i++) { Start-Sleep 1 }
 

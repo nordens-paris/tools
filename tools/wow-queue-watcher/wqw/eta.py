@@ -3,22 +3,40 @@ divide the current position by how fast it is dropping."""
 from collections import deque
 
 
+def _far_off(pos, last):
+    """A jump no real queue makes in one look: way up (a new queue, or an OCR misread)
+    or way down (usually a dropped digit)."""
+    return pos > last * 1.2 + 50 or pos < last * 0.5 - 50
+
+
 class EtaEstimator:
     def __init__(self, window_minutes=30, min_span_minutes=5, min_samples=4):
         self.window = window_minutes * 60
         self.min_span = min_span_minutes * 60
         self.min_samples = min_samples
         self.samples = deque()
+        self.pending = None  # a far-off reading waiting for the next one to confirm it
 
     def reset(self):
         self.samples.clear()
+        self.pending = None
 
     def add(self, t, pos):
-        if self.samples and pos > self.samples[-1][1] * 1.2 + 50:
-            self.reset()  # position jumped up: this is a new queue
+        """Add a reading. Returns False if it was held back as a likely OCR glitch: a reading far
+        off the trend only counts once the next reading lands near it too."""
+        if self.samples and _far_off(pos, self.samples[-1][1]):
+            if self.pending is None or _far_off(pos, self.pending[1]):
+                self.pending = (t, pos)
+                return False
+            first = self.pending
+            if pos > self.samples[-1][1]:
+                self.samples.clear()  # confirmed jump up: this is a new queue
+            self.samples.append(first)
+        self.pending = None
         self.samples.append((t, pos))
         while self.samples and t - self.samples[0][0] > self.window:
             self.samples.popleft()
+        return True
 
     def rate_per_minute(self):
         """Positions gained per minute, or None until there is enough data."""

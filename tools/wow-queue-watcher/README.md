@@ -35,6 +35,8 @@ Dobbeltklik derefter på `start.bat`. Første gang laves `config.toml` ud fra `c
 | `start-beta.bat` | Som `start.bat`, men til betaen |
 | `stop.bat` | Stopper programmet, også hvis det kører uden vindue |
 
+**Dashboardet på telefonen:** sæt `host = "0.0.0.0"` under `[dashboard]` i `config.toml`, start programmet og åbn hele linket med `?key=...`, som vinduet viser, på telefonen (samme wifi). Uden nøglen afviser dashboardet andre enheder. Trin for trin står i vejledningen.
+
 Alle kommandoer, tjekliste til natten og fejlfinding står i [docs/Vejledning.html](docs/Vejledning.html). Tekniske detaljer (på engelsk) står i [docs/technical.md](docs/technical.md).
 
 ## Byg en release

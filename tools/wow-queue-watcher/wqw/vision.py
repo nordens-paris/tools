@@ -29,7 +29,9 @@ CLASSIFY_ORDER = [("queue", QUEUE), ("disconnected", DISCONNECTED), ("ruleset", 
                   ("login", LOGIN)]
 
 ERROR_CODE = re.compile(r"\b((?:wow|blz)\s?\d{6,8})\b", re.I)
-POSITION = re.compile(r"position\s*in\s*queue\s*[:;.]?\s*([0-9oOlI|,.\s]{1,12})", re.I)
+# The number itself: digits (or letters OCR mistakes for digits) with optional thousands
+# separators - no spaces, so a following word can't be read as more digits ("152 lost").
+POSITION = re.compile(r"position\s*in\s*queue\s*[:;.]?\s*([0-9oOlI|]+(?:[,.][0-9oOlI|]{3})*)", re.I)
 EST_TIME = re.compile(r"estimated\s*time\s*[:;.]?\s*([\s\S]{0,30})", re.I)
 
 
@@ -66,6 +68,8 @@ def _has(text_norm, keyword):
 
 
 def _parse_int(raw):
+    if not re.search(r"\d", raw):
+        return None  # only look-alike letters: a word, not a number
     fixed = raw.translate(str.maketrans({"o": "0", "O": "0", "l": "1", "I": "1", "|": "1"}))
     digits = re.sub(r"[^0-9]", "", fixed.strip().split("\n")[0])
     return int(digits) if digits else None

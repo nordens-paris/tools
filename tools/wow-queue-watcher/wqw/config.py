@@ -42,6 +42,7 @@ DEFAULTS = {
         "realm_name": "",
         "account_name": "",  # account to pick on the account screen; empty = the preselected one
         "unknown_screen_minutes": 3,  # warn me if the game sits on a screen I don't recognise this long
+        "frozen_restart_minutes": 15,  # restart a game stuck on a blank, text-free screen this long; 0 = never
         "auto_enter_world": False,
         "auto_enter_world_after_minutes": 10,
     },
@@ -90,18 +91,26 @@ def load(path):
 
 def ensure_topic(cfg, path):
     """Give the user a private random ntfy topic on first run and save it to the config.
-    Anyone who knows the topic can read the alerts and send commands, so it must be unguessable."""
+    Anyone who knows the topic can read the alerts and send commands, so it must be unguessable.
+    Returns None if a topic was already set, else whether the new one could be saved."""
     if cfg.ntfy.topic:
-        return False
+        return None
     topic = "wqw-" + secrets.token_hex(8)
-    with open(path, encoding="utf-8") as f:
-        text = f.read()
-    new, n = re.subn(r'(?m)^(topic\s*=\s*)""', rf'\g<1>"{topic}"', text, count=1)
-    if n:
+    cfg.ntfy.topic = topic
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        # An empty topic line ("" or ''), else a new line under [ntfy], else a new [ntfy] section.
+        new, n = re.subn(r'''(?m)^(\s*topic\s*=\s*)(""|'')''', rf'\g<1>"{topic}"', text, count=1)
+        if not n:
+            new, n = re.subn(r"(?m)^(\[ntfy\][^\n]*\n)", rf'\g<1>topic = "{topic}"\n', text, count=1)
+        if not n:
+            new = text.rstrip("\n") + f'\n\n[ntfy]\ntopic = "{topic}"\n'
         with open(path, "w", encoding="utf-8") as f:
             f.write(new)
-    cfg.ntfy.topic = topic
-    return True
+        return tomllib.loads(new).get("ntfy", {}).get("topic") == topic
+    except (OSError, tomllib.TOMLDecodeError):
+        return False
 
 
 # --- finding Battle.net and WoW on other people's PCs -------------------------

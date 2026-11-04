@@ -41,7 +41,8 @@ Until then it keeps the PC awake. Once the game is up, it keeps retrying while
 the servers are still down.
 
 **Dashboard:** http://localhost:8765 shows a live graph, the latest screenshot,
-an event log and the same buttons as the phone.
+an event log and the same buttons as the phone. To open it on your phone too, see
+[Dashboard on your phone](#dashboard-on-your-phone-optional-about-2-minutes).
 
 ## Phone setup (Android, about 3 minutes)
 
@@ -66,6 +67,28 @@ an event log and the same buttons as the phone.
 Sending commands: type them in the ntfy app, in the same topic the alerts
 arrive in (the text box at the bottom). The watcher's own alerts have a title and
 your messages don't, which is how it tells them apart.
+
+## Dashboard on your phone (optional, about 2 minutes)
+
+The dashboard (graph, screenshot, buttons) can also be opened on your phone while it's on
+the same Wi-Fi as the PC. Your ntfy setup above is separate and keeps working either way.
+
+1. In `config.toml`, under `[dashboard]`, set `host = "0.0.0.0"` and save.
+2. Start the watcher. Its window prints a line like
+   `Dashboard on your phone (same Wi-Fi): http://192.168.1.105:8765/?key=3f9a1c...`.
+3. If Windows Firewall asks, allow access on **private networks**.
+4. Open that **whole link** on the phone (the `?key=...` part included) and bookmark it,
+   or use *Add to Home Screen*.
+
+Without the key, other devices only get "Forbidden": that keeps housemates, guests and
+other gadgets on your Wi-Fi away from the Quit / Relaunch buttons and your ntfy topic.
+On the PC itself, http://localhost:8765 works without a key.
+
+The key comes from your ntfy topic, so it stays the same across restarts and the bookmark
+keeps working. You only need a new link if your topic changes, or if the PC gets a new IP
+address on your network (then copy the line from the watcher window again). Treat the link
+like the topic: don't share it. The dashboard uses plain `http`, so only use it on your own
+home Wi-Fi, not on public networks.
 
 ## Stopping the watcher
 
@@ -212,4 +235,4 @@ default. Turn them on with `[reconnect] enabled = true` at your own discretion.
 
 ## Screens it knows
 
-Login / logged out (Reconnect), account selection (accepts the preselected account when auto-reconnect is on, otherwise asks you), queue, ruleset (= queue done), character select, disconnects, the password screen. On any other screen it clicks nothing, and warns the phone after `unknown_screen_minutes` (default 3) with a screenshot and the text it could read.
+Login / logged out (Reconnect), account selection (accepts the preselected account when auto-reconnect is on, otherwise asks you), queue, ruleset (= queue done), character select, disconnects, the password screen. On any other screen it clicks nothing, and warns the phone after `unknown_screen_minutes` (default 3) with a screenshot and the text it could read. A blank screen with no text at all, while you're not in the queue, counts as a hung game: after `frozen_restart_minutes` (default 15, 0 = never) it restarts the game.

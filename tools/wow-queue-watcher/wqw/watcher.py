@@ -31,7 +31,11 @@ WAITING = DECISION | {V.UNKNOWN}
 HANDS_OFF = ("queue", "servers are full", "estimated", "position in")
 
 HELP = ("Commands: start (now), start 18:30, start in 45m, cancel, standby, status, ack, "
-        "enter (Enter World), reconnect (kill + relaunch), pause, resume, quit")
+        "enter (Enter World), launch (start WoW if it isn't running), reconnect (kill + relaunch), "
+        "pause, resume, quit")
+# Text-free screens in a row after character select before we believe it's the loading screen /
+# the world. One or two can be the OCR missing the text over the animated background.
+IN_GAME_STREAK = 3
 
 
 def fmt_min(m):
@@ -88,6 +92,7 @@ class Watcher:
         self.relaunches = 0
         self.gave_up = False
         self.auto_entered = False
+        self.enter_pressed = False  # Enter World was pressed by us (command or auto-enter)
         self.last_ping = 0
         self.stop_when = None  # optional callable(watcher) -> bool, used by the simulator
         self.wrong_version_alerted = False
@@ -198,10 +203,11 @@ class Watcher:
         state, reading, img = self._observe()
         prev = self.state
         if img is not None:
-            self.last_jpeg = jpeg_bytes(img)  # local dashboard only
-            # The password screen shows your email address; never push that one to the phone.
+            # The password screen shows your email address; never push it to the phone or
+            # show it on the dashboard.
             if state == V.PASSWORD:
                 img = None
+            self.last_jpeg = jpeg_bytes(img) if img is not None else None  # local dashboard only
             self.image = img
         if state != prev:
             self.state_since = now
@@ -240,7 +246,8 @@ class Watcher:
         if state == V.UNKNOWN:
             self.unknown_streak += 1
             # Text-free screen right after character select = loading screen / in the world.
-            if self.last_known == V.IN_GAME or (self.last_known == V.CHAR_SELECT and self.unknown_streak >= 2):
+            if self.last_known == V.IN_GAME or (self.last_known == V.CHAR_SELECT
+                                                and self.unknown_streak >= IN_GAME_STREAK):
                 state = V.IN_GAME
         else:
             self.unknown_streak = 0
@@ -267,6 +274,8 @@ class Watcher:
             self.queue_sessions += 1
             self.flags = {"heads_up": False, "alarm": False}
             self.est.reset()
+            # Numbers from the previous queue would drive the alarm until the new ones are read.
+            self.position = self.blizzard_eta = self.pace_eta = self.eta = self.rate = None
             self.queue_start_pos = reading.position if reading else None
             self.queue_started_at = now
             self.last_update = now
@@ -277,7 +286,7 @@ class Watcher:
         elif state in QUEUE_DONE:
             self.in_line = True
             if state == V.CHAR_SELECT:
-                self.auto_entered = False
+                self.auto_entered = self.enter_pressed = False
             if not self.queue_done_alerted:
                 # First sign that we're through: the ruleset screen usually comes before character select.
                 self.queue_done_alerted = True
@@ -295,6 +304,14 @@ class Watcher:
                 self.alarm.buttons = ("ack", "enter", "status")  # the Enter world button now makes sense
                 self.alarm.message = "You're at character select - get to the PC, or tap Enter world."
         elif state == V.IN_GAME:
+            if self.alarm.active and not self.enter_pressed:
+                # "In the world" is only inferred from text-free screenshots; it may be the OCR
+                # missing character select. Nobody answered and we didn't press Enter World, so
+                # keep the alarm ringing (and keep watching) until someone acknowledges it.
+                self._event("Looks like the world is loading, but nobody answered the alarm - keeping it on")
+                self.alarm.message = "Looks like you're in the world. Tap I'm up to stop the alarm."
+                self.alarm.buttons = ("ack", "status")
+                return
             self.alarm.clear("(in the world)")
             self.finished = True
             self.in_line = False
@@ -318,11 +335,11 @@ class Watcher:
             self.in_line = False
 
     def _on_queue(self, reading, img, now):
-        if reading.position is not None:
+        # A lone reading far off the trend is held back until the next one confirms it (OCR glitch).
+        if reading.position is not None and self.est.add(now, reading.position):
             self.position = reading.position
             if self.queue_start_pos is None:
                 self.queue_start_pos = reading.position
-            self.est.add(now, reading.position)
         if reading.blizzard_eta is not None:
             self.blizzard_eta = reading.blizzard_eta
         self.rate = self.est.rate_per_minute()
@@ -396,15 +413,15 @@ class Watcher:
             if not pt:
                 self._event(f"Account '{r.account_name}' not found on the account screen")
                 return False
-            self.src.click(*pt)
+            if self.src.click(*pt) is False:
+                return False
             self.clock.sleep(0.6)
         accept = V.find_text(reading, "Accept")
         if not accept:
             self._event("No Accept button found on the account screen")
             return False
         self._event("Accepting the account" + (f" '{r.account_name}'" if r.account_name else " (the preselected one)"))
-        self.src.click(*accept)
-        return True
+        return self.src.click(*accept) is not False
 
     def _recover(self, now, state, reading):
         r = self.cfg.reconnect
@@ -414,16 +431,23 @@ class Watcher:
             if r.auto_launch and now - self.last_launch >= r.relaunch_wait_seconds:
                 self._launch("game not running")
             return
+        if reading and any(w in reading.all_text.lower() for w in HANDS_OFF):
+            return  # looks like the queue dialog: hands off, even if the screen was misread
         if state == V.PASSWORD:
             # Started without Battle.net (or its session expired). Never type a password:
             # restart through Battle.net, which logs in with the saved session.
             if now - self.last_launch >= r.relaunch_wait_seconds:
-                self._event("Game is asking for a password - restarting it through Battle.net")
-                self.src.kill()
-                self._launch("login screen asked for a password")
+                self._restart_game("login screen asked for a password",
+                                   "Game is asking for a password - restarting it through Battle.net")
             return
-        if reading and any(w in reading.all_text.lower() for w in HANDS_OFF):
-            return  # looks like the queue dialog: hands off, even if the screen was misread
+        frozen = getattr(r, "frozen_restart_minutes", 0)
+        if (state == V.UNKNOWN and frozen and reading is not None and not reading.all_text.strip()
+                and not self.in_line and not self.queue_done_alerted
+                and now - self.state_since >= frozen * 60 and now - self.last_launch >= frozen * 60):
+            # A blank screen with no text at all for this long, while we're not in the queue:
+            # most likely a hung client.
+            self._restart_game("blank screen", f"Blank screen for {frozen}+ min - restarting the game")
+            return
         cooled = now - self.last_action >= r.action_cooldown_seconds and now - self.last_launch >= 30
         if state == V.ACCOUNT:
             if cooled and self.pick_attempts < 4:  # after 4 tries leave it to the person
@@ -443,21 +467,36 @@ class Watcher:
         if (state in TROUBLE and self.trouble_since is not None
                 and now - self.trouble_since >= r.stuck_minutes * 60
                 and now - self.last_launch >= r.stuck_minutes * 60):
-            self._event(f"Stuck on {state} for {r.stuck_minutes}+ min - restarting the game")
-            self.src.kill()
-            self._launch(f"stuck on {state}")
+            self._restart_game(f"stuck on {state}", f"Stuck on {state} for {r.stuck_minutes}+ min - restarting the game")
+
+    def _restart_game(self, reason, event, requested=False):
+        """Kill the game and launch it again. A killed game has lost its queue spot, even when the
+        screen never showed a disconnect (e.g. stuck on Connecting), so the session ends here."""
+        self._event(event)
+        lost = self.in_line
+        self.in_line = self.queue_done_alerted = False
+        if lost:
+            self.alarm.clear("(game restarted)")  # an ETA / queue-finished alarm would now be wrong
+            if not requested:
+                where = f" at queue position {self.position}" if self.position else ""
+                self.n.send("Lost the queue spot", f"Restarting WoW ({reason}) - the spot{where} is gone. "
+                            "Trying to get back in automatically.", "high", ("warning",), ("status", "reconnect"))
+        self.src.kill()
+        self._launch(reason)
 
     def _act(self, state, reading):
         r = self.cfg.reconnect
         if state == V.REALM_LIST and r.realm_name:
             if pt := V.find_text(reading, r.realm_name):
                 self._event(f"Double-clicking realm '{r.realm_name}'")
-                self.src.click(*pt, double=True)
+                if self.src.click(*pt, double=True) is False:
+                    self._event("Couldn't bring WoW to the front - didn't click")
                 return
         for label in r.click_buttons:
             if pt := V.find_text(reading, label):
                 self._event(f"Clicking '{label}'")
-                self.src.click(*pt)
+                if self.src.click(*pt) is False:
+                    self._event("Couldn't bring WoW to the front - didn't click")
                 return
         # No blind Enter: on the queue dialog Enter means Cancel. If nothing matches,
         # the stuck timer restarts the game instead.
@@ -483,14 +522,22 @@ class Watcher:
             self.n.send("Relaunching WoW", f"Reason: {reason}. Attempt {self.relaunches}.", "low", ("arrows_counterclockwise",))
         else:
             self.n.send("Launching WoW", "Starting the game through Battle.net.", "low", ("rocket",))
-        if self.src.launch() is False and not self._wrong_version_running():
+        try:
+            ok = self.src.launch()
+        except Exception:
+            # e.g. Battle.net.exe missing. Count it as a failed launch so the phone hears about it,
+            # instead of an exception the loop's error counter would quietly reset.
+            self.log.exception("Launching the game failed")
+            ok = False
+        if ok is False and not self._wrong_version_running():
             if self.launch_fail_alerted:
                 self._event("Launch failed again")
                 return
             self.launch_fail_alerted = True
             self.n.send("Couldn't start WoW from Battle.net",
                         "Neither the launch command nor the Play button worked (update pending, logged out of "
-                        "Battle.net, or the launcher is on another page). I'll keep retrying quietly.",
+                        "Battle.net, the launcher is on another page, or Battle.net.exe wasn't found - see "
+                        "the log). I'll keep retrying quietly.",
                         "high", ("warning",), ("status", "reconnect"))
 
     def _wrong_version_running(self):
@@ -512,11 +559,18 @@ class Watcher:
 
     def _auto_enter_world(self, now, state):
         r = self.cfg.reconnect
+        # "Nobody answered" = the queue-finished alert went out and nobody acknowledged it (an ack sets
+        # finished). Works with alarm_on_queue_done off too, where the alert is a plain push.
         if (state == V.CHAR_SELECT and r.enabled and r.auto_enter_world and not self.paused and not self.auto_entered
-                and self.alarm.active and now - self.state_since >= r.auto_enter_world_after_minutes * 60):
+                and self.queue_done_alerted and not self.finished
+                and now - self.state_since >= r.auto_enter_world_after_minutes * 60):
             self.auto_entered = True
             self._event("Nobody answered the alarm - entering the world to avoid the idle timeout")
-            self.src.key("enter")
+            if self.src.key("enter") is False:
+                self.auto_entered = False  # try again on the next look
+                self._event("Couldn't bring WoW to the front - didn't press Enter")
+                return
+            self.enter_pressed = True
             self.n.send("Entered the world for you",
                         "You didn't answer the alarm, so I pressed Enter World to dodge the character-select "
                         "timeout. Your character is standing AFK in the world.", "max", ("rotating_light",),
@@ -538,7 +592,9 @@ class Watcher:
         if word in ("ack", "ok", "up", "stop"):
             was = self.alarm.active
             self.alarm.clear("(acknowledged)")
-            if was and self.mode == "active" and self.queue_done_alerted and not self.finished:
+            # Through the queue, an ack means "I'm at the PC", whether or not an alarm was ringing
+            # (alarm_on_queue_done = false only sends a push).
+            if self.mode == "active" and self.queue_done_alerted and not self.finished:
                 # You're at the PC and through the queue: from here on it's your game. Without this,
                 # closing WoW yourself would look like a crash and the watcher would relaunch it.
                 self.finished = True
@@ -550,7 +606,12 @@ class Watcher:
             self.n.send("Status", self._status_text(), "default", ("bar_chart",), ("status",), self.image)
         elif word == "enter":
             if self.state == V.CHAR_SELECT:
-                self.src.key("enter")
+                if self.src.key("enter") is False:
+                    self.n.send("Couldn't press Enter World", "Windows wouldn't bring WoW to the front, so I "
+                                "didn't press anything. Try again, or do it at the PC.", "high", ("warning",),
+                                ("enter", "status"))
+                    return
+                self.enter_pressed = True
                 self.alarm.clear("(entering world)")
                 self.n.send("Pressed Enter World", "Your character is entering the world.", "default", ("door",))
             else:
@@ -558,11 +619,11 @@ class Watcher:
         elif word in ("reconnect", "relaunch", "restart"):
             self.paused = self.finished = self.gave_up = False
             self.relaunches = 0
-            self.src.kill()
             if self.mode != "active":
+                self.src.kill()
                 self._activate(f"relaunch requested from {origin}")  # also start watching again
             else:
-                self._launch(f"requested from {origin}")
+                self._restart_game(f"requested from {origin}", f"Relaunch requested from {origin}", requested=True)
         elif word == "launch":
             if not self.src.process_running():
                 self._launch(f"requested from {origin}")
@@ -606,11 +667,18 @@ class Watcher:
     # --- schedule / timing ------------------------------------------------
 
     def _sleep_until(self, t):
-        while self.running and self.clock.now() < t:
-            self.clock.sleep(min(1.0, t - self.clock.now()))
+        while self.running:
+            left = t - self.clock.now()
+            if left <= 0:
+                return
+            self.clock.sleep(min(1.0, left))
             if not self.commands.empty():
-                self._process_commands()
-                self._snapshot()
+                # Most commands arrive while we sleep; a failing one must not end the watcher.
+                try:
+                    self._process_commands()
+                    self._snapshot()
+                except Exception:
+                    self.log.exception("Error while handling a command")
 
     def _health_ping(self):
         h = self.cfg.health

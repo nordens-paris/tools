@@ -1,9 +1,13 @@
 """Local web dashboard: queue position, ETA, graph, latest screenshot, event
 timeline and the same controls as the phone."""
+import hashlib
+import hmac
+import ipaddress
 import json
+import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 PAGE = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -234,15 +238,18 @@ button,input{font:inherit;color:inherit}
 <div class="toast" id="toast"></div>
 <script>
 const $=id=>document.getElementById(id);
+// Opened from another device the page needs ?key=... (printed in the watcher window); every request carries it.
+const KEY=new URLSearchParams(location.search).get('key')||'';
+const HDRS={'X-WQW':'1','X-WQW-Key':KEY};
 const STATES={QUEUE:['In queue','gold'],CHAR_SELECT:['Character select','green'],IN_GAME:['In the world','green'],
  CONNECTING:['Connecting','blue'],DISCONNECTED:['Disconnected','red'],LOGIN:['Logged out','amber'],PASSWORD:['Needs password','red'],
  REALM_LIST:['Realm list','amber'],NO_PROCESS:['Game not running','amber'],NO_WINDOW:['Window hidden','amber'],UNKNOWN:['Reading screen','blue'],ACCOUNT:['Choose account','amber'],RULESET:['Through the queue','green']};
 let D=null,lastOk=0,hidden=new Set(),chartPts=null;
-const fm=m=>m==null?'—':m>=60?Math.floor(m/60)+'h '+String(Math.round(m%60)).padStart(2,'0')+'m':Math.max(0,Math.round(m))+' min';
+const fm=m=>{if(m==null)return'—';const r=Math.max(0,Math.round(m));return r>=60?Math.floor(r/60)+'h '+String(r%60).padStart(2,'0')+'m':r+' min'};
 const hm=t=>new Date(t*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',hour12:false});
 const nf=n=>n==null?'—':Number(n).toLocaleString();
 function toast(t){const el=$('toast');el.textContent=t;el.classList.add('show');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),2200)}
-async function cmd(c){try{await fetch('/api/cmd',{method:'POST',body:c});toast('Sent: '+c);setTimeout(load,1300);setTimeout(load,2600)}catch(e){toast('Watcher not reachable')}}
+async function cmd(c){try{const r=await fetch('/api/cmd',{method:'POST',body:c,headers:HDRS});if(!r.ok)throw new Error(r.status);toast('Sent: '+c);setTimeout(load,1300);setTimeout(load,2600)}catch(e){toast('Watcher not reachable')}}
 function send(){const i=$('cmdtext');const v=i.value.trim();if(v){cmd(v);i.value=''}}
 document.querySelectorAll('.hint').forEach(h=>h.onclick=()=>{$('cmdtext').value=h.textContent;$('cmdtext').focus()});
 document.querySelectorAll('.legend span').forEach(s=>s.onclick=()=>{const k=s.dataset.k;hidden.has(k)?hidden.delete(k):hidden.add(k);s.classList.toggle('off');D&&chart(D.samples||[])});
@@ -363,8 +370,8 @@ function tick(){
  $('dot').classList.toggle('off',age>15);$('updated').textContent=lastOk?(age>15?'Watcher not responding':'Live · updated '+Math.round(age)+'s ago'):'Connecting…';
 }
 async function load(){
- try{const d=await (await fetch('/api/state',{cache:'no-store'})).json();d._skew=d.now-Date.now()/1000;D=d;lastOk=Date.now();render(d);
-  if(d.state&&d.mode==='active'){$('shot').src='/shot.jpg?'+Date.now();$('shotTime').textContent=hm(d.now)}
+ try{const d=await (await fetch('/api/state',{cache:'no-store',headers:HDRS})).json();d._skew=d.now-Date.now()/1000;D=d;lastOk=Date.now();render(d);
+  if(d.state&&d.mode==='active'){$('shot').src='/shot.jpg?key='+encodeURIComponent(KEY)+'&t='+Date.now();$('shotTime').textContent=hm(d.now)}
   $('shotEmpty').hidden=!!d.has_shot;$('shotTime').hidden=!d.has_shot}
  catch(e){}
 }
@@ -383,7 +390,33 @@ def lan_ip():
         return socket.gethostbyname(socket.gethostname())
 
 
+def dashboard_key(topic):
+    """Key that other devices need to open the dashboard. Derived from the (secret) ntfy topic so the
+    phone's bookmark keeps working across restarts, without giving the topic itself away."""
+    return hashlib.sha256(f"wqw-dashboard:{topic}".encode()).hexdigest()[:16]
+
+
+def _host_ok(host_header):
+    """Only answer requests addressed to an IP, localhost or this PC's name. A web page using DNS
+    rebinding reaches us under its own domain name, so it gets nothing."""
+    h = (host_header or "").strip().lower()
+    if h.startswith("["):
+        h = h[1:h.find("]")]
+    elif h.count(":") == 1:
+        h = h.split(":")[0]
+    if h == "localhost":
+        return True
+    try:
+        ipaddress.ip_address(h)
+        return True
+    except ValueError:
+        pc = socket.gethostname().lower()
+        return h == pc or h.startswith(pc + ".")
+
+
 def serve(watcher, host, port, log):
+    key = dashboard_key(watcher.cfg.ntfy.topic)
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass
@@ -395,8 +428,19 @@ def serve(watcher, host, port, log):
             self.end_headers()
             self.wfile.write(body)
 
+        def _allowed(self):
+            if not _host_ok(self.headers.get("Host")):
+                return False
+            if ipaddress.ip_address(self.client_address[0]).is_loopback:
+                return True
+            given = self.headers.get("X-WQW-Key") or parse_qs(urlparse(self.path).query).get("key", [""])[0]
+            return hmac.compare_digest(given.encode(), key.encode())
+
         def do_GET(self):
             path = urlparse(self.path).path
+            if not self._allowed():
+                return self._send(403, b"Forbidden. From another device, open the dashboard link with ?key=... "
+                                  b"that the watcher window prints.", "text/plain")
             if path == "/":
                 self._send(200, PAGE.encode(), "text/html; charset=utf-8")
             elif path == "/api/state":
@@ -411,13 +455,18 @@ def serve(watcher, host, port, log):
         def do_POST(self):
             if urlparse(self.path).path != "/api/cmd":
                 return self._send(404, b"not found", "text/plain")
-            n = int(self.headers.get("Content-Length") or 0)
+            # The custom header can't be sent cross-site without a CORS preflight (which we never
+            # answer), so other web pages can't post commands here.
+            if not self._allowed() or self.headers.get("X-WQW") != "1":
+                return self._send(403, b"Forbidden", "text/plain")
+            n = min(int(self.headers.get("Content-Length") or 0), 1024)
             watcher.command(self.rfile.read(n).decode(errors="replace")[:50], "dashboard")
             self._send(200, b"ok", "text/plain")
 
     httpd = ThreadingHTTPServer((host, port), Handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     log.info("Dashboard: http://%s:%s", "localhost" if host in ("127.0.0.1", "0.0.0.0") else host, port)
-    if host == "0.0.0.0":
-        log.info("Dashboard on your phone (same Wi-Fi): http://%s:%s", lan_ip(), port)
+    if host not in ("127.0.0.1", "localhost"):
+        log.info("Dashboard on your phone (same Wi-Fi): http://%s:%s/?key=%s", lan_ip() if host == "0.0.0.0" else host,
+                 port, key)
     return httpd
