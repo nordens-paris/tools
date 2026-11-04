@@ -17,6 +17,15 @@ interface SimRates {
   resistedHits: number;
   unresistedDmg: number;
   unresistedHits: number;
+  /** Direct damage of normal hits and of crits (crits' count is `crits`), for the crit multiplier. */
+  normalDmg: number;
+  normalHits: number;
+  critDmg: number;
+}
+
+/** How much more a crit does than a normal hit in the sim (talents included), if it had both. */
+function simCritMultiplier(r: SimRates): number | undefined {
+  return r.crits && r.normalHits && r.normalDmg && r.critDmg ? r.critDmg / r.crits / (r.normalDmg / r.normalHits) : undefined;
 }
 
 /** Share of the damage partial resists took off direct hits, 0..1. */
@@ -43,7 +52,7 @@ function simRatesByName(player: SimPlayerMetrics): Map<string, SimRates> {
     const base = isWhite ? 'Melee' : a.id.otherId === 'OtherActionShoot' ? 'Auto Shot' : spellName(a.id.spellId ?? a.id.itemId ?? -1, '');
     if (!base) continue;
     const name = prefix + base;
-    const r = rates.get(name) ?? { landed: 0, crits: 0, avoided: 0, resistedDmg: 0, resistedHits: 0, unresistedDmg: 0, unresistedHits: 0 };
+    const r = rates.get(name) ?? { landed: 0, crits: 0, avoided: 0, resistedDmg: 0, resistedHits: 0, unresistedDmg: 0, unresistedHits: 0, normalDmg: 0, normalHits: 0, critDmg: 0 };
     for (const t of a.targets) {
       // WoWSims "hits" excludes crits and glancing blows; resisted hits are a subset of hits/crits.
       r.landed += (t.hits ?? 0) + (t.crits ?? 0) + (t.glances ?? 0);
@@ -55,6 +64,12 @@ function simRatesByName(player: SimPlayerMetrics): Map<string, SimRates> {
       r.resistedHits += resistedHits;
       r.unresistedDmg += (t.damage ?? 0) - (t.tickDamage ?? 0) - resistedDirect;
       r.unresistedHits += (t.hits ?? 0) + (t.crits ?? 0) - resistedHits;
+      // Older sim builds don't send crit and glance damage; then there's no multiplier.
+      if (t.critDamage !== undefined) {
+        r.critDmg += t.critDamage;
+        r.normalDmg += (t.damage ?? 0) - (t.tickDamage ?? 0) - t.critDamage - (t.glanceDamage ?? 0);
+        r.normalHits += t.hits ?? 0;
+      }
     }
     rates.set(name, r);
   }
@@ -142,8 +157,10 @@ export function computeLuck(raw: PlayerFightRaw, sim: SimPlayerMetrics): DirectL
     const expAvoid = attempts * pAvoid;
     const avgLanded = o.landed ? o.total / o.landed : 0;
     // Extra damage per extra crit: crit average minus normal average when the log has both,
-    // otherwise assume crits do double damage.
-    const perCrit = o.critAvg && o.normalAvg ? o.critAvg - o.normalAvg : avgLanded / (1 + pCrit);
+    // otherwise the normal hit times the sim's crit bonus (double damage if the sim has none).
+    const mult = simCritMultiplier(r) ?? 2;
+    const normal = o.normalAvg || (o.critAvg ? o.critAvg / mult : avgLanded / (1 + (o.crits / o.landed) * (mult - 1)));
+    const perCrit = o.critAvg && o.normalAvg ? o.critAvg - o.normalAvg : normal * (mult - 1);
     const dmgFromCrits = (o.crits - expCrits) * perCrit;
     const dmgFromAvoid = (expAvoid - o.avoided) * avgLanded;
     // Partial resists (spells): damage the sim expects resists to take off vs what they took.

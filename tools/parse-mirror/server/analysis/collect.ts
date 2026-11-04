@@ -112,6 +112,58 @@ function outcomeOf(name: string, e: WclDamageEntry): AbilityOutcome {
   };
 }
 
+/**
+ * Damage a partial resist took off one hit. The log's "resisted" is 25/50/75% of the hit's base
+ * damage (before talents, debuffs and crits), not of the damage lost. The resist applies to the
+ * final damage, so a 25% resist means the hit lost a third of what landed.
+ */
+function resistLoss(e: WclEvent): number {
+  if (typeof e.resisted !== 'number' || e.resisted <= 0 || typeof e.amount !== 'number') return 0;
+  const base = typeof e.unmitigatedAmount === 'number' && e.unmitigatedAmount > 0 ? e.unmitigatedAmount : 0;
+  const tier = base ? Math.min(0.75, Math.max(0.25, Math.round((e.resisted / base) * 4) / 4)) : 0;
+  return tier ? (e.amount * tier) / (1 - tier) : e.resisted;
+}
+
+// Warcraft Logs hit types: hit, crit, block, crit block, glancing, crushing, and partly resisted hits and crits
+// land; miss, dodge, parry, immune and full resist don't.
+const LANDED_HIT = new Set([1, 2, 4, 5, 6, 15, 16, 17]);
+const AVOIDED_HIT = new Set([0, 7, 8, 10, 14]);
+const CRIT_HIT = new Set([2, 5, 17]);
+const NORMAL_HIT = new Set([1, 16]);
+const hitTypeOf = (e: WclEvent) => (typeof e.hitType === 'number' ? e.hitType : 1);
+
+/**
+ * One ability's outcome on the given targets (the boss) only, from the damage events of whoever
+ * did it. The sim has one target, and adds (lower level, no resistances) miss, resist and crit
+ * differently, so the luck analysis only counts hits on the boss. Full spell misses have no event;
+ * those keep the table's count, scaled to the targets' share of the hits. Without events for the
+ * ability (or without targets), the table's outcome is kept.
+ */
+export function outcomeOn(o: AbilityOutcome, events: WclEvent[], targets: Set<number>): AbilityOutcome {
+  const direct = events.filter((e) => e.type === 'damage' && !e.tick);
+  if (!targets.size || !direct.length) return o;
+  const on = direct.filter((e) => targets.has(e.targetID!));
+  const landed = (xs: WclEvent[]) => xs.filter((e) => LANDED_HIT.has(hitTypeOf(e)));
+  const avoided = (xs: WclEvent[]) => xs.filter((e) => AVOIDED_HIT.has(hitTypeOf(e))).length;
+  const dmg = (e: WclEvent) => Number(e.amount ?? 0) + Number(e.absorbed ?? 0);
+  const avg = (xs: WclEvent[]) => (xs.length ? xs.reduce((s, e) => s + dmg(e), 0) / xs.length : 0);
+  const landedAll = landed(direct).length;
+  const hits = landed(on);
+  const resisted = on.reduce((s, e) => s + resistLoss(e), 0);
+  const potential = hits.reduce((s, e) => s + Number(e.amount ?? 0), 0) + resisted;
+  return {
+    ...o,
+    // DoT ticks on the targets count towards the ability's damage, as in the table.
+    total: events.filter((e) => e.type === 'damage' && targets.has(e.targetID!)).reduce((s, e) => s + dmg(e), 0),
+    landed: hits.length,
+    crits: hits.filter((e) => CRIT_HIT.has(hitTypeOf(e))).length,
+    avoided: avoided(direct) ? avoided(on) : landedAll ? Math.round((o.avoided * hits.length) / landedAll) : o.avoided,
+    normalAvg: avg(hits.filter((e) => NORMAL_HIT.has(hitTypeOf(e)))),
+    critAvg: avg(hits.filter((e) => CRIT_HIT.has(hitTypeOf(e)))),
+    ...(o.resists ? { resists: potential ? { resisted, potential } : undefined } : {}),
+  };
+}
+
 // Totem buffs aren't logged on Anniversary, and Bloodlust is raid-wide there, so it doesn't show
 // parties either. What does: Drums and Vampiric Touch mana (they only reach the user's party), and
 // party-only auras with their caster (Moonkin Aura, Battle Shout, paladin auras...). Casts before
@@ -150,9 +202,11 @@ const USUAL_TOTEMS: { name: string; id: number; icon: string; caster: boolean; e
   { name: 'Totem of Wrath', id: 30706, icon: 'spell_fire_totemofwrath', caster: true, elemental: true },
 ];
 
-// Vampiric Touch's mana (34919) and Drums of Battle / War / Greater Drums of Battle.
+// Vampiric Touch's mana (34919) and the drums: Battle, War, Greater Drums of Battle, Speed and
+// Restoration. Each reaches only the drummer's party.
 export const VAMPIRIC_TOUCH_MANA = 34919;
-const PARTY_EVENT_SPELLS = new Set([VAMPIRIC_TOUCH_MANA, 35476, 35475, 351355]);
+export const DRUM_IDS = [35476, 35475, 351355, 35477, 35478];
+const PARTY_EVENT_SPELLS = new Set([VAMPIRIC_TOUCH_MANA, ...DRUM_IDS]);
 
 async function partyMembers(
   client: WclClient,
@@ -258,8 +312,9 @@ function isbShareOfHits(events: WclEvent[], source: number): number | undefined 
   for (const rs of ratios.values()) {
     const lo = Math.min(...rs);
     const hi = Math.max(...rs);
-    // One group only: all with ISB or all without; too few hits to tell either way.
-    if (hi / lo < 1.12) return undefined;
+    // One group only (all with ISB or all without, often the few crits of a short kill): this kind
+    // can't tell, so it's left out and the other kind decides.
+    if (hi / lo < 1.12) continue;
     withIsb += rs.filter((r) => r > lo * 1.1).length;
     total += rs.length;
   }
@@ -374,6 +429,8 @@ function petsOf(
   total: number,
   owner: string,
   unmodeled: string[] = [],
+  // An ability's outcome on the boss only, by who did it (see outcomeOn).
+  onBoss: (o: AbilityOutcome, actor: number | undefined, guid: number) => AbilityOutcome = (o) => o,
 ) {
   const pets: (PetSummary & { actor?: number })[] = [];
   const outcomes: AbilityOutcome[] = [];
@@ -398,7 +455,7 @@ function petsOf(
     // Guardians the sim can't summon (an Infernal) are left out of real DPS anyway.
     if (kind === 'totem' || unmodeled.includes(spellName(e.guid, e.name))) continue;
     const prefix = kind === 'pet' || SIMMED_GUARDIANS.has(summon) ? 'Pet' : summon;
-    e.subentries.forEach((s, i) => outcomes.push({ ...outcomeOf(`${prefix}: ${abilities[i]}`, s), pet: true }));
+    e.subentries.forEach((s, i) => outcomes.push(onBoss({ ...outcomeOf(`${prefix}: ${abilities[i]}`, s), pet: true }, s.actor, s.guid)));
   }
   return { pets: pets.sort((a, b) => b.damage - a.damage), outcomes };
 }
@@ -514,16 +571,7 @@ export async function collectPlayerFight(
   const resistedBySpell = new Map<number, number>();
   for (const e of damageEvents) {
     if (e.sourceID !== source || !e.ability || e.tick || typeof e.amount !== 'number') continue;
-    // The log's "resisted" is 25/50/75% of the hit's base damage (before talents, debuffs and
-    // crits), not of the damage lost. The resist applies to the final damage, so a 25% resist
-    // means the hit lost a third of what landed.
-    let resisted = 0;
-    if (typeof e.resisted === 'number' && e.resisted > 0) {
-      const base = typeof e.unmitigatedAmount === 'number' && e.unmitigatedAmount > 0 ? e.unmitigatedAmount : 0;
-      const tier = base ? Math.min(0.75, Math.max(0.25, Math.round((e.resisted / base) * 4) / 4)) : 0;
-      resisted = tier ? (e.amount * tier) / (1 - tier) : e.resisted;
-    }
-    resistedBySpell.set(e.ability.guid, (resistedBySpell.get(e.ability.guid) ?? 0) + resisted);
+    resistedBySpell.set(e.ability.guid, (resistedBySpell.get(e.ability.guid) ?? 0) + resistLoss(e));
   }
   // Direct damage per spell (the table's hit details exclude DoT ticks), plus what was resisted.
   const resistsOf = (e: WclTableEntry & { hitdetails?: WclHitDetail[] }) => {
@@ -553,12 +601,21 @@ export async function collectPlayerFight(
   }
 
   const totalDamage = damage.entries.reduce((sum, e) => sum + e.total, 0);
-  const pets = petsOf(damage.entries, totalDamage, spec.className, spec.sim.unmodeledDamage);
+  // The sim has one target; damage on adds doesn't count when comparing with it.
+  const bosses = new Set((fights.enemies ?? []).filter((a) => a.type === 'Boss').map((a) => a.id));
+  // Damage events by who did them and the ability, for each ability's outcome on the boss.
+  const abilityKey = (actor: number | undefined, guid: number) => `${actor}:${guid === 1 || guid < 0 ? 1 : guid}`;
+  const eventsBy = new Map<string, WclEvent[]>();
+  for (const e of damageEvents) {
+    if (e.type !== 'damage' || !e.ability) continue;
+    const key = abilityKey(e.sourceID, e.ability.guid);
+    (eventsBy.get(key) ?? eventsBy.set(key, []).get(key)!).push(e);
+  }
+  const onBoss = (o: AbilityOutcome, actor: number | undefined, guid: number) => (actor === undefined ? o : outcomeOn(o, eventsBy.get(abilityKey(actor, guid)) ?? [], bosses));
+  const pets = petsOf(damage.entries, totalDamage, spec.className, spec.sim.unmodeledDamage, onBoss);
   const mainPet = pets.pets.find((p) => p.kind === 'pet');
   if (spec.petUptime && mainPet?.actor !== undefined) mainPet.uptimePct = petUptimePct(damageEvents, start, end, mainPet.actor);
   const unmodeled = damage.entries.filter((e) => spec.sim.unmodeledDamage?.includes(e.name)).reduce((sum, e) => sum + e.total, 0);
-  // The sim has one target; damage on adds doesn't count when comparing with it.
-  const bosses = new Set((fights.enemies ?? []).filter((a) => a.type === 'Boss').map((a) => a.id));
   const bossDamage = damageEvents.filter((e) => bosses.has(e.targetID!)).reduce((sum, e) => sum + Number(e.amount ?? 0) + Number(e.absorbed ?? 0), 0) || totalDamage;
   // Rage from damage taken at level 70: 2.5 rage per 274.7 damage.
   const takenTotal = taken?.entries.reduce((sum, e) => sum + e.total, 0) ?? 0;
@@ -692,12 +749,6 @@ export async function collectPlayerFight(
   gaps.sort((x, y) => y.duration - x.duration);
   const idleSec = Math.max(0, durationSec - busySec);
 
-  const abilityEfficiency = spec.efficiency.map(({ name, cooldownSec, delaySec = 0 }) => {
-    const possible = Math.max(1, Math.floor((durationSec - delaySec) / cooldownSec) + 1);
-    const used = castsByName.get(name)?.casts ?? 0;
-    return { name, pct: Math.min(100, (used / possible) * 100) };
-  });
-
   const cooldowns: CooldownUse[] = spec.cooldowns
     .map((name) => {
       const uses = castList.filter((c) => c.name === name);
@@ -737,6 +788,13 @@ export async function collectPlayerFight(
 
   const hit = hitChance(spec, combatant, talents, buffs);
   const expertise = expertiseOf(spec, combatant, talents, raceProto);
+  // Casts vs the most the cooldown allows, with talents that shorten it (Improved Whirlwind...).
+  const abilityEfficiency = spec.efficiency.map(({ name, cooldownSec, delaySec = 0, talents: cdTalents = [] }) => {
+    const cooldown = Math.max(1, cooldownSec - cdTalents.reduce((s, t) => s + talentRank(spec.className, talents, t.name) * t.secPerPoint, 0));
+    const possible = Math.max(1, Math.floor((durationSec - delaySec) / cooldown) + 1);
+    const used = castsByName.get(name)?.casts ?? 0;
+    return { name, pct: Math.min(100, (used / possible) * 100) };
+  });
   // Power Infusion is cast speed, so it only matters (and is only measured) for casters.
   const powerInfusion = spec.caster ? powerInfusionGain(buffsTable.auras, damageEvents, source, durationSec) : undefined;
 
@@ -773,9 +831,13 @@ export async function collectPlayerFight(
           // An ability the player shares with pets (a hunter's and their Snake Trap snakes' Melee) is
           // one entry split by actor: the player's part is theirs, the rest are pet hits.
           const parts = (e as { subentries?: (WclDamageEntry & { actor?: number; actorName?: string })[] }).subentries;
-          if (!parts?.length) return [{ ...outcomeOf(name, e), ...(spec.caster ? { resists: resistsOf(e) } : {}) }];
+          if (!parts?.length) return [onBoss({ ...outcomeOf(name, e), ...(spec.caster ? { resists: resistsOf(e) } : {}) }, source, e.guid)];
           return parts.map((p) =>
-            p.actor === source ? { ...outcomeOf(name, p), ...(spec.caster ? { resists: resistsOf(p) } : {}) } : { ...outcomeOf(`${p.actorName ?? 'Pet'}: ${name}`, p), pet: true },
+            onBoss(
+              p.actor === source ? { ...outcomeOf(name, p), ...(spec.caster ? { resists: resistsOf(p) } : {}) } : { ...outcomeOf(`${p.actorName ?? 'Pet'}: ${name}`, p), pet: true },
+              p.actor,
+              p.guid ?? e.guid,
+            ),
           );
         }),
       ...pets.outcomes,

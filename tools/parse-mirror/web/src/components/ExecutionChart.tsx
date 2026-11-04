@@ -65,7 +65,7 @@ const MEANING: Record<string, [string, string]> = {
 
 const PARTS = [
   { key: 'gear', label: 'Gear & buffs', cls: 'gear', hint: 'What the sim says their gear, talents, consumes and raid buffs (Power Infusion included) are worth over yours, on your kill time.' },
-  { key: 'kill', label: 'Kill time', cls: 'kill', hint: 'How much their kill length changes the sim’s number. On a short kill, cooldowns, trinkets and Bloodlust cover more of the fight, so DPS is higher.' },
+  { key: 'kill', label: 'Kill time', cls: 'kill', hint: 'How much their kill length (and, for warriors, how much of it was the execute phase) changes the sim’s number. On a short kill, cooldowns, trinkets and Bloodlust cover more of the fight, so DPS is higher.' },
   { key: 'play', label: 'Play', cls: 'play', hint: 'How much more of their setup’s simmed DPS they turned into real DPS than you did, with luck taken out.' },
   { key: 'luck', label: 'Luck', cls: 'luck', hint: 'Their crits, hits, resists and procs compared with average, minus yours.' },
 ] as const;

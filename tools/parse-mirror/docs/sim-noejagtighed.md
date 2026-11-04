@@ -90,7 +90,8 @@ Arcane mages har det samme, bare større, fordi et kort kill har færre Arcane B
 Held regnes i tre dele:
 
 1. **Direkte:** spillerens crits, miss/dodge/parry og (for spells) partial resists pr. ability mod
-   det, simmen forventer for præcis det setup, omregnet til DPS og en z-score.
+   det, simmen forventer for præcis det setup, omregnet til DPS og en z-score. Kun slag på bossen
+   tæller (fra skade-events), ligesom i execution: adds har lavere level og ruller anderledes.
 2. **Følgevirkninger:** simmen køres igen med crit og hit sat, så den ruller som spilleren gjorde.
    Det tæller det, rullene giver videre: rage og Flurry for warriors, egne Improved Shadow
    Bolt-procs for warlocks. I praksis lille.
@@ -142,6 +143,8 @@ er ikke afprøvet):
   over, så simmen resisterede 13,7 % af spells i stedet for ~18 %. Over 267 warlock-kills tog
   partial resists 5,8 % af den direkte skade i virkeligheden; den rettede sim forventer 6,0 %
   (urettet 4,5 %).
+- **Improved Mortal Strike** gav ingen kortere cooldown med 1–4 point: `time.Duration(0.2*n)` blev
+  rundet ned til 0. Nu 200 ms pr. point. Standard-buildsene tager den ikke, men armory-builds kan.
 
 ## Rettelser i hvordan loggen læses
 

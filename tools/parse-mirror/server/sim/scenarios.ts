@@ -82,8 +82,9 @@ export async function runScenarios(
   // and each player's own sim right away, luck and kill-time sims once that player's sim is back.
   // Results don't depend on the order (every sim has a fixed seed).
   const runLimited = limited(run, parallel);
-  const sim = (player: SimPlayerSetup, env = yourEnv, duration = durationSec) =>
-    runLimited(buildRequest({ spec, player, env, durationSec: duration, encounter, iterations }));
+  // A player's own kill is their length and their execute phase; "your kill time" is both of yours.
+  const sim = (player: SimPlayerSetup, env = yourEnv, duration = durationSec, fight = encounter) =>
+    runLimited(buildRequest({ spec, player, env, durationSec: duration, encounter: fight, iterations }));
 
   const scenarios: { key: string; label: string; description: string; changes?: string[]; player: SimPlayerSetup; env?: SimEnvironment }[] = [
     {
@@ -133,7 +134,7 @@ export async function runScenarios(
   log(`Simming ${scenarios.length} scenarios, and execution and luck for ${players.length} players`);
   const baseline = sim(yourSetup);
   // Players' own sims go first: their luck sims can only start once those are back.
-  const ownSims = new Map(players.map((raw) => [raw, raw === you ? baseline : sim(setupFromRaw(raw, spec), envOf(raw), raw.fight.durationSec)]));
+  const ownSims = new Map(players.map((raw) => [raw, raw === you ? baseline : sim(setupFromRaw(raw, spec), envOf(raw), raw.fight.durationSec, encounterOf(raw))]));
   const scenarioPromise = Promise.all(scenarios.map((s, i) => (i === 0 ? baseline : sim(s.player, s.env))));
 
   // Execution: actual DPS vs what the sim says each player's own setup can do on their own kill
@@ -145,7 +146,7 @@ export async function runScenarios(
       const own = await ownSims.get(raw)!;
       // The same setup on your kill time splits "setup" into gear and buffs vs kill length.
       const [luck, onYourTime] = await Promise.all([
-        luckOf(raw, own, spec.caster, (bonus) => sim(setup, withBonusStats(env, bonus), raw.fight.durationSec)),
+        luckOf(raw, own, spec.caster, (bonus) => sim(setup, withBonusStats(env, bonus), raw.fight.durationSec, encounterOf(raw))),
         raw === you ? own : sim(setup, env, durationSec),
       ]);
       return {
@@ -205,8 +206,12 @@ export async function runScenarios(
 }
 
 function withBonusStats(env: SimEnvironment, bonus: Record<number, number>): SimEnvironment {
-  const out = structuredClone(env);
-  for (const [idx, value] of Object.entries(bonus)) out.bonusStats[Number(idx)] = (out.bonusStats[Number(idx)] ?? 0) + value;
+  return { ...structuredClone(env), bonusStats: addStats(env.bonusStats, bonus) };
+}
+
+function addStats(a: Record<number, number>, b: Record<number, number>): Record<number, number> {
+  const out = { ...a };
+  for (const [idx, value] of Object.entries(b)) out[Number(idx)] = (out[Number(idx)] ?? 0) + value;
   return out;
 }
 
@@ -215,6 +220,8 @@ function withBonusStats(env: SimEnvironment, bonus: Record<number, number>): Sim
  * Knock-on: the sim again with crit and hit rating set so it rolls like the player did, which also
  * counts what those rolls feed (rage and Flurry for warriors, the player's own Improved Shadow Bolt
  * procs...). Procs: the sim again with trinket/enchant proc stats for the extra (or missing) uptime.
+ * Proc uptimes are measured against the re-rolled sim when there is one: more crits already give
+ * more on-crit procs there, so those aren't counted twice.
  */
 async function luckOf(
   raw: PlayerFightRaw,
@@ -227,15 +234,12 @@ async function luckOf(
   const roll = ROLL_STATS[caster ? 'caster' : 'melee'];
   const critGap = summary.critPct - summary.expectedCritPct;
   const avoidGap = summary.expectedAvoidPct - summary.avoidPct;
-  const procs = procLuck(raw, base.player);
-
-  const [rolled, procced] = await Promise.all([
-    // Small gaps are within the sims' own noise; the direct estimate is better there.
-    Math.abs(critGap) >= 0.5 || Math.abs(avoidGap) >= 0.5
-      ? simWith({ [roll.crit.stat]: critGap * roll.crit.perPct, [roll.hit.stat]: avoidGap * roll.hit.perPct })
-      : undefined,
-    Object.keys(procs.bonusStats).length ? simWith(procs.bonusStats) : undefined,
-  ]);
+  // Small gaps are within the sims' own noise; the direct estimate is better there.
+  const rollBonus = Math.abs(critGap) >= 0.5 || Math.abs(avoidGap) >= 0.5 ? { [roll.crit.stat]: critGap * roll.crit.perPct, [roll.hit.stat]: avoidGap * roll.hit.perPct } : undefined;
+  const rolled = rollBonus ? await simWith(rollBonus) : undefined;
+  const procBase = rolled ?? base;
+  const procs = procLuck(raw, procBase.player);
+  const procced = Object.keys(procs.bonusStats).length ? await simWith(addStats(rollBonus ?? {}, procs.bonusStats)) : undefined;
 
   const directRolls = direct.critDps + direct.avoidDps;
   let rollDps = directRolls;
@@ -252,7 +256,7 @@ async function luckOf(
     if (Math.sign(simmed) === Math.sign(directRolls) || Math.abs(directRolls) < 5) rollDps = simmed;
   }
   const knockOnDps = rollDps - directRolls;
-  const procLuckDps = procced ? procced.avg - base.avg : 0;
+  const procLuckDps = procced ? procced.avg - procBase.avg : 0;
   const luckDps = summary.directDps + knockOnDps + procLuckDps;
   return {
     ...summary,
@@ -266,7 +270,8 @@ async function luckOf(
 
 /**
  * Your consumes with the top players' choices swapped in per category (and their engineering
- * items/scrolls added). Categories they don't use keep yours, so the sim only gains.
+ * items/scrolls added). Categories they don't use keep yours. A swap can still lose DPS (their
+ * elixirs for your flask, say); the what-if then shows a loss.
  */
 const ELIXIRS: ConsumeUse['category'][] = ['Battle Elixir', 'Guardian Elixir'];
 

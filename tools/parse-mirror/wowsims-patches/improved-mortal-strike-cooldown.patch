@@ -1,0 +1,14 @@
+diff --git a/sim/warrior/talents_arms.go b/sim/warrior/talents_arms.go
+index 958909640..f810aa54b 100644
+--- a/sim/warrior/talents_arms.go
++++ b/sim/warrior/talents_arms.go
+@@ -564,7 +564,8 @@ func (war *Warrior) registerImprovedMortalStrike() {
+ 	war.AddStaticMod(core.SpellModConfig{
+ 		ClassMask: SpellMaskMortalStrike,
+ 		Kind:      core.SpellMod_Cooldown_Flat,
+-		TimeValue: -time.Second * time.Duration(0.2*float64(war.Talents.ImprovedMortalStrike)),
++		// 0.2 s per point; time.Duration(0.2*n) truncated to 0 for 1-4 points.
++		TimeValue: -time.Millisecond * time.Duration(200*war.Talents.ImprovedMortalStrike),
+ 	})
+ 
+ 	war.AddStaticMod(core.SpellModConfig{

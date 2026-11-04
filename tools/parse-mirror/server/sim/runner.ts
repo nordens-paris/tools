@@ -30,6 +30,8 @@ export interface SimPlayerMetrics {
       parries?: number;
       damage?: number;
       tickDamage?: number;
+      critDamage?: number;
+      glanceDamage?: number;
       resistedHits?: number;
       resistedCrits?: number;
       resistedDamage?: number;

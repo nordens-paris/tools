@@ -10,7 +10,7 @@ import { specForIcon, specNameFor } from '../specs/index.ts';
 import type { WclClient } from '../wcl/client.ts';
 import type { WclActor, WclCombatantInfo, WclEvent, WclFight } from '../wcl/types.ts';
 import { IMPROVED_SHADOW_BOLT_IDS } from '../sim/environment.ts';
-import { PARTY_AURAS, VAMPIRIC_TOUCH_MANA, WCL_SLOTS } from './collect.ts';
+import { DRUM_IDS as DRUMS, PARTY_AURAS, VAMPIRIC_TOUCH_MANA, WCL_SLOTS } from './collect.ts';
 
 type Info = WclCombatantInfo & { sourceID: number };
 
@@ -88,7 +88,6 @@ export function hasTotemOfWrath(player: WclActor, actors: WclActor[], infos: Inf
   return groups.some((g) => g.members.includes(player.id) && g.members.some(elemental));
 }
 
-const DRUMS = [35476, 35475, 351355, 35477, 35478];
 // Potions (cast spell IDs) and the runes that share their purpose.
 const POTIONS = Object.keys(POTION_INFO).map(Number);
 const RUNES = [27869, 16666];
@@ -350,7 +349,9 @@ function hitShort(icon: string, info: Info, totemOfWrath: boolean): string | und
   for (const t of spec.hit.talents) pct += talentRank(spec.className, talents, t.name) * t.pctPerPoint;
   const auras = (info.auras ?? []).map((a) => spellName(a.ability, a.name ?? ''));
   if (auras.includes('Heroic Presence') || (spec.caster && auras.includes('Inspiring Presence'))) pct += 1;
-  if (spec.caster && totemOfWrath) pct += 3;
+  // An Elemental's own Totem of Wrath is already in their talents above.
+  const tow = spec.caster && totemOfWrath && !spec.hit.talents.some((t) => t.name === 'Totem of Wrath');
+  if (tow) pct += 3;
   if (pct >= spec.hit.capPct - 1) return undefined;
-  return `Hit ${pct.toFixed(1)}% of ${spec.hit.capPct}%${spec.caster && totemOfWrath ? ' (with Totem of Wrath)' : ''}`;
+  return `Hit ${pct.toFixed(1)}% of ${spec.hit.capPct}%${tow ? ' (with Totem of Wrath)' : ''}`;
 }

@@ -17,6 +17,20 @@ const OUTCOME: Record<number, TankOpenerAction['outcome']> = { 0: 'miss', 1: 'hi
 /** The opener window, in seconds. */
 const OPENER_SEC = 10;
 const GCD_SEC = 1.5;
+/** Resource types on resourcechange events, and the threat a point of each gives (core/rage.go, core/mana.go). */
+const MANA = 0;
+const RAGE = 1;
+const THREAT_PER_RAGE = 5;
+const THREAT_PER_MANA = 0.5;
+const VAMPIRIC_TOUCH_MANA = 34919;
+
+/** One thing that made threat; `cast` has no target (counts on whoever they tanked), `resource` is a rage or mana gain. */
+interface ThreatEvent {
+  e: LogEvent;
+  threat: number;
+  cast?: boolean;
+  resource?: boolean;
+}
 
 /** Armor's damage reduction against a level 73 boss: armor / (armor + 467.5 × 73 − 22167.5), capped at 75%. */
 export const armorReduction = (armor: number) => Math.min(0.75, armor / (armor + 467.5 * 73 - 22167.5));
@@ -187,7 +201,7 @@ export function tankMetrics(data: TankFightData, model = new FightModel(data.rai
   };
   const damaging = new Set<string>();
   // Every threat event, for the opener and the threat on the enemy they tanked.
-  const threatEvents: { e: LogEvent; threat: number; cast?: boolean }[] = [];
+  const threatEvents: ThreatEvent[] = [];
   for (const e of data.done as LogEvent[]) {
     if (e.type !== 'damage' || !e.ability || (e.targetID !== undefined && model.players.has(e.targetID))) continue;
     damaging.add(e.ability.name);
@@ -209,6 +223,17 @@ export function tankMetrics(data: TankFightData, model = new FightModel(data.rai
     const threat = rule.flat * unitMult(e.timestamp);
     addThreat(e.ability!.name, e.ability!.abilityIcon, e.timestamp, threat);
     threatEvents.push({ e, threat, cast: true });
+  }
+  // Rage and mana gained (Bloodrage, Primal Fury, Spiritual Attunement, potions): 5 threat per rage
+  // and 0.5 per mana, with no stance or form multiplier, as in WoWSims. Vampiric Touch's mana is the
+  // priest's threat. Healing threat is left out, as WoWSims has none.
+  for (const e of model.resources) {
+    if (e.type !== 'resourcechange' || e.targetID !== id || !e.ability || e.ability.guid === VAMPIRIC_TOUCH_MANA) continue;
+    const per = e.resourceChangeType === RAGE ? THREAT_PER_RAGE : e.resourceChangeType === MANA ? THREAT_PER_MANA : 0;
+    const gained = (e.resourceChange ?? 0) - (e.waste ?? 0);
+    if (!per || gained <= 0) continue;
+    addThreat(e.ability.name, e.ability.abilityIcon, e.timestamp, gained * per);
+    threatEvents.push({ e, threat: gained * per, cast: true, resource: true });
   }
   const totalThreat = [...byAbility.values()].reduce((s, r) => s + r.threat, 0);
   const onTanked = threatEvents.filter((x) => x.cast || x.e.targetID === tankedId).reduce((s, x) => s + x.threat, 0);
@@ -282,7 +307,7 @@ export function tankMetrics(data: TankFightData, model = new FightModel(data.rai
  * all their attacks, crits per ability among attacks that landed (the overall rate for abilities
  * with few hits), and what each ability usually does when it lands, normally and as a crit.
  */
-function openerOf(events: { e: LogEvent; threat: number; cast?: boolean }[], casts: LogEvent[], spec: TankSpec, T0: number, swingsOnThem: LogEvent[]): TankOpener {
+function openerOf(events: ThreatEvent[], casts: LogEvent[], spec: TankSpec, T0: number, swingsOnThem: LogEvent[]): TankOpener {
   const sec = (t: number) => (t - T0) / 1000;
   const own = new Set([...spec.gcd, ...spec.offGcd, ...Object.keys(spec.spells)]);
   const castNames = new Set(casts.map((e) => e.ability!.name));
@@ -341,7 +366,8 @@ function openerOf(events: { e: LogEvent; threat: number; cast?: boolean }[], cas
   const gcd = new Set(spec.gcd);
   const actions: TankOpenerAction[] = [];
   for (const x of events) {
-    if (x.e.timestamp < T0 || x.e.timestamp > shownUntil || x.e.tick) continue;
+    // Rage and mana gains count in the threat sums, but aren't actions (Bloodrage's cast is).
+    if (x.e.timestamp < T0 || x.e.timestamp > shownUntil || x.e.tick || x.resource) continue;
     const name = x.e.ability!.name;
     const attack = isAttack(x);
     actions.push({

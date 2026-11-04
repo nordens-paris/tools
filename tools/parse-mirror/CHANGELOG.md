@@ -9,6 +9,43 @@ version udgives under
 [Releases](https://github.com/nordens-paris/tools/releases?q=parse-mirror&expanded=true); de er
 markeret med **Windows-pakke** her.
 
+## v0.3.8 (4. november 2026)
+
+### Rettet
+
+- **Held regnede med skade på adds.** Crits, misses og resists blev talt på alle mål, men Play og
+  "Execution, luck removed" regner kun skade på bossen. Adds har lavere level og misser, resister
+  og critter anderledes end bossen, så kampe med mange adds (fx Shade of Akama) gav et
+  skævt held. Nu tæller held kun slagene på bossen.
+- **Execute-fasen** var din for alle: top-spillernes egne sims brugte, hvornår din boss kom under
+  20 %. Nu simmes hver spiller med sin egen kill, og kun simmen på din kill-tid bruger din.
+  Påvirker warriors' execution og "Kill time".
+- **Dødsfald efter lang tid under 50 %** blev regnet som hurtige, hvis spilleren var under 50 % i
+  alle de 8 sekunder, der kigges på. Nu tæller de som dødsfald med tid til at redde, så tank-healere
+  får fundet for en tank, der døde sådan.
+- **Hit-tjekket på raid-siden** gav Elemental-shamans Totem of Wrath to gange, så nogen under
+  hit-cappet ikke blev vist.
+- **Sim-noten for warriors** sagde, at Recklessness ikke gør hvide slag til crits i simmen. Det gør
+  den, siden vores WoWSims-rettelse.
+- **Cast efficiency** brugte faste cooldowns. Nu tæller talenter, der gør dem kortere: Improved
+  Whirlwind, Improved Mortal Strike, Improved Judgement og Improved Mind Blast. Før nåede en Fury med
+  Improved Whirlwind let 100 %, så gode og mindre gode spillere stod ens.
+- **Improved Shadow Bolt-andelen** af en warlocks hits blev opgivet, hvis alle crits (ofte få på et
+  kort kill) havde den. Så brugte simmen debuffens lavere tids-uptime. Nu afgør de almindelige hits.
+- **Held for crits uden normale hits i loggen** (eller omvendt) regnede alle crits som dobbelt
+  skade. Nu bruges simmens crit-bonus for den spell, så spells tæller 1,5×.
+- **Proc-held** talte procs, der kommer af crits, med to gange: simmen med spillerens crits gav
+  allerede flere procs. Proc-uptimen sammenlignes nu med den sim.
+- **Party ud fra drums** kendte ikke Drums of Speed og Drums of Restoration på DPS-siden (raid-siden
+  gjorde).
+- **Tank-threat** manglede threat fra rage og mana, tanken får (Bloodrage, Primal Fury, Spiritual
+  Attunement...): 5 pr. rage og 0,5 pr. mana, som i WoWSims. Peers' kampe hentes én gang igen for at
+  få dem med.
+- **Maksimalt liv** uden store slag at gå ud fra brugte `10 × stamina + 4000` for alle; cloth-klasser
+  fik cirka 800 for meget. Nu bruges klassens base-liv fra WoWSims.
+- **WoWSims: Improved Mortal Strike** gav ingen kortere cooldown med 1–4 point (en afrunding til 0
+  s). Rettet med en ny WoWSims-rettelse, så simmen er bygget om (`wowsim.wasm.gz`).
+
 ## v0.3.7 (3. november 2026) · Windows-pakke
 
 ### Forbedret

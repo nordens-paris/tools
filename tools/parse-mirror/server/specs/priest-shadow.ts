@@ -22,7 +22,8 @@ export const priestShadow: SpecConfig = {
   ],
   // Improved Mind Blast (5/5) brings Mind Blast down to 5.5 s.
   efficiency: [
-    { name: 'Mind Blast', cooldownSec: 5.5 },
+    // Improved Mind Blast: 0.5 s per point (5.5 s with all five).
+    { name: 'Mind Blast', cooldownSec: 8, talents: [{ name: 'Improved Mind Blast', secPerPoint: 0.5 }] },
     { name: 'Shadow Word: Death', cooldownSec: 12 },
   ],
   // 16% spell hit against a level 73 boss; Shadow Focus adds 2% per point to Shadow spells.

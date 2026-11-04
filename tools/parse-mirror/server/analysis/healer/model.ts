@@ -32,6 +32,9 @@ export interface LogEvent extends WclEvent {
   armor?: number;
 }
 
+/** Base health at level 70 per class, before stamina (WoWSims core/base_stats.go). */
+const BASE_HEALTH: Record<string, number> = { Warrior: 4264, Paladin: 3197, Hunter: 3388, Rogue: 3524, Priest: 3211, Shaman: 2979, Mage: 3213, Warlock: 3310, Druid: 3434 };
+
 export interface Mana {
   current: number;
   max: number;
@@ -227,7 +230,10 @@ export class FightModel {
     return !(this.deathTimes.get(id) ?? []).some((d) => d <= t);
   }
 
-  /** Max HP: from big hits and the HP percent they took off, else from stamina (~7% off). */
+  /**
+   * Max HP: from big hits and the HP percent they took off, else from stamina: the class's base
+   * health plus 10 per stamina point (1 each for the first 20).
+   */
   /** `skip`: hits to leave out (a tank's hits under a big temporary buff); not cached. */
   maxHp(id: number, skip?: (e: LogEvent) => boolean) {
     let m = skip ? undefined : this.maxHpCache.get(id);
@@ -238,7 +244,7 @@ export class FightModel {
       const drop = this.hpAt(id, e.timestamp - 1) - e.hitPoints;
       if (drop >= 8) ests.push(((e.amount ?? 0) * 100) / drop);
     }
-    m = ests.length >= 3 ? { value: median(ests), from: 'damage' } : { value: (this.stamina.get(id) || 600) * 10 + 4000, from: 'stamina' };
+    m = ests.length >= 3 ? { value: median(ests), from: 'damage' } : { value: (BASE_HEALTH[this.players.get(id)?.icon.split('-')[0] ?? ''] ?? 3300) + Math.max(0, (this.stamina.get(id) || 600) * 10 - 180), from: 'stamina' };
     if (!skip) this.maxHpCache.set(id, m);
     return m;
   }
